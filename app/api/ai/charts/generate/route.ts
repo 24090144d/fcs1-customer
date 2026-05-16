@@ -21,12 +21,27 @@ export async function POST(req: NextRequest) {
   if (!prompt) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
 
   const sb = createAdminClient();
-  const { data: org } = await sb
+  let { data: org } = await sb
     .from('organizations')
     .select('id, organization_code')
     .order('created_at', { ascending: true })
     .limit(1)
     .single() as unknown as SbResult<{ id: string; organization_code: string }>;
+  if (!org?.id) {
+    const fallbackCode = (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase();
+    const fallbackName = process.env.CUSTOMER_NAME ?? 'Default Organization';
+    const { data: inserted } = await sb
+      .from('organizations')
+      .insert({
+        organization_code: fallbackCode,
+        organization_name: fallbackName,
+        timezone: 'UTC',
+        metadata: {},
+      })
+      .select('id, organization_code')
+      .single() as unknown as SbResult<{ id: string; organization_code: string }>;
+    org = inserted ?? null;
+  }
   if (!org?.id) return NextResponse.json({ error: 'Organization not found' }, { status: 500 });
 
   const lower = prompt.toLowerCase();

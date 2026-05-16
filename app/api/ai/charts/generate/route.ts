@@ -21,12 +21,41 @@ export async function POST(req: NextRequest) {
   if (!prompt) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
 
   const sb = createAiAdminClient();
-  let { data: org } = await sb
-    .from('organizations')
-    .select('id, organization_code')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .single() as unknown as SbResult<{ id: string; organization_code: string }>;
+  const sourceTable = moduleCode === 'jo' ? 'jo_records' : 'im_records';
+  const { data: sampleRows } = await sb
+    .from(sourceTable)
+    .select('organization_id')
+    .limit(5000) as unknown as SbResult<Array<{ organization_id: string | null }>>;
+
+  let preferredOrgId: string | null = null;
+  if (sampleRows && sampleRows.length > 0) {
+    const freq = new Map<string, number>();
+    for (const r of sampleRows) {
+      const id = (r.organization_id ?? '').trim();
+      if (!id) continue;
+      freq.set(id, (freq.get(id) ?? 0) + 1);
+    }
+    preferredOrgId = Array.from(freq.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+
+  let org: { id: string; organization_code: string } | null = null;
+  if (preferredOrgId) {
+    const { data } = await sb
+      .from('organizations')
+      .select('id, organization_code')
+      .eq('id', preferredOrgId)
+      .maybeSingle() as unknown as SbResult<{ id: string; organization_code: string }>;
+    org = data ?? null;
+  }
+  if (!org?.id) {
+    const { data } = await sb
+      .from('organizations')
+      .select('id, organization_code')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single() as unknown as SbResult<{ id: string; organization_code: string }>;
+    org = data ?? null;
+  }
   if (!org?.id) {
     const fallbackCode = (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase();
     const fallbackName = process.env.CUSTOMER_NAME ?? 'Default Organization';
@@ -43,6 +72,21 @@ export async function POST(req: NextRequest) {
     org = inserted ?? null;
   }
   if (!org?.id) return NextResponse.json({ error: 'Organization not found' }, { status: 500 });
+  const effectiveOrgId = preferredOrgId ?? org.id;
+
+  if (preferredOrgId && org.id !== preferredOrgId) {
+    const fallbackCode = (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase();
+    const fallbackName = process.env.CUSTOMER_NAME ?? 'Default Organization';
+    await sb
+      .from('organizations')
+      .upsert({
+        id: preferredOrgId,
+        organization_code: fallbackCode,
+        organization_name: fallbackName,
+        timezone: 'UTC',
+        metadata: {},
+      }, { onConflict: 'id' });
+  }
 
   const lower = prompt.toLowerCase();
   const wantsMonth = lower.includes('month') || lower.includes('monthly');
@@ -64,7 +108,7 @@ export async function POST(req: NextRequest) {
       const { data } = await sb
         .from('im_records')
         .select('created_date, severity')
-        .eq('organization_id', org.id)
+        .eq('organization_id', effectiveOrgId)
         .limit(5000) as unknown as SbResult<Array<{ created_date: string | null; severity: string | null }>>;
       const rows = data ?? [];
       const months = new Set<string>();
@@ -90,7 +134,7 @@ export async function POST(req: NextRequest) {
       const { data } = await sb
         .from('im_records')
         .select('incident_status')
-        .eq('organization_id', org.id)
+        .eq('organization_id', effectiveOrgId)
         .limit(5000) as unknown as SbResult<Array<{ incident_status: string | null }>>;
       const map = new Map<string, number>();
       for (const r of data ?? []) {
@@ -106,7 +150,7 @@ export async function POST(req: NextRequest) {
       const { data } = await sb
         .from('im_records')
         .select('incident_category')
-        .eq('organization_id', org.id)
+        .eq('organization_id', effectiveOrgId)
         .limit(5000) as unknown as SbResult<Array<{ incident_category: string | null }>>;
       const map = new Map<string, number>();
       for (const r of data ?? []) {
@@ -125,7 +169,7 @@ export async function POST(req: NextRequest) {
       const { data } = await sb
         .from('jo_records')
         .select('created_datetime, service_item_category')
-        .eq('organization_id', org.id)
+        .eq('organization_id', effectiveOrgId)
         .limit(5000) as unknown as SbResult<Array<{ created_datetime: string | null; service_item_category: string | null }>>;
       const rows = data ?? [];
       const months = new Set<string>();
@@ -151,7 +195,7 @@ export async function POST(req: NextRequest) {
       const { data } = await sb
         .from('jo_records')
         .select('job_status')
-        .eq('organization_id', org.id)
+        .eq('organization_id', effectiveOrgId)
         .limit(5000) as unknown as SbResult<Array<{ job_status: string | null }>>;
       const map = new Map<string, number>();
       for (const r of data ?? []) {
@@ -172,7 +216,7 @@ export async function POST(req: NextRequest) {
   };
 
   return NextResponse.json({
-    organization_id: org.id,
+    organization_id: effectiveOrgId,
     module_code: moduleCode,
     title,
     chart_type: chartType,

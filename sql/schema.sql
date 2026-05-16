@@ -253,53 +253,54 @@ ALTER TABLE ONLY public."jo_staging_rows"
 ALTER TABLE ONLY public."uploaded_files"
   ADD CONSTRAINT "uploaded_files_upload_job_id_fkey" FOREIGN KEY (upload_job_id) REFERENCES upload_jobs(id) ON DELETE CASCADE;
 
-CREATE INDEX im_dashboard_json_created_idx ON public.im_dashboard_json USING btree (created_at);
-CREATE INDEX im_dashboard_json_job_idx ON public.im_dashboard_json USING btree (upload_job_id);
-CREATE UNIQUE INDEX im_dashboard_json_pkey ON public.im_dashboard_json USING btree (id);
-CREATE UNIQUE INDEX im_dashboard_json_upload_job_id_key ON public.im_dashboard_json USING btree (upload_job_id);
+CREATE INDEX IF NOT EXISTS im_dashboard_json_created_idx ON public.im_dashboard_json USING btree (created_at);
+CREATE INDEX IF NOT EXISTS im_dashboard_json_job_idx ON public.im_dashboard_json USING btree (upload_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS im_dashboard_json_pkey ON public.im_dashboard_json USING btree (id);
+CREATE UNIQUE INDEX IF NOT EXISTS im_dashboard_json_upload_job_id_key ON public.im_dashboard_json USING btree (upload_job_id);
 
-CREATE INDEX im_records_booking_source_idx ON public.im_records USING btree (booking_source);
-CREATE INDEX im_records_created_date_idx ON public.im_records USING btree (created_date);
-CREATE INDEX im_records_department_idx ON public.im_records USING btree (department);
-CREATE INDEX im_records_incident_category_idx ON public.im_records USING btree (incident_category);
-CREATE INDEX im_records_incident_datetime_idx ON public.im_records USING btree (incident_datetime);
-CREATE INDEX im_records_incident_status_idx ON public.im_records USING btree (incident_status);
-CREATE INDEX im_records_job_idx ON public.im_records USING btree (upload_job_id);
-CREATE UNIQUE INDEX im_records_pkey ON public.im_records USING btree (id);
-CREATE INDEX im_records_profile_type_idx ON public.im_records USING btree (profile_type);
-CREATE INDEX im_records_scope_idx ON public.im_records USING btree (chain_code, hotel_code, module_code, country_code);
-CREATE INDEX im_records_severity_idx ON public.im_records USING btree (severity);
-CREATE INDEX im_records_vip_code_idx ON public.im_records USING btree (vip_code);
+CREATE INDEX IF NOT EXISTS im_records_booking_source_idx ON public.im_records USING btree (booking_source);
+CREATE INDEX IF NOT EXISTS im_records_created_date_idx ON public.im_records USING btree (created_date);
+CREATE INDEX IF NOT EXISTS im_records_department_idx ON public.im_records USING btree (department);
+CREATE INDEX IF NOT EXISTS im_records_incident_category_idx ON public.im_records USING btree (incident_category);
+CREATE INDEX IF NOT EXISTS im_records_incident_datetime_idx ON public.im_records USING btree (incident_datetime);
+CREATE INDEX IF NOT EXISTS im_records_incident_status_idx ON public.im_records USING btree (incident_status);
+CREATE INDEX IF NOT EXISTS im_records_job_idx ON public.im_records USING btree (upload_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS im_records_pkey ON public.im_records USING btree (id);
+CREATE INDEX IF NOT EXISTS im_records_profile_type_idx ON public.im_records USING btree (profile_type);
+CREATE INDEX IF NOT EXISTS im_records_scope_idx ON public.im_records USING btree (chain_code, hotel_code, module_code, country_code);
+CREATE INDEX IF NOT EXISTS im_records_severity_idx ON public.im_records USING btree (severity);
+CREATE INDEX IF NOT EXISTS im_records_vip_code_idx ON public.im_records USING btree (vip_code);
 
-CREATE INDEX im_staging_rows_job_idx ON public.im_staging_rows USING btree (upload_job_id);
-CREATE INDEX im_staging_rows_job_row_idx ON public.im_staging_rows USING btree (upload_job_id, row_number);
-CREATE UNIQUE INDEX im_staging_rows_pkey ON public.im_staging_rows USING btree (id);
+CREATE INDEX IF NOT EXISTS im_staging_rows_job_idx ON public.im_staging_rows USING btree (upload_job_id);
+CREATE INDEX IF NOT EXISTS im_staging_rows_job_row_idx ON public.im_staging_rows USING btree (upload_job_id, row_number);
+CREATE UNIQUE INDEX IF NOT EXISTS im_staging_rows_pkey ON public.im_staging_rows USING btree (id);
 
-CREATE INDEX jo_dashboard_json_job_idx ON public.jo_dashboard_json USING btree (upload_job_id);
-CREATE UNIQUE INDEX jo_dashboard_json_pkey ON public.jo_dashboard_json USING btree (id);
-CREATE UNIQUE INDEX jo_dashboard_json_upload_job_id_key ON public.jo_dashboard_json USING btree (upload_job_id);
+CREATE INDEX IF NOT EXISTS jo_dashboard_json_job_idx ON public.jo_dashboard_json USING btree (upload_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS jo_dashboard_json_pkey ON public.jo_dashboard_json USING btree (id);
+CREATE UNIQUE INDEX IF NOT EXISTS jo_dashboard_json_upload_job_id_key ON public.jo_dashboard_json USING btree (upload_job_id);
 
-CREATE INDEX jo_records_created_datetime_idx ON public.jo_records USING btree (created_datetime);
-CREATE INDEX jo_records_job_idx ON public.jo_records USING btree (upload_job_id);
-CREATE UNIQUE INDEX jo_records_pkey ON public.jo_records USING btree (id);
-CREATE INDEX jo_records_scope_idx ON public.jo_records USING btree (chain_code, hotel_code, module_code, country_code);
-CREATE INDEX jo_records_status_idx ON public.jo_records USING btree (job_status);
+CREATE INDEX IF NOT EXISTS jo_records_created_datetime_idx ON public.jo_records USING btree (created_datetime);
+CREATE INDEX IF NOT EXISTS jo_records_job_idx ON public.jo_records USING btree (upload_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS jo_records_pkey ON public.jo_records USING btree (id);
+CREATE INDEX IF NOT EXISTS jo_records_scope_idx ON public.jo_records USING btree (chain_code, hotel_code, module_code, country_code);
+CREATE INDEX IF NOT EXISTS jo_records_status_idx ON public.jo_records USING btree (job_status);
 
-CREATE INDEX jo_staging_rows_job_idx ON public.jo_staging_rows USING btree (upload_job_id);
-CREATE INDEX jo_staging_rows_job_row_idx ON public.jo_staging_rows USING btree (upload_job_id, row_number);
-CREATE UNIQUE INDEX jo_staging_rows_pkey ON public.jo_staging_rows USING btree (id);
+CREATE INDEX IF NOT EXISTS jo_staging_rows_job_idx ON public.jo_staging_rows USING btree (upload_job_id);
+CREATE INDEX IF NOT EXISTS jo_staging_rows_job_row_idx ON public.jo_staging_rows USING btree (upload_job_id, row_number);
+CREATE UNIQUE INDEX IF NOT EXISTS jo_staging_rows_pkey ON public.jo_staging_rows USING btree (id);
 
-CREATE INDEX organizations_code_idx ON public.organizations USING btree (organization_code);
-CREATE UNIQUE INDEX organizations_organization_code_key ON public.organizations USING btree (organization_code);
-CREATE UNIQUE INDEX organizations_pkey ON public.organizations USING btree (id);
+CREATE INDEX IF NOT EXISTS organizations_code_idx ON public.organizations USING btree (organization_code);
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_organization_code_key ON public.organizations USING btree (organization_code);
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_pkey ON public.organizations USING btree (id);
 
-CREATE INDEX upload_jobs_module_idx ON public.upload_jobs USING btree (module_code);
-CREATE INDEX upload_jobs_org_idx ON public.upload_jobs USING btree (organization_id);
-CREATE UNIQUE INDEX upload_jobs_pkey ON public.upload_jobs USING btree (id);
-CREATE INDEX upload_jobs_status_idx ON public.upload_jobs USING btree (status);
+CREATE INDEX IF NOT EXISTS upload_jobs_module_idx ON public.upload_jobs USING btree (module_code);
+CREATE INDEX IF NOT EXISTS upload_jobs_org_idx ON public.upload_jobs USING btree (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS upload_jobs_pkey ON public.upload_jobs USING btree (id);
+CREATE INDEX IF NOT EXISTS upload_jobs_status_idx ON public.upload_jobs USING btree (status);
 
-CREATE INDEX uploaded_files_hash_lookup_idx ON public.uploaded_files USING btree (organization_id, module_code, file_hash);
-CREATE INDEX uploaded_files_job_idx ON public.uploaded_files USING btree (upload_job_id);
-CREATE UNIQUE INDEX uploaded_files_pkey ON public.uploaded_files USING btree (id);
+CREATE INDEX IF NOT EXISTS uploaded_files_hash_lookup_idx ON public.uploaded_files USING btree (organization_id, module_code, file_hash);
+CREATE INDEX IF NOT EXISTS uploaded_files_job_idx ON public.uploaded_files USING btree (upload_job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uploaded_files_pkey ON public.uploaded_files USING btree (id);
 
 COMMIT;
+

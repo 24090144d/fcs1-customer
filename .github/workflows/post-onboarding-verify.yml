@@ -1,0 +1,83 @@
+name: Post Onboarding Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      customer_code:
+        description: "Customer code (example: china)"
+        required: true
+        type: string
+      customer_name:
+        description: "Customer display name"
+        required: true
+        type: string
+      app_url:
+        description: "Customer app URL (optional, for smoke checks)"
+        required: false
+        default: ""
+        type: string
+      domain:
+        description: "Customer custom domain (optional)"
+        required: false
+        default: ""
+        type: string
+      database_url:
+        description: "Customer DATABASE_URL (optional; defaults to secret DATABASE_URL_CHINA)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve database URL
+        id: resolve_db_url
+        env:
+          INPUT_DATABASE_URL: ${{ inputs.database_url }}
+          DEFAULT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL_CHINA }}
+        run: |
+          if [ -n "$INPUT_DATABASE_URL" ]; then
+            echo "database_url=$INPUT_DATABASE_URL" >> "$GITHUB_OUTPUT"
+          elif [ -n "$DEFAULT_SECRET_DATABASE_URL" ]; then
+            echo "database_url=$DEFAULT_SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "No database URL provided. Set workflow input database_url or repo secret DATABASE_URL_CHINA."
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run post-onboarding verification
+        env:
+          CUSTOMER_CODE: ${{ inputs.customer_code }}
+          CUSTOMER_NAME: ${{ inputs.customer_name }}
+          DATABASE_URL: ${{ steps.resolve_db_url.outputs.database_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          APP_URL: ${{ inputs.app_url }}
+          DOMAIN: ${{ inputs.domain }}
+        run: node scripts/post-onboarding-verify.js
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: onboarding-verification-${{ inputs.customer_code }}
+          path: reports/

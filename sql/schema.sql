@@ -3,6 +3,20 @@
 
 BEGIN;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'module_code') THEN
+    CREATE TYPE module_code AS ENUM ('im', 'jo');
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'upload_job_status') THEN
+    CREATE TYPE upload_job_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public."im_dashboard_json" (
   "id" uuid DEFAULT gen_random_uuid() NOT NULL,
   "organization_id" uuid NOT NULL,

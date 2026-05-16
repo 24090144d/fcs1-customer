@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "provision:customer-db": "node scripts/provision-customer-db.js"
   },
   "dependencies": {
     "@types/pg": "^8.20.0",

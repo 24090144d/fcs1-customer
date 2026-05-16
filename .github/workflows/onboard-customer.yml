@@ -32,8 +32,14 @@ on:
         default: "main"
         type: string
       database_url:
-        description: "Customer DATABASE_URL (postgresql://...)"
-        required: true
+        description: "Customer DATABASE_URL (optional if secret is provided)"
+        required: false
+        default: ""
+        type: string
+      database_url_secret_name:
+        description: "GitHub Actions secret name for DATABASE_URL (example: DATABASE_URL_CHINA)"
+        required: false
+        default: ""
         type: string
 
 permissions:
@@ -52,9 +58,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
+      - name: Resolve database URL
+        id: resolve_db_url
+        env:
+          INPUT_DATABASE_URL: ${{ inputs.database_url }}
+          SECRET_DATABASE_URL: ${{ inputs.database_url_secret_name != '' && secrets[inputs.database_url_secret_name] || '' }}
+        run: |
+          if [ -n "$INPUT_DATABASE_URL" ]; then
+            echo "database_url=$INPUT_DATABASE_URL" >> "$GITHUB_OUTPUT"
+          elif [ -n "$SECRET_DATABASE_URL" ]; then
+            echo "database_url=$SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "No database URL provided. Set workflow input database_url or database_url_secret_name."
+            exit 1
+          fi
+
       - name: Validate psql connectivity
         env:
-          DATABASE_URL: ${{ inputs.database_url }}
+          DATABASE_URL: ${{ steps.resolve_db_url.outputs.database_url }}
         run: |
           psql "$DATABASE_URL" -c "select now();"
 
@@ -62,7 +83,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/init-customer-db.ps1 `
-            -DatabaseUrl "${{ inputs.database_url }}" `
+            -DatabaseUrl "${{ steps.resolve_db_url.outputs.database_url }}" `
             -CustomerCode "${{ inputs.customer_code }}" `
             -CustomerName "${{ inputs.customer_name }}"
 
@@ -75,7 +96,7 @@ jobs:
           ./scripts/onboard-customer.ps1 `
             -CustomerCode "${{ inputs.customer_code }}" `
             -CustomerName "${{ inputs.customer_name }}" `
-            -DatabaseUrl "${{ inputs.database_url }}" `
+            -DatabaseUrl "${{ steps.resolve_db_url.outputs.database_url }}" `
             -VercelToken "$env:VERCEL_TOKEN" `
             -VercelOrgId "$env:VERCEL_ORG_ID" `
             -Domain "${{ inputs.domain }}" `

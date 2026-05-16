@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAiAdminClient } from '@/lib/supabase/server';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
 export async function GET(req: NextRequest) {
   const userId = (req.nextUrl.searchParams.get('user_id') ?? 'anonymous').trim() || 'anonymous';
-  const sb = createAdminClient();
+  const sb = createAiAdminClient();
 
   const { data: org } = await sb
     .from('organizations')

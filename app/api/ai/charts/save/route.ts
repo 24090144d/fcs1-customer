@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAiAdminClient } from '@/lib/supabase/server';
 
 type SaveReq = {
   organization_id?: string;
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
-  const sb = createAdminClient();
+  const sb = createAiAdminClient();
   const { data, error } = await sb
     .from('ai_chart_definitions')
     .insert({

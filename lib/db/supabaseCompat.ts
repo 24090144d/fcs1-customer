@@ -163,6 +163,7 @@ export class PgSupabaseCompat {
 }
 
 let pool: Pool | null = null;
+const poolByConnectionString = new Map<string, Pool>();
 
 export function getPool() {
   if (!pool) {
@@ -171,4 +172,12 @@ export function getPool() {
     pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
   }
   return pool;
+}
+
+export function getPoolByConnectionString(connectionString: string) {
+  const existing = poolByConnectionString.get(connectionString);
+  if (existing) return existing;
+  const created = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  poolByConnectionString.set(connectionString, created);
+  return created;
 }

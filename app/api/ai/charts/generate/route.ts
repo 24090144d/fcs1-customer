@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAiAdminClient } from '@/lib/supabase/server';
 
 type GenerateReq = { prompt?: string; module_code?: 'im' | 'jo' };
 type SbResult<T> = { data: T | null; error: { message: string } | null };
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const moduleCode = body.module_code ?? 'im';
   if (!prompt) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
 
-  const sb = createAdminClient();
+  const sb = createAiAdminClient();
   let { data: org } = await sb
     .from('organizations')
     .select('id, organization_code')

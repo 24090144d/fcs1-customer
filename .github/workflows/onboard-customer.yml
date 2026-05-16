@@ -32,12 +32,7 @@ on:
         default: "main"
         type: string
       database_url:
-        description: "Customer DATABASE_URL (optional if secret is provided)"
-        required: false
-        default: ""
-        type: string
-      database_url_secret_name:
-        description: "GitHub Actions secret name for DATABASE_URL (example: DATABASE_URL_CHINA)"
+        description: "Customer DATABASE_URL (optional; defaults to secret DATABASE_URL_CHINA)"
         required: false
         default: ""
         type: string
@@ -62,14 +57,14 @@ jobs:
         id: resolve_db_url
         env:
           INPUT_DATABASE_URL: ${{ inputs.database_url }}
-          SECRET_DATABASE_URL: ${{ inputs.database_url_secret_name != '' && secrets[inputs.database_url_secret_name] || '' }}
+          DEFAULT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL_CHINA }}
         run: |
           if [ -n "$INPUT_DATABASE_URL" ]; then
             echo "database_url=$INPUT_DATABASE_URL" >> "$GITHUB_OUTPUT"
-          elif [ -n "$SECRET_DATABASE_URL" ]; then
-            echo "database_url=$SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
+          elif [ -n "$DEFAULT_SECRET_DATABASE_URL" ]; then
+            echo "database_url=$DEFAULT_SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
           else
-            echo "No database URL provided. Set workflow input database_url or database_url_secret_name."
+            echo "No database URL provided. Set workflow input database_url or repo secret DATABASE_URL_CHINA."
             exit 1
           fi
 

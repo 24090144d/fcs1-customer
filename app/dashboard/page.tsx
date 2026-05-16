@@ -1,0 +1,381 @@
+import Link from 'next/link';
+import { Upload } from 'lucide-react';
+import { unstable_noStore as noStore } from 'next/cache';
+import { createAdminClient } from '@/lib/supabase/server';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { DashboardClient } from './DashboardClient';
+import type { ImDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
+
+export const dynamic = 'force-dynamic';
+
+type SbResult<T> = { data: T | null; error: { message: string } | null };
+
+function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' {
+  return String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo_dashboard_json' : 'im_dashboard_json';
+}
+
+async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<ImDashboardJson | null> {
+  noStore();
+  try {
+    const supabase = createAdminClient();
+    type DashRow = { generated_json: ImDashboardJson };
+    const table = resolveDashboardTable(moduleCode);
+    const isJo = String(moduleCode ?? '').toLowerCase() === 'jo';
+    const expectedSchema = String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo-v1' : 'im-v1';
+    const base = supabase
+      .from(table)
+      .select('generated_json')
+      .filter('generated_json->meta->>schema', 'eq', expectedSchema)
+      .order('created_at', { ascending: false });
+    let result = await (
+      hotelCode
+        ? base.filter('generated_json->meta->>hotel_code', 'eq', hotelCode)
+        : base
+    ).limit(1).maybeSingle() as unknown as SbResult<DashRow>;
+    if (!result.data && isJo && hotelCode) {
+      // Some historical JO rows may lack parsed hotel_code due to file-hash dedupe.
+      // Fallback to latest JO dashboard row so user still sees JO data.
+      result = await base.limit(1).maybeSingle() as unknown as SbResult<DashRow>;
+    }
+    return result.data?.generated_json ?? null;
+  } catch { return null; }
+}
+
+async function fetchChainEntries(chainCode: string, currentHotelCode: string, moduleCode?: string): Promise<ChainEntry[]> {
+  noStore();
+  try {
+    const supabase = createAdminClient();
+    type DashRow = { generated_json: ImDashboardJson; created_at: string };
+    const table = resolveDashboardTable(moduleCode);
+    const { data: rows } = await supabase
+      .from(table)
+      .select('generated_json, created_at')
+      .filter('generated_json->meta->>chain_code', 'eq', chainCode)
+      .order('created_at', { ascending: false }) as unknown as SbResult<DashRow[]>;
+    if (!rows || rows.length === 0) return [];
+    const seen = new Map<string, ChainEntry>();
+    for (const row of rows) {
+      const json = row.generated_json;
+      if (!json?.meta?.hotel_code) continue;
+      if (seen.has(json.meta.hotel_code)) continue;
+      if (!json.summary) continue;
+      seen.set(json.meta.hotel_code, {
+        hotel_code:   json.meta.hotel_code,
+        hotel_name:   json.meta.hotel_name,
+        country_code: json.meta.country_code ?? '',
+        summary:      json.summary,
+        raw_daily:    json.raw_daily ?? [],
+      });
+    }
+    return Array.from(seen.values()).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
+  } catch { return []; }
+}
+
+function mergeNumMap(target: Record<string, number>, source: Record<string, number> | undefined) {
+  if (!source) return;
+  for (const [k, v] of Object.entries(source)) target[k] = (target[k] ?? 0) + v;
+}
+function mergeNestedNumMap(
+  target: Record<string, Record<string, number>>,
+  source: Record<string, Record<string, number>> | undefined,
+) {
+  if (!source) return;
+  for (const [k, inner] of Object.entries(source)) {
+    if (!target[k]) target[k] = {};
+    mergeNumMap(target[k], inner);
+  }
+}
+
+function mergeRawDaily(allDaily: DailyBucket[][]): DailyBucket[] {
+  const byDate = new Map<string, DailyBucket>();
+  for (const daily of allDaily) {
+    for (const d of daily) {
+      if (!byDate.has(d.date)) {
+        byDate.set(d.date, {
+          date: d.date,
+          total: 0,
+          completed: 0,
+          cancelled: 0,
+          pending: 0,
+          high_crit: 0,
+          severity_sum: 0,
+          vip: 0,
+          by_severity: {},
+          by_category: {},
+          by_status: {},
+        });
+      }
+      const t = byDate.get(d.date)!;
+      t.total += d.total;
+      t.completed += d.completed;
+      t.cancelled += d.cancelled;
+      t.pending += d.pending;
+      t.high_crit += d.high_crit;
+      t.severity_sum += d.severity_sum;
+      t.vip += d.vip ?? 0;
+      mergeNumMap(t.by_severity, d.by_severity);
+      mergeNumMap(t.by_category, d.by_category);
+      mergeNumMap(t.by_status, d.by_status);
+    }
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function mergeSummary(summaries: HotelSummary[]): HotelSummary {
+  const out: HotelSummary = {
+    total: 0,
+    completed: 0,
+    cancelled: 0,
+    pending: 0,
+    vip_total: 0,
+    vip_completed: 0,
+    vip_cancelled: 0,
+    severity_sum: 0,
+    repeat_count: 0,
+    status_map: {},
+    dept_map: {},
+    category_map: {},
+    item_map: {},
+    dept_item_map: {},
+    dept_category_map: {},
+    week_map: {},
+    week_source_map: {},
+    dept_source_map: {},
+    booking_map: {},
+    source_map: {},
+    severity_map: {},
+  };
+  for (const s of summaries) {
+    out.total += s.total;
+    out.completed += s.completed;
+    out.cancelled += s.cancelled;
+    out.pending += s.pending;
+    out.vip_total += s.vip_total;
+    out.vip_completed += s.vip_completed;
+    out.vip_cancelled += s.vip_cancelled;
+    out.severity_sum += s.severity_sum;
+    out.repeat_count += s.repeat_count;
+    mergeNumMap(out.status_map, s.status_map);
+    mergeNumMap(out.dept_map, s.dept_map);
+    mergeNumMap(out.category_map, s.category_map);
+    mergeNumMap(out.item_map, s.item_map);
+    mergeNestedNumMap(out.dept_item_map, s.dept_item_map);
+    mergeNestedNumMap(out.dept_category_map, s.dept_category_map);
+    mergeNumMap(out.week_map, s.week_map);
+    mergeNestedNumMap(out.week_source_map, s.week_source_map);
+    mergeNestedNumMap(out.dept_source_map, s.dept_source_map);
+    mergeNumMap(out.booking_map, s.booking_map);
+    mergeNumMap(out.source_map, s.source_map);
+    mergeNumMap(out.severity_map, s.severity_map);
+  }
+  return out;
+}
+
+function buildCorpKpis(template: ImDashboardJson, summary: HotelSummary): ImDashboardJson['kpis'] {
+  const total = summary.total;
+  const completed = summary.completed;
+  const cancelled = summary.cancelled;
+  const pending = summary.pending;
+  const closureRate = total > 0 ? (completed / total) * 100 : 0;
+  const backlogRate = total > 0 ? (pending / total) * 100 : 0;
+  const timeoutRate = backlogRate;
+  const escalationRate = total > 0 ? ((summary.status_map['Escalated'] ?? 0) / total) * 100 : 0;
+  const reassignmentRate = total > 0 ? (summary.repeat_count / total) * 100 : 0;
+  const avgSeverity = total > 0 ? (summary.severity_sum / total) : 0;
+  const vipShare = total > 0 ? (summary.vip_total / total) * 100 : 0;
+
+  return template.kpis.map((k) => {
+    if (k.id === 'kpi_01') return { ...k, value: total };
+    if (k.id === 'kpi_02') return { ...k, value: Number(closureRate.toFixed(1)) };
+    if (k.id === 'kpi_03') return { ...k, value: Number(backlogRate.toFixed(1)) };
+    if (k.id === 'kpi_04') return { ...k, value: pending };
+    if (k.id === 'kpi_05') return { ...k, value: cancelled };
+    if (k.id === 'kpi_06') return { ...k, value: Number(vipShare.toFixed(1)) };
+    if (k.id === 'kpi_07') return { ...k, value: k.value === null ? null : k.value };
+    if (k.id === 'kpi_08') return { ...k, value: Number(reassignmentRate.toFixed(2)) };
+    if (k.id === 'kpi_09') return { ...k, value: k.value === null ? null : k.value };
+    if (k.id === 'kpi_10') return { ...k, value: Number(avgSeverity.toFixed(2)) };
+    // JO-safe fallbacks
+    if ((k.label ?? '').toLowerCase().includes('timeout')) return { ...k, value: Number(timeoutRate.toFixed(1)) };
+    if ((k.label ?? '').toLowerCase().includes('escalation')) return { ...k, value: Number(escalationRate.toFixed(1)) };
+    if ((k.label ?? '').toLowerCase().includes('reassignment')) return { ...k, value: Number(reassignmentRate.toFixed(1)) };
+    return k;
+  });
+}
+
+async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Promise<{ data: ImDashboardJson | null; chainEntries: ChainEntry[] }> {
+  noStore();
+  if (!chainCode) return { data: null, chainEntries: [] };
+  try {
+    const supabase = createAdminClient();
+    type DashRow = { generated_json: ImDashboardJson; created_at: string };
+    const table = resolveDashboardTable(moduleCode);
+    const rowsResult = await supabase
+      .from(table)
+      .select('generated_json, created_at')
+      .filter('generated_json->meta->>chain_code', 'eq', chainCode.toUpperCase())
+      .order('created_at', { ascending: false }) as unknown as SbResult<DashRow[]>;
+
+    const rows = rowsResult.data ?? [];
+    if (rows.length === 0) return { data: null, chainEntries: [] };
+
+    const latestByHotel = new Map<string, ImDashboardJson>();
+    for (const row of rows) {
+      const json = row.generated_json;
+      const hotelCode = (json?.meta?.hotel_code ?? '').trim().toUpperCase();
+      if (!hotelCode || latestByHotel.has(hotelCode)) continue;
+      if (!json.summary) continue;
+      latestByHotel.set(hotelCode, json);
+    }
+
+    const dashboards = Array.from(latestByHotel.values());
+    if (dashboards.length < 2) return { data: null, chainEntries: [] };
+
+    const template = dashboards[0];
+    const chainEntries: ChainEntry[] = dashboards.map((d) => ({
+      hotel_code: d.meta.hotel_code,
+      hotel_name: d.meta.hotel_name,
+      country_code: d.meta.country_code ?? '',
+      summary: d.summary,
+      raw_daily: d.raw_daily ?? [],
+    })).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
+
+    // Build accurate department->source_of_complaint and department->item maps
+    // from live IM records so corp charts remain correct even for legacy summaries.
+    if (String(moduleCode ?? '').toLowerCase() !== 'jo') {
+      type SrcRow = {
+        hotel_code: string | null;
+        department: string | null;
+        source_of_complaint: string | null;
+        incident_item_name: string | null;
+        booking_source: string | null;
+      };
+      const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
+      if (hotelCodes.length > 0) {
+        const mapByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const itemByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const bookingByHotel: Record<string, Record<string, number>> = {};
+        const batch = await supabase
+          .from('im_records')
+          .select('hotel_code, department, source_of_complaint, incident_item_name, booking_source')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<SrcRow[]>;
+        const rows = batch.data ?? [];
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const deptRaw = r.department;
+          const dept = deptRaw === null || deptRaw === undefined || String(deptRaw).trim() === '' ? 'Unknown Department' : String(deptRaw);
+          const src = r.source_of_complaint === null ? 'Unknown' : String(r.source_of_complaint);
+          const itemRaw = r.incident_item_name;
+          const item = itemRaw === null || itemRaw === undefined || String(itemRaw).trim() === '' ? 'Unknown Item' : String(itemRaw);
+          if (!mapByHotel[hotel]) mapByHotel[hotel] = {};
+          if (!mapByHotel[hotel][dept]) mapByHotel[hotel][dept] = {};
+          mapByHotel[hotel][dept][src] = (mapByHotel[hotel][dept][src] ?? 0) + 1;
+          if (!itemByHotel[hotel]) itemByHotel[hotel] = {};
+          if (!itemByHotel[hotel][dept]) itemByHotel[hotel][dept] = {};
+          itemByHotel[hotel][dept][item] = (itemByHotel[hotel][dept][item] ?? 0) + 1;
+          const bookingRaw = r.booking_source;
+          const booking = bookingRaw === null || bookingRaw === undefined ? 'Unknown' : String(bookingRaw);
+          if (!bookingByHotel[hotel]) bookingByHotel[hotel] = {};
+          bookingByHotel[hotel][booking] = (bookingByHotel[hotel][booking] ?? 0) + 1;
+        }
+
+        for (const entry of chainEntries) {
+          entry.summary.dept_source_map = mapByHotel[entry.hotel_code] ?? entry.summary.dept_source_map ?? {};
+          entry.summary.dept_item_map = itemByHotel[entry.hotel_code] ?? entry.summary.dept_item_map ?? {};
+          entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
+        }
+      }
+    }
+
+    const summary = mergeSummary(dashboards.map((d) => d.summary));
+    // Re-merge summary from chainEntries in case live IM maps were enriched above.
+    const enrichedSummary = mergeSummary(chainEntries.map((e) => e.summary));
+    const rawDaily = mergeRawDaily(dashboards.map((d) => d.raw_daily ?? []));
+    const dates = rawDaily.map((d) => d.date);
+    const dateMin = dates.length > 0 ? dates[0] : null;
+    const dateMax = dates.length > 0 ? dates[dates.length - 1] : null;
+    const totalRecords = dashboards.reduce((s, d) => s + (d.meta.total_records ?? 0), 0);
+
+    const data: ImDashboardJson = {
+      ...template,
+      meta: {
+        ...template.meta,
+        source_name: `${chainCode.toUpperCase()} Corp`,
+        chain_code: chainCode.toUpperCase(),
+        hotel_code: 'CORP',
+        hotel_name: 'Corp',
+        total_records: totalRecords,
+        date_range: { min: dateMin, max: dateMax },
+        generated_at: new Date().toISOString(),
+      },
+      kpis: buildCorpKpis(template, summary),
+      raw_daily: rawDaily,
+      summary: enrichedSummary,
+    };
+
+    return { data, chainEntries };
+  } catch {
+    return { data: null, chainEntries: [] };
+  }
+}
+
+// Needed to allow searchParams without force-dynamic in static export
+export const generateStaticParams = async () => [];
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { hotel?: string; module?: string; chain?: string };
+}) {
+  const hotelCode = searchParams.hotel;
+  const isCorp = String(hotelCode ?? '').toLowerCase() === 'corp';
+
+  const corpPayload = isCorp
+    ? await fetchCorpDashboard(searchParams.chain, searchParams.module)
+    : { data: null, chainEntries: [] as ChainEntry[] };
+  const data = isCorp ? corpPayload.data : await fetchDashboard(hotelCode, searchParams.module);
+
+  if (!data) {
+    return (
+      <AppLayout breadcrumbs={[{ label: 'Dashboard' }]}>
+        <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+          <div className="text-center space-y-4 px-6">
+            <div className="w-16 h-16 rounded-2xl bg-slate-200 flex items-center justify-center mx-auto">
+              <Upload size={24} className="text-slate-500" />
+            </div>
+            <h1 className="font-serif text-2xl font-bold text-slate-800">No Dashboard Data</h1>
+            <p className="font-sans text-sm text-slate-500 max-w-sm">
+              Upload an IM or JO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
+            </p>
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center gap-2 bg-slate-800 text-white font-sans text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-slate-700 transition-colors"
+            >
+              <Upload size={15} />
+              Upload CSV
+            </Link>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const chainEntries = isCorp
+    ? corpPayload.chainEntries
+    : data.meta.chain_code
+    ? await fetchChainEntries(data.meta.chain_code, data.meta.hotel_code, searchParams.module)
+    : [];
+
+  const { chain_code, hotel_code, hotel_name, country_code } = data.meta;
+  const hotelLabel = hotel_code
+    ? [chain_code, hotel_code, hotel_name, country_code ? `(${country_code})` : '']
+        .filter(Boolean).join(' - ')
+    : data.meta.source_name;
+
+  return (
+    <AppLayout breadcrumbs={[{ label: 'Dashboard' }, { label: hotelLabel }]}>
+      <DashboardClient data={data} chainEntries={chainEntries} />
+    </AppLayout>
+  );
+}

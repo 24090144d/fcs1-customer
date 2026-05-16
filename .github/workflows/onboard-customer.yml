@@ -1,0 +1,95 @@
+name: Onboard Customer
+
+on:
+  workflow_dispatch:
+    inputs:
+      customer_code:
+        description: "Customer code (example: ACME)"
+        required: true
+        type: string
+      customer_name:
+        description: "Customer display name"
+        required: true
+        type: string
+      domain:
+        description: "Custom domain (optional)"
+        required: false
+        default: ""
+        type: string
+      region:
+        description: "Azure region (metadata only for now)"
+        required: true
+        default: "eastus"
+        type: string
+      db_tier:
+        description: "DB tier (metadata only for now)"
+        required: true
+        default: "B_Standard_B1ms"
+        type: string
+      release_ref:
+        description: "Git ref to deploy"
+        required: true
+        default: "main"
+        type: string
+      database_url:
+        description: "Customer DATABASE_URL (postgresql://...)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Validate psql connectivity
+        env:
+          DATABASE_URL: ${{ inputs.database_url }}
+        run: |
+          psql "$DATABASE_URL" -c "select now();"
+
+      - name: Initialize database schema and seed
+        shell: pwsh
+        run: |
+          ./scripts/init-customer-db.ps1 `
+            -DatabaseUrl "${{ inputs.database_url }}" `
+            -CustomerCode "${{ inputs.customer_code }}" `
+            -CustomerName "${{ inputs.customer_name }}"
+
+      - name: Provision Vercel project and trigger deploy
+        shell: pwsh
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          ./scripts/onboard-customer.ps1 `
+            -CustomerCode "${{ inputs.customer_code }}" `
+            -CustomerName "${{ inputs.customer_name }}" `
+            -DatabaseUrl "${{ inputs.database_url }}" `
+            -VercelToken "$env:VERCEL_TOKEN" `
+            -VercelOrgId "$env:VERCEL_ORG_ID" `
+            -Domain "${{ inputs.domain }}" `
+            -GitRef "${{ inputs.release_ref }}" `
+            -SkipDbInit
+
+      - name: Publish summary
+        run: |
+          echo "Customer onboarding completed." >> $GITHUB_STEP_SUMMARY
+          echo "- Customer: ${{ inputs.customer_code }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Name: ${{ inputs.customer_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Region: ${{ inputs.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- DB Tier: ${{ inputs.db_tier }}" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.domain }}" ]; then
+            echo "- Domain requested: ${{ inputs.domain }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- Release ref: ${{ inputs.release_ref }}" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Google Fonts: Fraunces · JetBrains Mono · Manrope ───────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap');
+
+/* ── CSS custom properties ───────────────────────────────────────────────── */
+:root {
+  --font-serif:  'Fraunces',        Georgia,      serif;
+  --font-mono:   'JetBrains Mono',  Menlo,        monospace;
+  --font-sans:   'Manrope',         system-ui,    sans-serif;
+
+  --orange:      #C55A10;
+  --orange-dark: #E87030;
+  --teal:        #0E7470;
+  --teal-dark:   #14A89E;
+}
+
+/* ── Base styles ─────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: #F5F0E8;
+    color: #1A1714;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-serif);
+  }
+
+  code, kbd, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Existing rule helpers (used by onboarding / layout) */
+  .rule-double { border-top: 3px double #1a1714; }
+  .rule-single { border-top: 1px solid #1a1714; }
+  .rule-gold   { border-top: 1px solid #c4922a; }
+  .col-rule    { border-right: 1px solid #d9c8a8; }
+}
+
+/* ── Components ──────────────────────────────────────────────────────────── */
+@layer components {
+  .masthead-title {
+    @apply font-serif text-5xl md:text-7xl font-bold tracking-tight text-ink;
+    letter-spacing: -0.02em;
+  }
+
+  .section-label {
+    @apply font-sans text-xs font-semibold uppercase tracking-widest text-ink-muted;
+  }
+
+  .vintage-card {
+    @apply bg-parchment-100 border border-parchment-300 p-6;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 bg-ink text-parchment-50 px-5 py-2.5
+           font-sans text-sm font-medium tracking-wide
+           hover:bg-ink-light transition-colors;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center gap-2 border border-ink text-ink px-5 py-2.5
+           font-sans text-sm font-medium tracking-wide
+           hover:bg-parchment-200 transition-colors;
+  }
+}
+
+/* ── Grain texture overlay ───────────────────────────────────────────────── */
+/*
+ * Applied via class="grain" on the dashboard outer wrapper.
+ * Uses a fixed pseudo-element so the texture scrolls with the viewport
+ * and never contributes to layout dimensions.
+ */
+.grain {
+  position: relative;
+  isolation: isolate;
+}
+.grain::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  /* SVG feTurbulence noise rendered as a repeating bg tile */
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  background-repeat: repeat;
+  opacity: 0.028;
+  mix-blend-mode: multiply;
+}
+/* Grain stays visible but thinner in dark mode */
+.dark .grain::before {
+  opacity: 0.045;
+  mix-blend-mode: screen;
+}
+
+/* ── Print styles ────────────────────────────────────────────────────────── */
+@media print {
+  @page { margin: 12mm 14mm; size: A4 landscape; }
+
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /*
+   * CRITICAL: Break the h-screen / overflow-y-auto scroll jail.
+   * AppLayout wraps content in a viewport-height flex box with scroll;
+   * the browser prints only the visible scroll region — giving 1 page.
+   * Reset every height/overflow constraint so content flows freely.
+   */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  [data-print-root] {
+    min-height: 0 !important;
+  }
+
+  /* Hide sidebar, toolbar, filters, section headings */
+  aside,
+  .print-hidden,
+  .print-section-head { display: none !important; }
+
+  /* Show print-only elements */
+  .print-only { display: flex !important; }
+
+  /* ── Page 1: title + KPI grid ────────────── */
+  .print-title {
+    display: flex !important;
+    flex-direction: column;
+    margin-bottom: 10mm;
+  }
+
+  .kpi-print-section {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* 5 KPI cards per row, 2 rows = 10 total */
+  .kpi-print-section .kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  /* ── Subsequent pages: 1 chart per page ─── */
+  /* Remove screen spacing from sections */
+  section { margin-top: 0 !important; }
+
+  /* Flatten chart grids to single column */
+  .chart-grid {
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  /*
+   * A4 landscape content height = 210mm − 2×12mm margins = 186mm.
+   * Use absolute mm instead of vh — in print mode vh resolves to
+   * the screen viewport height (~900px), which exceeds the page content
+   * area (~703px), causing break-inside:avoid to drop the card entirely.
+   */
+  .chart-card {
+    page-break-before: always;
+    break-before: page;
+    height: 182mm;
+    width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    border-left-width: 4px !important;
+  }
+
+  /* Chart canvas fills remaining height (header + footer are shrink-0) */
+  .chart-canvas-wrap {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+  .chart-canvas-wrap .highcharts-container,
+  .chart-canvas-wrap .highcharts-root {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Footer on every page via chart card */
+  .chart-footer { display: block !important; }
+}

@@ -21,6 +21,9 @@ function Invoke-PsqlFile {
 
   Write-Host "Applying $SqlFile"
   & psql "$DatabaseUrl" -v ON_ERROR_STOP=1 -f "$SqlFile"
+  if ($LASTEXITCODE -ne 0) {
+    throw "psql failed for file: $SqlFile (exit code $LASTEXITCODE)"
+  }
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -43,5 +46,8 @@ set organization_name = excluded.organization_name;
 
 Write-Host "Seeding organization metadata for $CustomerCode"
 $seedSql | & psql "$DatabaseUrl" -v ON_ERROR_STOP=1
+if ($LASTEXITCODE -ne 0) {
+  throw "psql failed while seeding organization metadata (exit code $LASTEXITCODE)"
+}
 
 Write-Host "Customer database initialization complete."

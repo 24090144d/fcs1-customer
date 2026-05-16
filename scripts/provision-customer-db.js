@@ -68,6 +68,7 @@ async function main() {
   await dbClient.connect();
 
   await dbClient.query(`grant usage on schema public to ${qident(roleName)}`);
+  await dbClient.query(`grant create on schema public to ${qident(roleName)}`);
   await dbClient.query(
     `grant select, insert, update, delete on all tables in schema public to ${qident(roleName)}`
   );

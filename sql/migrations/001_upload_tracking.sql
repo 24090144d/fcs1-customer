@@ -29,15 +29,35 @@ create table if not exists public.upload_jobs (
 alter table public.upload_jobs enable row level security;
 
 -- For now: service role only (no user auth yet — tighten when auth is added)
-create policy "Service role full access on upload_jobs"
-  on public.upload_jobs
-  using (true)
-  with check (true);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'upload_jobs'
+      and policyname = 'Service role full access on upload_jobs'
+  ) then
+    create policy "Service role full access on upload_jobs"
+      on public.upload_jobs
+      using (true)
+      with check (true);
+  end if;
+end $$;
 
-create index if not exists upload_jobs_file_hash_idx   on public.upload_jobs (file_hash);
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'upload_jobs' and column_name = 'file_hash'
+  ) then
+    create index if not exists upload_jobs_file_hash_idx on public.upload_jobs (file_hash);
+  end if;
+end $$;
+
 create index if not exists upload_jobs_module_code_idx on public.upload_jobs (module_code);
-create index if not exists upload_jobs_status_idx      on public.upload_jobs (status);
-create index if not exists upload_jobs_created_at_idx  on public.upload_jobs (created_at desc);
+create index if not exists upload_jobs_status_idx on public.upload_jobs (status);
+create index if not exists upload_jobs_created_at_idx on public.upload_jobs (created_at desc);
 
 -- ── uploaded_files ────────────────────────────────────────────────────────────
 -- Hash registry — one row per unique file content (SHA-256).
@@ -60,9 +80,20 @@ create table if not exists public.uploaded_files (
 
 alter table public.uploaded_files enable row level security;
 
-create policy "Service role full access on uploaded_files"
-  on public.uploaded_files
-  using (true)
-  with check (true);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'uploaded_files'
+      and policyname = 'Service role full access on uploaded_files'
+  ) then
+    create policy "Service role full access on uploaded_files"
+      on public.uploaded_files
+      using (true)
+      with check (true);
+  end if;
+end $$;
 
 create index if not exists uploaded_files_file_hash_idx on public.uploaded_files (file_hash);

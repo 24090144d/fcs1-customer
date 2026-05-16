@@ -50,8 +50,14 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          if command -v psql >/dev/null 2>&1; then
+            echo "psql already installed; skipping apt install."
+            psql --version
+          else
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+            psql --version
+          fi
 
       - name: Resolve database URL
         id: resolve_db_url

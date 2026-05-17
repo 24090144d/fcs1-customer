@@ -78,14 +78,14 @@ function applyLabelRules(raw: Highcharts.Options): Highcharts.Options {
     return opts;
   }
 
-  // Bar/Column: if <=10 categories, show data value
-  const catCount = Array.isArray((opts.xAxis as Highcharts.XAxisOptions)?.categories)
-    ? (((opts.xAxis as Highcharts.XAxisOptions).categories as unknown[])?.length ?? 0)
+  // Bar/Column: if <=10 points, show data value
+  const barPointCount = Array.isArray((series[0] as { data?: unknown[] } | undefined)?.data)
+    ? (((series[0] as { data?: unknown[] }).data)?.length ?? 0)
     : 0;
-  if ((firstType === 'bar' || firstType === 'column') && catCount > 0 && catCount <= 10) {
+  if ((firstType === 'bar' || firstType === 'column') && barPointCount > 0 && barPointCount <= 10) {
     const plotOptions = (opts.plotOptions ?? {}) as Highcharts.PlotOptions;
     const target = firstType === 'bar' ? (plotOptions.bar ?? {}) : (plotOptions.column ?? {});
-    const shouldUseDistinctColors = catCount < 6;
+    const shouldUseDistinctColors = barPointCount < 6;
     opts.plotOptions = {
       ...plotOptions,
       [firstType]: {
@@ -167,6 +167,53 @@ function applyLabelRules(raw: Highcharts.Options): Highcharts.Options {
     return opts;
   }
 
+  // Heatmap: show labels for top 3 cells only
+  if (firstType === 'heatmap') {
+    const hmSeries = series as Array<{ type?: string; data?: Array<unknown> }>;
+    const enhanced = hmSeries.map((s) => {
+      const data = Array.isArray(s.data) ? [...s.data] : [];
+      const ranked = data
+        .map((p, i) => {
+          if (Array.isArray(p)) return { i, v: Number(p[2] ?? 0) };
+          if (p && typeof p === 'object') {
+            const po = p as Record<string, unknown>;
+            return { i, v: Number(po.value ?? po.z ?? po.y ?? 0) };
+          }
+          return { i, v: 0 };
+        })
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 3);
+      const topIdx = new Set(ranked.map((r) => r.i));
+      const withLabels = data.map((p, i) => {
+        if (Array.isArray(p)) {
+          const cloned = [...p];
+          const value = Number(cloned[2] ?? 0);
+          return {
+            x: Number(cloned[0] ?? 0),
+            y: Number(cloned[1] ?? 0),
+            value,
+            dataLabels: topIdx.has(i)
+              ? { enabled: true, format: '{point.value}', style: labelStyle }
+              : { enabled: false },
+          };
+        }
+        if (p && typeof p === 'object') {
+          const po = p as Record<string, unknown>;
+          return {
+            ...po,
+            dataLabels: topIdx.has(i)
+              ? { enabled: true, format: '{point.value}', style: labelStyle }
+              : { enabled: false },
+          };
+        }
+        return p;
+      });
+      return { ...s, data: withLabels };
+    });
+    opts.series = enhanced as unknown as Highcharts.SeriesOptionsType[];
+    return opts;
+  }
+
   // Treemap: show data labels for top 3 by value
   if (firstType === 'treemap') {
     const tmSeries = series as Array<{ type?: string; data?: Array<Record<string, unknown>> }>;
@@ -187,7 +234,11 @@ function applyLabelRules(raw: Highcharts.Options): Highcharts.Options {
               format: `<b>{point.name}</b><br/>{point.value}`,
               style: labelStyle,
             }
-          : { enabled: false },
+          : {
+              enabled: true,
+              format: `<b>{point.name}</b>`,
+              style: labelStyle,
+            },
       }));
       return { ...s, colorByPoint: true, data: withLabels };
     });
@@ -333,6 +384,8 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
       theme as unknown as Record<string, unknown>,
       base  as unknown as Record<string, unknown>,
     ) as unknown as Highcharts.Options;
+    // Keep a single visible title source (card header) to avoid duplicate naming.
+    merged.title = { ...((merged.title ?? {}) as Highcharts.TitleOptions), text: undefined };
     const withLabelRules = applyLabelRules(merged);
     const forceDistinctIds = new Set(['him06', 'him22', 'him26', 'him28', 'him29', 'him33', 'him37']);
     return applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id);

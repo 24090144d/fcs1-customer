@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Upload, BarChart2, LineChart, PieChart, X, Database, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, EyeOff, Eye } from 'lucide-react';
+import { Upload, BarChart2, LineChart, PieChart, X, Database, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
 import { APP_VERSION } from '@/lib/version';
@@ -122,7 +122,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
   const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [navigating, setNavigating] = useState(false);
-  const [savedCharts, setSavedCharts] = useState<Array<{ id: string; title: string; is_hidden: boolean }>>([]);
+  const [hasPublishedBuilder, setHasPublishedBuilder] = useState(false);
   const { t: tr } = useI18n();
   const userId = typeof window !== 'undefined'
     ? (() => {
@@ -169,11 +169,10 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
   useEffect(() => {
     fetch(`/api/ai/charts/list?user_id=${encodeURIComponent(userId)}`)
       .then((r) => r.json())
-      .then((d) => setSavedCharts((d.charts ?? []).map((c: { id: string; title: string; is_hidden: boolean }) => ({
-        id: c.id,
-        title: c.title,
-        is_hidden: c.is_hidden,
-      }))))
+      .then((d) => {
+        const published = (d.charts ?? []).some((c: { is_published?: boolean; is_hidden?: boolean }) => (c.is_published ?? false) && !(c.is_hidden ?? false));
+        setHasPublishedBuilder(published);
+      })
       .catch(() => {});
   }, [pathname, userId]);
 
@@ -193,15 +192,6 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
     if (resettingDb) return;
     setResetPasswordInput('');
     setResetPasswordOpen(true);
-  }
-
-  async function toggleChartHidden(chartId: string, nextHidden: boolean) {
-    await fetch('/api/ai/charts/visibility', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, chart_id: chartId, is_hidden: nextHidden }),
-    }).catch(() => {});
-    setSavedCharts((prev) => prev.map((c) => c.id === chartId ? { ...c, is_hidden: nextHidden } : c));
   }
 
   async function submitResetDatabase() {
@@ -383,7 +373,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
             collapsed={collapsed}
           >
             <MessageSquare size={14} strokeWidth={pathname === '/playground' ? 2.5 : 2} className="shrink-0" />
-            {!collapsed && 'AI Playground'}
+            {!collapsed && 'Dashboard Builder'}
           </NavItem>
           <NavItem
             href="/onboarding"
@@ -397,40 +387,6 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
             {!collapsed && tr('sidebar.menu_upload_csv', 'Upload CSV')}
           </NavItem>
         </nav>
-
-        {!collapsed && savedCharts.length > 0 && (
-          <>
-            <SectionLabel label="Saved AI Charts" T={t} />
-            <div className="px-1 shrink-0 space-y-px">
-              {savedCharts.map((c) => (
-                <div key={c.id} className="flex items-center gap-1">
-                  <Link
-                    href="/playground"
-                    onClick={() => setNavigating(true)}
-                    className="flex-1 px-3 py-2 font-mono uppercase truncate"
-                    style={{
-                      fontSize: '0.68rem',
-                      letterSpacing: '0.08em',
-                      color: c.is_hidden ? t.dim : t.nav,
-                      opacity: c.is_hidden ? 0.6 : 1,
-                    }}
-                  >
-                    {c.title}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void toggleChartHidden(c.id, !c.is_hidden)}
-                    className="p-1.5"
-                    style={{ color: t.dim }}
-                    aria-label={c.is_hidden ? 'Unhide chart' : 'Hide chart'}
-                  >
-                    {c.is_hidden ? <Eye size={12} /> : <EyeOff size={12} />}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
         {/* ── Hair rule ──────────────────────────────────────────────────── */}
         <div
@@ -559,6 +515,24 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
               </div>
             );
           })}
+
+          {/* Builder rollout menu below chain section */}
+          {hasPublishedBuilder && (
+            <div className="mt-3 px-1">
+              {!collapsed && <SectionLabel label="Builder" T={t} />}
+              <NavItem
+                href="/dashboard-im"
+                active={pathname === '/dashboard-im'}
+                onClose={onClose}
+                onNavigateStart={() => setNavigating(true)}
+                T={t}
+                collapsed={collapsed}
+              >
+                <BarChart2 size={14} strokeWidth={pathname === '/dashboard-im' ? 2.5 : 2} className="shrink-0" />
+                {!collapsed && 'Dashboard · IM'}
+              </NavItem>
+            </div>
+          )}
         </div>
 
         {/* ── User strip ─────────────────────────────────────────────────── */}

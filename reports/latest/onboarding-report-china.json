@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-05-16T16:49:23.657Z",
+  "customerCode": "china",
+  "customerName": "China",
+  "projectName": "fcs1-china",
+  "appUrl": "https://fcs1-china.vercel.app",
+  "domain": null,
+  "overall": "PASS",
+  "passCount": 10,
+  "failCount": 0,
+  "warnCount": 0,
+  "checks": [
+    {
+      "name": "vercel_project_exists",
+      "status": "PASS",
+      "detail": "Project fcs1-china found"
+    },
+    {
+      "name": "vercel_latest_deployment",
+      "status": "PASS",
+      "detail": "Latest deployment READY (fcs1-china-hf8x2vgc8-fcs1-s-projects.vercel.app)"
+    },
+    {
+      "name": "vercel_env_vars",
+      "status": "PASS",
+      "detail": "Required env vars present"
+    },
+    {
+      "name": "database_target",
+      "status": "PASS",
+      "detail": "Connected to expected DB fcs1_china"
+    },
+    {
+      "name": "database_user",
+      "status": "PASS",
+      "detail": "Connected as app_user_china"
+    },
+    {
+      "name": "database_schema_tables",
+      "status": "PASS",
+      "detail": "Public tables count = 9"
+    },
+    {
+      "name": "smoke_/",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "smoke_/onboarding",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "smoke_/dashboard",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "smoke_/api/nav/dashboards",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    }
+  ]
+}

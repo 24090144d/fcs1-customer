@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export default function PlaygroundPage() {
   return (
-    <AppLayout breadcrumbs={[{ label: 'Playground' }]}>
+    <AppLayout breadcrumbs={[{ label: 'Dashboard · IM' }]}>
       <PlaygroundClient />
     </AppLayout>
   );

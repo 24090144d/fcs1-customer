@@ -293,6 +293,56 @@ function hcOpts(o: Record<string, unknown>): Highcharts.Options {
   return o as unknown as Highcharts.Options;
 }
 
+function buildBuilderOverride(def: ChartDef, fd: FilteredData | null, deptSummary: DeptScopedSummary | null): Highcharts.Options | undefined {
+  if (!fd && !deptSummary) return undefined;
+  const savedOptions = (def.options ?? {}) as Record<string, unknown>;
+  const savedChartType = String(((savedOptions.chart as Record<string, unknown> | undefined)?.type ?? '')).toLowerCase();
+  const hasSavedDrilldown = !!savedOptions.drilldown;
+  // Respect builder-authored chart type/config when pie/donut/drilldown was explicitly saved.
+  if (hasSavedDrilldown || savedChartType === 'pie') return undefined;
+  const title = (def.title ?? '').toLowerCase();
+  if (title.includes('monthly') && title.includes('severity') && fd) {
+    const monthMap = new Map<string, Record<string, number>>();
+    for (const d of fd.days) {
+      const m = d.date.slice(0, 7);
+      if (!monthMap.has(m)) monthMap.set(m, {});
+      const row = monthMap.get(m)!;
+      for (const [sev, n] of Object.entries(d.by_severity ?? {})) row[sev] = (row[sev] ?? 0) + Number(n);
+    }
+    const months = Array.from(monthMap.keys()).sort();
+    const sevKeys = Array.from(new Set(months.flatMap((m) => Object.keys(monthMap.get(m) ?? {}))));
+    return {
+      chart: { type: 'column' },
+      xAxis: { categories: months },
+      yAxis: { title: { text: 'Count' } },
+      series: sevKeys.map((sev) => ({ type: 'column', name: sev, data: months.map((m) => Number(monthMap.get(m)?.[sev] ?? 0)) })),
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+    } as Highcharts.Options;
+  }
+  if (title.includes('department')) {
+    const depMap = deptSummary?.dept_map ?? {};
+    const rows = Object.entries(depMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
+    const categories = rows.map(([k]) => k);
+    const values = rows.map(([, v]) => Number(v));
+    if (categories.length === 0) return undefined;
+    return {
+      chart: { type: 'bar' },
+      xAxis: { categories },
+      yAxis: { title: { text: 'Count' } },
+      series: [{ type: 'bar', name: 'Count', data: values }],
+      plotOptions: { bar: { dataLabels: { enabled: true } } },
+    } as Highcharts.Options;
+  }
+  return undefined;
+}
+
+function builderIndexFromId(id: string): number | null {
+  const m = id.match(/builder_chart_(\d+)$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
 // ── Filterable chart rebuilder ────────────────────────────────────────────────
 
 function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Options | undefined {
@@ -1156,9 +1206,12 @@ function SectionHead({ label, dark }: { label: string; dark: boolean }) {
 export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboardJson; chainEntries?: ChainEntry[] }) {
   const isJo = data.meta.schema === 'jo-v1';
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
+  const isBuilder = data.meta.upload_job_id === 'builder-dashboard-im';
   const { t } = useI18n();
   const moduleLabel = isJo ? 'JO' : 'IM';
-  const contextTitle = isCorp
+  const contextTitle = isBuilder
+    ? `Dashboard · ${moduleLabel}`
+    : isCorp
     ? `${(data.meta.chain_code ?? 'CORP').toUpperCase()} · ${moduleLabel}`
     : data.meta.hotel_name
     ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${moduleLabel}${data.meta.country_code ? ` (${data.meta.country_code})` : ''}`
@@ -1285,20 +1338,26 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
       setDeptScopedSummary(null);
       return;
     }
+    const builderOrgId = (data.meta as unknown as { organization_id?: string }).organization_id;
+    const useBuilderScope = isBuilder && !!builderOrgId;
     const params = new URLSearchParams({
-      chain: data.meta.chain_code,
-      hotel: data.meta.hotel_code,
       from: dateFrom || '',
       to: dateTo || '',
       department: departmentFilter,
     });
+    if (useBuilderScope) {
+      params.set('organization_id', builderOrgId as string);
+    } else {
+      params.set('chain', data.meta.chain_code);
+      params.set('hotel', data.meta.hotel_code);
+    }
     let cancelled = false;
-    fetch(`/api/dashboard/im-scope?${params.toString()}`)
+    fetch(`${useBuilderScope ? '/api/dashboard/im-scope-builder' : '/api/dashboard/im-scope'}?${params.toString()}`)
       .then((r) => r.json())
       .then((json) => { if (!cancelled && !json.error) setDeptScopedSummary(json as DeptScopedSummary); })
       .catch(() => { if (!cancelled) setDeptScopedSummary(null); });
     return () => { cancelled = true; };
-  }, [isCorp, isJo, departmentFilter, data.meta.chain_code, data.meta.hotel_code, dateFrom, dateTo]);
+  }, [isBuilder, isCorp, isJo, departmentFilter, data.meta, data.meta.chain_code, data.meta.hotel_code, dateFrom, dateTo]);
 
   const activeChainEntries = useMemo<ChainEntry[]>(() => {
     if (!(isCorp && !isJo && filtered && dateFrom && dateTo)) return chainEntries;
@@ -1531,6 +1590,24 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   }, [isCorp, isJo, data.summary, data.charts, kpis, fd, deptScopedSummary]);
 
   const localizedKpis = useMemo(() => {
+    if (isBuilder) {
+      const activeFd = deptFd ?? fd;
+      const total = activeFd?.total ?? data.summary.total ?? 0;
+      const completed = activeFd?.completed ?? data.summary.completed ?? 0;
+      const pending = activeFd?.pending ?? data.summary.pending ?? 0;
+      const cancelled = activeFd?.cancelled ?? data.summary.cancelled ?? 0;
+      const closure = total > 0 ? (completed / total) * 100 : 0;
+      return kpis.map((k) => ({
+        ...k,
+        value: /total incident/i.test(k.label) ? total
+          : /closure rate/i.test(k.label) ? r1(closure)
+          : /pending/i.test(k.label) ? pending
+          : /cancel/i.test(k.label) ? cancelled
+          : k.value,
+        label: k.label,
+        note: k.note,
+      }));
+    }
     if (corpImKpis) {
       return corpImKpis.map((k) => ({
         ...k,
@@ -1552,7 +1629,7 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
       label: t(`${isJo ? 'kpi_labels_jo' : 'kpi_labels_im'}.${k.id}`, k.label),
       note: t(`${isJo ? 'kpi_notes_jo' : 'kpi_notes_im'}.${k.id}`, k.note),
     }));
-  }, [corpImKpis, hotelImKpis, kpis, isJo, t]);
+  }, [isBuilder, corpImKpis, hotelImKpis, kpis, isJo, t, deptFd, fd, data.summary]);
 
   const localizedEac = useMemo(() => data.eac.map((c) => {
     if (isJo) {
@@ -2062,6 +2139,10 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
 
   function chartOpts(def: ChartDef): { override?: Highcharts.Options; fullPeriod: boolean } {
     const effectiveFd = deptFd ?? fd;
+    if (isBuilder) {
+      const builderOverride = buildBuilderOverride(def, effectiveFd, deptScopedSummary);
+      if (builderOverride) return { override: builderOverride, fullPeriod: false };
+    }
     const isImHotelCustomChart = !isCorp && !isJo && /^him\d+$/i.test(def.id);
     if (!isCorp && !isJo && deptScopedSummary) {
       if (effectiveFd) {
@@ -2379,7 +2460,18 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
           </section>
         )}
 
-        {!isCorp && (
+        {isBuilder ? (
+          <section>
+            <SectionHead label={'Builder Charts'} dark={dark} />
+            <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {localizedCharts.map((def) => {
+                const { override, fullPeriod } = chartOpts(def);
+                const uiIndex = builderIndexFromId(def.id) ?? nextChartIndex();
+                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+              })}
+            </div>
+          </section>
+        ) : !isCorp && (
           <>
             {!isJo ? (
               <>

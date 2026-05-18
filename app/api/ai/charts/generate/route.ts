@@ -193,7 +193,83 @@ function detectRequestedImFields(prompt: string): ImDimension[] {
       if (!requested.includes(rule.dimension)) requested.push(rule.dimension);
     }
   }
+  // Disambiguation for overlapping aliases.
+  if (lower.includes('booking source')) {
+    const idx = requested.indexOf('source_of_complaint');
+    if (idx >= 0) requested.splice(idx, 1);
+  }
+  if (lower.includes('rate code')) {
+    const idx = requested.indexOf('rates');
+    if (idx >= 0) requested.splice(idx, 1);
+  }
   return requested;
+}
+
+function detectPrimaryByDepartment(prompt: string): ImDimension | null {
+  const lower = prompt.toLowerCase();
+  const byDept = lower.indexOf('by department');
+  if (byDept < 0) return null;
+  const before = lower.slice(0, byDept);
+  const pairs: Array<{ field: ImDimension; keys: string[] }> = [
+    { field: 'incident_status', keys: ['incident status', 'status'] },
+    { field: 'incident_item_name', keys: ['incident item name', 'incident item', ' item '] },
+    { field: 'incident_category', keys: ['incident category', 'category'] },
+    { field: 'severity', keys: ['severity'] },
+    { field: 'source_of_complaint', keys: ['source of complaint', 'complaint source', 'source'] },
+    { field: 'booking_source', keys: ['booking source', 'booking'] },
+    { field: 'hotel_code', keys: ['hotel code', 'hotel'] },
+    { field: 'vip_code', keys: ['vip code', 'vip'] },
+    { field: 'profile_type', keys: ['profile type', 'profile'] },
+    { field: 'rate_code', keys: ['rate code'] },
+  ];
+  let best: { field: ImDimension; pos: number } | null = null;
+  for (const p of pairs) {
+    for (const k of p.keys) {
+      const pos = before.indexOf(k);
+      if (pos < 0) continue;
+      if (!best || pos < best.pos) best = { field: p.field, pos };
+    }
+  }
+  return best?.field ?? null;
+}
+
+const DRILL_FIELDS: Array<{ field: ImDimension; aliases: string[] }> = [
+  { field: 'incident_status', aliases: ['incident status', 'status'] },
+  { field: 'incident_item_name', aliases: ['incident item name', 'incident item', 'item'] },
+  { field: 'incident_category', aliases: ['incident category', 'category'] },
+  { field: 'severity', aliases: ['severity'] },
+  { field: 'source_of_complaint', aliases: ['source complaint', 'source of complaint', 'complaint source', 'source'] },
+  { field: 'booking_source', aliases: ['booking source'] },
+  { field: 'hotel_code', aliases: ['hotel code', 'hotel'] },
+  { field: 'vip_code', aliases: ['vip code', 'vip'] },
+  { field: 'profile_type', aliases: ['profile type', 'profile'] },
+  { field: 'rate_code', aliases: ['rate code'] },
+  { field: 'department', aliases: ['department', 'dept'] },
+];
+
+function detectPairByPattern(prompt: string): { primary: ImDimension; secondary: ImDimension } | null {
+  const lower = prompt.toLowerCase();
+  const byIdx = lower.indexOf(' by ');
+  if (byIdx < 0) return null;
+  const left = ` ${lower.slice(0, byIdx)} `;
+  const right = ` ${lower.slice(byIdx + 4)} `;
+  const pickBest = (segment: string): ImDimension | null => {
+    let best: { field: ImDimension; len: number } | null = null;
+    for (const f of DRILL_FIELDS) {
+      for (const a of f.aliases) {
+        if (!segment.includes(` ${a} `)) continue;
+        const len = a.length;
+        if (!best || len > best.len) best = { field: f.field, len };
+      }
+    }
+    return best?.field ?? null;
+  };
+  const leftField = pickBest(left);
+  const rightField = pickBest(right);
+  const leftHit = leftField ? { field: leftField } : null;
+  const rightHit = rightField ? { field: rightField } : null;
+  if (!leftHit || !rightHit) return null;
+  return { primary: leftHit.field, secondary: rightHit.field };
 }
 
 function parseImIntent(prompt: string): ImIntent {
@@ -435,12 +511,25 @@ export async function POST(req: NextRequest) {
 
     let intent = parseImIntent(prompt);
     requestedFields = detectRequestedImFields(prompt);
+    const pairByPattern = detectPairByPattern(prompt);
     if (requestedFields.includes('department') && requestedFields.includes('incident_item_name')) {
       intent = { ...intent, wantsDrilldown: true, dimension: 'department' };
     }
+    if (requestedFields.includes('incident_status') && requestedFields.includes('department')) {
+      intent = { ...intent, wantsDrilldown: true, dimension: 'incident_status' };
+    }
+    if (pairByPattern) {
+      intent = { ...intent, wantsDrilldown: true, dimension: pairByPattern.primary };
+    }
+    const byDeptPrimary = detectPrimaryByDepartment(prompt);
+    if (byDeptPrimary) {
+      intent = { ...intent, wantsDrilldown: true, dimension: byDeptPrimary };
+    }
     const hasCalcAlias = /\b(rate|percent|percentage|pct|ratio|share|avg|average|mean)\b/i.test(prompt);
     if (hasCalcAlias && !lowerPrompt.includes('kpi') && !intent.wantsDualAxis && !intent.wantsGauge) {
-      fallbackWarnings.push('Calculation keyword detected (rate/percent/ratio). Current rule-based chart defaults to count unless KPI/gauge/explicit formula pattern is used.');
+      if (!lowerPrompt.includes('rate code')) {
+        fallbackWarnings.push('Calculation keyword detected (rate/percent/ratio). Current rule-based chart defaults to count unless KPI/gauge/explicit formula pattern is used.');
+      }
     }
     if (intent.timeBucket !== 'none' && intent.timeBucket !== 'monthly') {
       fallbackWarnings.push(`Time granularity "${intent.timeBucket}" requested; using monthly bucket in current rule-based mode.`);
@@ -667,6 +756,15 @@ export async function POST(req: NextRequest) {
         series = [{ type: 'treemap', layoutAlgorithm: 'squarified', colorByPoint: true, data: dataTree }];
       } else {
       let drillDimension: ImDimension = dim === 'incident_category' ? 'incident_item_name' : 'incident_category';
+      if (pairByPattern) {
+        drillDimension = pairByPattern.secondary;
+      }
+      if (intent.wantsDrilldown && requestedFields.includes('department') && dim !== 'department') {
+        drillDimension = 'department';
+      }
+      if (intent.wantsDrilldown && dim === 'incident_status' && requestedFields.includes('department')) {
+        drillDimension = 'department';
+      }
       if (intent.wantsDrilldown && dim === 'department' && requestedFields.includes('incident_item_name')) {
         drillDimension = 'incident_item_name';
       }

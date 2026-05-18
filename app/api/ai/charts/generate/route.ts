@@ -79,7 +79,7 @@ type ImDimension =
 type ImIntent = {
   dimension: ImDimension;
   wantsMonth: boolean;
-  timeBucket: 'none' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'quarterly';
+  timeBucket: 'none' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   wantsGauge: boolean;
   chartType: 'column' | 'bar' | 'line' | 'pie' | 'scatter' | 'bubble' | 'gauge' | 'heatmap' | 'treemap';
   topN: number;
@@ -278,8 +278,9 @@ function parseImIntent(prompt: string): ImIntent {
   const wantsDaily = lower.includes('daily') || lower.includes('day') || lower.includes('created date') || lower.includes('incident date');
   const wantsWeekly = lower.includes('weekly') || lower.includes('week');
   const wantsQuarterly = lower.includes('quarterly') || lower.includes('quarter') || /\bq[1-4]\b/.test(lower);
+  const wantsYearly = lower.includes('yearly') || /\byear\b/.test(lower);
   const wantsMonthly = lower.includes('month') || lower.includes('monthly');
-  const timeBucket: ImIntent['timeBucket'] = wantsHourly ? 'hourly' : wantsDaily ? 'daily' : wantsWeekly ? 'weekly' : wantsQuarterly ? 'quarterly' : wantsMonthly ? 'monthly' : 'none';
+  const timeBucket: ImIntent['timeBucket'] = wantsHourly ? 'hourly' : wantsDaily ? 'daily' : wantsWeekly ? 'weekly' : wantsQuarterly ? 'quarterly' : wantsMonthly ? 'monthly' : wantsYearly ? 'yearly' : 'none';
   const wantsMonth = timeBucket !== 'none';
   const wantsDonut = lower.includes('donut');
   const wantsPie = wantsDonut || lower.includes('pie');
@@ -318,6 +319,27 @@ function parseImIntent(prompt: string): ImIntent {
   else if (wantsBar || wantsTop) chartType = 'bar';
 
   return { dimension, wantsMonth, timeBucket, wantsGauge, chartType, topN, wantsDonut, wantsDualAxis, wantsStacked, wantsDrilldown, wantsDonutRace, wantsBarRace };
+}
+
+function timeBucketKey(dateIso: string, bucket: ImIntent['timeBucket']): string {
+  const d = new Date(dateIso);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const hr = String(d.getUTCHours()).padStart(2, '0');
+  if (bucket === 'hourly') return hr;
+  if (bucket === 'daily') return `${y}-${m}-${day}`;
+  if (bucket === 'weekly') {
+    const dt = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate()));
+    const dayNum = dt.getUTCDay() || 7;
+    dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((dt.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${dt.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  }
+  if (bucket === 'quarterly') return `${y}-Q${Math.floor((Number(m) - 1) / 3) + 1}`;
+  if (bucket === 'yearly') return `${y}`;
+  return `${y}-${m}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -519,7 +541,10 @@ export async function POST(req: NextRequest) {
       intent = { ...intent, wantsDrilldown: true, dimension: 'incident_status' };
     }
     if (pairByPattern) {
-      intent = { ...intent, wantsDrilldown: true, dimension: pairByPattern.primary };
+      intent = { ...intent, dimension: pairByPattern.primary };
+      if (lowerPrompt.includes('drilldown') || lowerPrompt.includes('drill down')) {
+        intent = { ...intent, wantsDrilldown: true };
+      }
     }
     const byDeptPrimary = detectPrimaryByDepartment(prompt);
     if (byDeptPrimary) {
@@ -531,40 +556,53 @@ export async function POST(req: NextRequest) {
         fallbackWarnings.push('Calculation keyword detected (rate/percent/ratio). Current rule-based chart defaults to count unless KPI/gauge/explicit formula pattern is used.');
       }
     }
-    if (intent.timeBucket !== 'none' && intent.timeBucket !== 'monthly') {
-      fallbackWarnings.push(`Time granularity "${intent.timeBucket}" requested; using monthly bucket in current rule-based mode.`);
-    }
     const dim = intent.dimension;
     const dimLabel = dim
       .replaceAll('_', ' ')
       .replace(/\b\w/g, (m) => m.toUpperCase());
     resolvedFields = [dim];
 
-    interpretation = `Interpreted as ${intent.wantsMonth ? 'monthly ' : ''}incident count by ${dimLabel}${intent.chartType === 'pie' ? (intent.wantsDonut ? ' (donut)' : ' (pie)') : ''}${intent.chartType === 'scatter' ? ' (scatter)' : ''}${intent.chartType === 'bubble' ? ' (bubble)' : ''}${intent.chartType === 'gauge' ? ' (gauge KPI)' : ''}${intent.chartType === 'heatmap' ? ' (heatmap)' : ''}${intent.chartType === 'treemap' ? ' (treemap)' : ''}${intent.wantsDonutRace ? ' as donut race' : ''}${intent.wantsBarRace ? ' as bar race' : ''}${intent.wantsDualAxis ? ' with dual-axis combo' : ''}${intent.wantsStacked ? ' in stacked mode' : ''}${intent.wantsDrilldown ? ' with drilldown' : ''}.`;
+    const tbLabel = intent.wantsMonth ? `${intent.timeBucket === 'none' ? 'monthly' : intent.timeBucket} ` : '';
+    interpretation = `Interpreted as ${tbLabel}incident count by ${dimLabel}${intent.chartType === 'pie' ? (intent.wantsDonut ? ' (donut)' : ' (pie)') : ''}${intent.chartType === 'scatter' ? ' (scatter)' : ''}${intent.chartType === 'bubble' ? ' (bubble)' : ''}${intent.chartType === 'gauge' ? ' (gauge KPI)' : ''}${intent.chartType === 'heatmap' ? ' (heatmap)' : ''}${intent.chartType === 'treemap' ? ' (treemap)' : ''}${intent.wantsDonutRace ? ' as donut race' : ''}${intent.wantsBarRace ? ' as bar race' : ''}${intent.wantsDualAxis ? ' with dual-axis combo' : ''}${intent.wantsStacked ? ' in stacked mode' : ''}${intent.wantsDrilldown ? ' with drilldown' : ''}.`;
 
     if (intent.wantsMonth) {
-      title = `Monthly Incidents by ${dimLabel}`;
+      const capBucket = `${intent.timeBucket.charAt(0).toUpperCase()}${intent.timeBucket.slice(1)}`;
+      title = `${capBucket} Incidents by ${dimLabel}`;
       chartType = intent.chartType;
-      querySpec = { table: 'im_records', group_by: ['month', dim], metric: 'count' };
+      querySpec = { table: 'im_records', group_by: [intent.timeBucket, dim], metric: 'count' };
+      if (pairByPattern) {
+        querySpec = { table: 'im_records', group_by: [intent.timeBucket, dim, pairByPattern.secondary], metric: 'count' };
+      }
       const { data } = await sb
         .from('im_records')
-        .select(`created_date,${dim}`)
+        .select(pairByPattern ? `created_date,${dim},${pairByPattern.secondary}` : `created_date,${dim}`)
         .eq('organization_id', effectiveOrgId)
         .limit(10000) as unknown as SbResult<Array<{ created_date: string | null } & Record<string, string | null>>>;
       const rows = data ?? [];
-      const months = new Set<string>();
+      const buckets = new Set<string>();
       const dimMap = new Map<string, Map<string, number>>();
+      const pairMap = new Map<string, Map<string, number>>();
       for (const r of rows) {
         if (!r.created_date) continue;
-        const month = monthFromIso(new Date(r.created_date).toISOString());
-        months.add(month);
+        const bucket = timeBucketKey(new Date(r.created_date).toISOString(), intent.timeBucket);
+        buckets.add(bucket);
         const raw = r[dim];
         const key = (typeof raw === 'string' ? raw : 'Unknown').trim() || 'Unknown';
         if (!dimMap.has(key)) dimMap.set(key, new Map());
         const cur = dimMap.get(key)!;
-        cur.set(month, (cur.get(month) ?? 0) + 1);
+        cur.set(bucket, (cur.get(bucket) ?? 0) + 1);
+        if (pairByPattern) {
+          const secRaw = r[pairByPattern.secondary];
+          const sec = (typeof secRaw === 'string' ? secRaw : 'Unknown').trim() || 'Unknown';
+          const combo = `${key} | ${sec}`;
+          if (!pairMap.has(combo)) pairMap.set(combo, new Map());
+          const pcur = pairMap.get(combo)!;
+          pcur.set(bucket, (pcur.get(bucket) ?? 0) + 1);
+        }
       }
-      categories = Array.from(months).sort();
+      categories = intent.timeBucket === 'hourly'
+        ? Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+        : Array.from(buckets).sort();
       const ranked = Array.from(dimMap.entries())
         .sort((a, b) => {
           const sa = Array.from(a[1].values()).reduce((s, v) => s + v, 0);
@@ -572,6 +610,16 @@ export async function POST(req: NextRequest) {
           return sb2 - sa;
         })
         .slice(0, intent.topN);
+      const rankedPair = Array.from(pairMap.entries())
+        .sort((a, b) => {
+          const sa = Array.from(a[1].values()).reduce((s, v) => s + v, 0);
+          const sb2 = Array.from(b[1].values()).reduce((s, v) => s + v, 0);
+          return sb2 - sa;
+        })
+        .slice(0, intent.topN);
+      if (pairByPattern) {
+        resolvedFields.push(pairByPattern.secondary);
+      }
       if (intent.wantsDonutRace) {
         chartType = 'pie';
         const latestMonth = categories[categories.length - 1] ?? '';
@@ -602,12 +650,13 @@ export async function POST(req: NextRequest) {
         categories = [];
         series = [{ name: 'Count', data: pieData }];
       } else {
-        const baseSeries = ranked.map(([name, m]) => ({
+        const baseSource = pairByPattern ? rankedPair : ranked;
+        const baseSeries = baseSource.map(([name, m]) => ({
           name,
           data: categories.map((c) => m.get(c) ?? 0),
         }));
         if (intent.wantsDualAxis) {
-          const totalByMonth = categories.map((month) => ranked.reduce((acc, [, m]) => acc + (m.get(month) ?? 0), 0));
+          const totalByMonth = categories.map((bucket) => ranked.reduce((acc, [, m]) => acc + (m.get(bucket) ?? 0), 0));
           yAxis = [{ title: { text: 'By Dimension' } }, { title: { text: 'Total Incidents' }, opposite: true }];
           series = [
             { ...baseSeries[0], type: chartType === 'line' ? 'column' : chartType },
@@ -770,9 +819,11 @@ export async function POST(req: NextRequest) {
       }
       if (intent.wantsDrilldown) resolvedFields.push(drillDimension);
       const selectCols = intent.wantsDrilldown ? `${dim},${drillDimension}` : dim;
+      const twoDimForStacked = !!pairByPattern && intent.wantsStacked && (chartType === 'column' || chartType === 'bar');
+      const effectiveSelectCols = twoDimForStacked ? `${dim},${pairByPattern.secondary}` : selectCols;
       const { data } = await sb
         .from('im_records')
-        .select(selectCols)
+        .select(effectiveSelectCols)
         .eq('organization_id', effectiveOrgId)
         .limit(10000) as unknown as SbResult<Array<Record<string, string | null>>>;
       const map = new Map<string, number>();
@@ -790,7 +841,69 @@ export async function POST(req: NextRequest) {
         }
       }
       const top = Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, intent.topN);
-      if (chartType === 'pie') {
+      const hasPair = !!pairByPattern;
+      if (twoDimForStacked || hasPair) {
+        resolvedFields.push(pairByPattern.secondary);
+        const secValues = new Set<string>();
+        const matrix = new Map<string, Map<string, number>>();
+        for (const r of data ?? []) {
+          const aRaw = r[dim];
+          const a = (typeof aRaw === 'string' ? aRaw : 'Unknown').trim() || 'Unknown';
+          if (!top.some(([k]) => k === a)) continue;
+          const bRaw = r[pairByPattern.secondary];
+          const b = (typeof bRaw === 'string' ? bRaw : 'Unknown').trim() || 'Unknown';
+          secValues.add(b);
+          if (!matrix.has(a)) matrix.set(a, new Map());
+          const m = matrix.get(a)!;
+          m.set(b, (m.get(b) ?? 0) + 1);
+        }
+        const topA = top.map(([k]) => k);
+        const topB = Array.from(secValues)
+          .map((b) => ({ b, total: topA.reduce((s, a) => s + Number(matrix.get(a)?.get(b) ?? 0), 0) }))
+          .sort((x, y) => y.total - x.total)
+          .slice(0, intent.topN)
+          .map((x) => x.b);
+        const bLabel = pairByPattern.secondary.replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+        if (twoDimForStacked) {
+          categories = topA;
+          series = topB.map((b) => ({
+            name: b,
+            type: chartType,
+            data: topA.map((a) => Number(matrix.get(a)?.get(b) ?? 0)),
+          }));
+          plotOptions = { [chartType]: { stacking: 'normal' } };
+          title = `Top ${intent.topN} ${dimLabel} by ${bLabel} (Stacked)`;
+        } else if (intent.wantsDualAxis && (chartType === 'bar' || chartType === 'line' || chartType === 'column')) {
+          categories = topA;
+          const totalByA = topA.map((a) => topB.reduce((s, b) => s + Number(matrix.get(a)?.get(b) ?? 0), 0));
+          const topB1 = topB[0] ?? 'Unknown';
+          yAxis = [{ title: { text: 'Incidents' } }, { title: { text: `${topB1} Incidents` }, opposite: true }];
+          series = [
+            { name: 'Total Incidents', type: chartType === 'line' ? 'column' : chartType, data: totalByA },
+            { name: `${topB1}`, type: 'line', yAxis: 1, data: topA.map((a) => Number(matrix.get(a)?.get(topB1) ?? 0)) },
+          ];
+          title = `Top ${intent.topN} ${dimLabel} by ${bLabel} (2-Axis Combo)`;
+        } else if (chartType === 'pie' && !intent.wantsDrilldown) {
+          const combos = topA.flatMap((a) => topB.map((b) => ({ name: `${a} | ${b}`, y: Number(matrix.get(a)?.get(b) ?? 0) })))
+            .filter((x) => x.y > 0)
+            .sort((x, y) => y.y - x.y)
+            .slice(0, intent.topN);
+          categories = [];
+          series = [{ name: 'Count', type: 'pie', data: combos }];
+          if (intent.wantsDonut) plotOptions = { pie: { innerSize: '55%' } };
+          title = `Top ${intent.topN} ${dimLabel} by ${bLabel}${intent.wantsDonut ? ' (Donut)' : ' (Pie)'}`;
+        } else if ((chartType === 'bar' || chartType === 'line' || chartType === 'column') && !intent.wantsDrilldown) {
+          categories = topA;
+          series = topB.map((b) => ({
+            name: b,
+            type: chartType,
+            data: topA.map((a) => Number(matrix.get(a)?.get(b) ?? 0)),
+          }));
+          title = `Top ${intent.topN} ${dimLabel} by ${bLabel}`;
+        }
+      }
+      if (chartType === 'pie' && series.length === 0) {
+      
         categories = [];
         series = [{
           name: 'Count',
@@ -820,7 +933,7 @@ export async function POST(req: NextRequest) {
             };
           });
         }
-      } else {
+      } else if (series.length === 0) {
         categories = top.map(([k]) => k);
         series = [{
           name: 'Count',
@@ -940,11 +1053,12 @@ export async function POST(req: NextRequest) {
           if (unresolved.length > 0) {
             reasons.push(`Requested field(s) not in resolved query: ${unresolved.join(', ')}`);
           }
+          const resolvedUnique = Array.from(new Set(resolvedFields));
           return {
             mode: 'rule_based',
             supported_fields: SUPPORTED_IM_FIELDS,
             requested_fields: reqFields,
-            resolved_fields: resolvedFields,
+            resolved_fields: resolvedUnique,
             fallback: reasons.length > 0,
             fallback_reasons: reasons,
           };

@@ -417,11 +417,14 @@ export default function PlaygroundClient() {
     const payloadChartConfig = generated.kpis && generated.kpis.length > 0
       ? ({ kpis: generated.kpis } as unknown as Highcharts.Options)
       : generated.chart_config_json;
+    const inputTitle = prompt.trim();
+    const saveTitle = inputTitle.length > 0 ? inputTitle : generated.title;
     const res = await fetch('/api/ai/charts/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...generated,
+        title: saveTitle,
         chart_config_json: payloadChartConfig,
         chart_note: generated.chart_note ?? '',
         chart_formula: generated.chart_formula ?? '',
@@ -436,7 +439,7 @@ export default function PlaygroundClient() {
       return;
     }
     await loadSaved();
-    showNotice('success', `[${generated.title}] added to Builder.`);
+    showNotice('success', `[${saveTitle}] added to Builder.`);
     setSaving(false);
   }
 
@@ -692,8 +695,15 @@ export default function PlaygroundClient() {
   const generatedChartOptions = useMemo<Highcharts.Options | null>(() => {
     const candidate = generated?.chart_config_json;
     if (!candidate || typeof candidate !== 'object') return null;
-    return candidate;
-  }, [generated]);
+    const previewTitle = prompt.trim() || generated?.title || '';
+    return {
+      ...candidate,
+      title: {
+        ...(((candidate.title as Highcharts.TitleOptions | undefined) ?? {}) as Highcharts.TitleOptions),
+        text: previewTitle,
+      },
+    };
+  }, [generated, prompt]);
 
   return (
     <div className="p-6 pb-20 space-y-6">
@@ -951,7 +961,7 @@ export default function PlaygroundClient() {
 
       {generated && (!generated.kpis || generated.kpis.length === 0) && (
         <div className="p-4 border rounded-lg bg-white/70">
-          <h2 className="font-semibold mb-3">Preview: {generated.title}</h2>
+          <h2 className="font-semibold mb-3">Preview: {prompt.trim() || generated.title}</h2>
           {generatedChartOptions ? (
             <>
               <HighchartsReact highcharts={Highcharts} options={generatedChartOptions} />

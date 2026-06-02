@@ -130,6 +130,7 @@ if ($Domain -ne "") {
 
 Write-Host "Triggering deploy from git ref $GitRef"
 $deployBody = @{
+  name = $projectName
   project = $projectName
   gitSource = @{
     type = "github"

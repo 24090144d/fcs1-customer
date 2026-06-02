@@ -81,6 +81,19 @@ catch {
   }
 }
 
+Write-Host "Ensuring Vercel project $projectName is linked to GitHub"
+try {
+  Invoke-RestMethod `
+    -Method Patch `
+    -Uri "https://api.vercel.com/v9/projects/$projectName?teamId=$VercelOrgId" `
+    -Headers $headers `
+    -Body (@{ gitRepository = $gitRepository } | ConvertTo-Json -Depth 4) | Out-Null
+  Write-Host "GitHub repository linked."
+}
+catch {
+  Write-Host "Warning: unable to link GitHub repository to project. $_"
+}
+
 $envValues = @(
   @{ key = "CUSTOMER_CODE"; value = $CustomerCode },
   @{ key = "CUSTOMER_NAME"; value = $CustomerName },

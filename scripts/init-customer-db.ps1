@@ -23,6 +23,7 @@ function Invoke-PsqlFile {
 
   Write-Host "Applying $SqlFile"
   $targetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+  $targetUrl = $targetUrl -replace '([?&])channel_binding=require', ''
   & psql "$targetUrl" -v ON_ERROR_STOP=1 -f "$SqlFile"
   if ($LASTEXITCODE -ne 0) {
     throw "psql failed for file: $SqlFile (exit code $LASTEXITCODE)"
@@ -40,6 +41,7 @@ function Test-TableExists {
 
   $query = "select to_regclass('public.$TableName') is not null as exists;"
   $targetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+  $targetUrl = $targetUrl -replace '([?&])channel_binding=require', ''
   $result = & psql "$targetUrl" -t -A -v ON_ERROR_STOP=1 -c "$query"
   if ($LASTEXITCODE -ne 0) {
     throw "Failed checking table existence for $TableName (exit code $LASTEXITCODE)"
@@ -75,6 +77,7 @@ set organization_name = excluded.organization_name;
 
 Write-Host "Seeding organization metadata for $CustomerCode"
 $seedTargetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+$seedTargetUrl = $seedTargetUrl -replace '([?&])channel_binding=require', ''
 $seedSql | & psql "$seedTargetUrl" -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) {
   throw "psql failed while seeding organization metadata (exit code $LASTEXITCODE)"

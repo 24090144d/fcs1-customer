@@ -23,6 +23,16 @@ $headers = @{
   "Content-Type" = "application/json"
 }
 
+function Sanitize-DbUrl {
+  param([string]$Url)
+  return ($Url -replace '([?&])channel_binding=require', '')
+}
+
+$DatabaseUrl = Sanitize-DbUrl $DatabaseUrl
+if ($DatabaseUrlUnpooled) {
+  $DatabaseUrlUnpooled = Sanitize-DbUrl $DatabaseUrlUnpooled
+}
+
 Write-Host "Ensuring Vercel project $projectName exists"
 $projectBody = @{
   name = $projectName

@@ -5,6 +5,7 @@ param(
   [string]$CustomerName,
   [Parameter(Mandatory = $true)]
   [string]$DatabaseUrl,
+  [string]$DatabaseUrlUnpooled = "",
   [Parameter(Mandatory = $true)]
   [string]$VercelToken,
   [Parameter(Mandatory = $true)]
@@ -43,8 +44,13 @@ catch {
 $envValues = @(
   @{ key = "CUSTOMER_CODE"; value = $CustomerCode },
   @{ key = "CUSTOMER_NAME"; value = $CustomerName },
-  @{ key = "DATABASE_URL"; value = $DatabaseUrl }
+  @{ key = "DATABASE_URL"; value = $DatabaseUrl },
+  @{ key = "AI_DATABASE_URL"; value = $DatabaseUrl }
 )
+if ($DatabaseUrlUnpooled) {
+  $envValues += @{ key = "DATABASE_URL_UNPOOLED"; value = $DatabaseUrlUnpooled }
+  $envValues += @{ key = "AI_DATABASE_URL_UNPOOLED"; value = $DatabaseUrlUnpooled }
+}
 
 foreach ($entry in $envValues) {
   $envBody = @{
@@ -107,6 +113,7 @@ if (-not $SkipDbInit) {
   Write-Host "Running DB initialization"
   & (Join-Path $PSScriptRoot "init-customer-db.ps1") `
     -DatabaseUrl $DatabaseUrl `
+    -DatabaseUrlUnpooled $DatabaseUrlUnpooled `
     -CustomerCode $CustomerCode `
     -CustomerName $CustomerName
 }

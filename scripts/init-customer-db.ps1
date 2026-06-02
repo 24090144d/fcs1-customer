@@ -1,6 +1,8 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$DatabaseUrl,
+  [Parameter(Mandatory = $false)]
+  [string]$DatabaseUrlUnpooled = "",
   [Parameter(Mandatory = $true)]
   [string]$CustomerCode,
   [Parameter(Mandatory = $true)]
@@ -20,7 +22,8 @@ function Invoke-PsqlFile {
   }
 
   Write-Host "Applying $SqlFile"
-  & psql "$DatabaseUrl" -v ON_ERROR_STOP=1 -f "$SqlFile"
+  $targetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+  & psql "$targetUrl" -v ON_ERROR_STOP=1 -f "$SqlFile"
   if ($LASTEXITCODE -ne 0) {
     throw "psql failed for file: $SqlFile (exit code $LASTEXITCODE)"
   }
@@ -36,7 +39,8 @@ function Test-TableExists {
   )
 
   $query = "select to_regclass('public.$TableName') is not null as exists;"
-  $result = & psql "$DatabaseUrl" -t -A -v ON_ERROR_STOP=1 -c "$query"
+  $targetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+  $result = & psql "$targetUrl" -t -A -v ON_ERROR_STOP=1 -c "$query"
   if ($LASTEXITCODE -ne 0) {
     throw "Failed checking table existence for $TableName (exit code $LASTEXITCODE)"
   }
@@ -70,7 +74,8 @@ set organization_name = excluded.organization_name;
 "@
 
 Write-Host "Seeding organization metadata for $CustomerCode"
-$seedSql | & psql "$DatabaseUrl" -v ON_ERROR_STOP=1
+$seedTargetUrl = if ($DatabaseUrlUnpooled) { $DatabaseUrlUnpooled } else { $DatabaseUrl }
+$seedSql | & psql "$seedTargetUrl" -v ON_ERROR_STOP=1
 if ($LASTEXITCODE -ne 0) {
   throw "psql failed while seeding organization metadata (exit code $LASTEXITCODE)"
 }

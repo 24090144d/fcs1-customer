@@ -1,8 +1,8 @@
-# China Customer Onboarding Automation Summary (2026-05-16)
+# CN Customer Onboarding Automation Summary (2026-05-16)
 
 ## Completed
-- Created customer database: `fcs1_china`.
-- Created/updated least-privilege app user: `app_user_china`.
+- Created customer database: `fcs1_cn`.
+- Created/updated least-privilege app user: `app_user_cn`.
 - Added reusable DB provisioning script:
   - `scripts/provision-customer-db.js`
   - `npm run provision:customer-db`
@@ -13,18 +13,18 @@
   - Falls back to manual `database_url` input.
 
 ## Generated Database URL
-- `postgresql://app_user_china:<password>@fcs1-dash.postgres.database.azure.com:5432/fcs1_china?sslmode=require`
+- `postgresql://app_user_cn:<password>@<neon-host>/fcs1_cn?sslmode=require`
 - Current generated password is stored in command output from provisioning run.
 
 ## What You Need To Configure In GitHub
-1. Add secret `DATABASE_URL_CHINA` with the full URL above.
+1. Add secret `DATABASE_URL_CN` with the full URL above.
 2. Ensure existing secrets are set:
    - `VERCEL_TOKEN`
    - `VERCEL_ORG_ID`
 3. In workflow run:
-   - `customer_code=china`
-   - `customer_name=China`
-   - `database_url_secret_name=DATABASE_URL_CHINA`
+   - `customer_code=cn`
+   - `customer_name=CN`
+   - `database_url_secret_name=DATABASE_URL_CN`
    - `release_ref=main`
 
 ## Remaining Manual Infrastructure Checks

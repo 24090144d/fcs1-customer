@@ -32,7 +32,22 @@ on:
         default: "main"
         type: string
       database_url:
-        description: "Customer DATABASE_URL (optional; defaults to secret DATABASE_URL_CHINA)"
+        description: "Customer DATABASE_URL (optional; defaults to secret DATABASE_URL_<CUSTOMER_CODE>)"
+        required: false
+        default: ""
+        type: string
+      database_url_unpooled:
+        description: "Customer direct/unpooled DATABASE_URL for schema init (optional; defaults to secret DATABASE_URL_UNPOOLED_<CUSTOMER_CODE>)"
+        required: false
+        default: ""
+        type: string
+      database_url_secret_name:
+        description: "Optional repo secret name override (defaults to DATABASE_URL_<CUSTOMER_CODE>)"
+        required: false
+        default: ""
+        type: string
+      database_url_unpooled_secret_name:
+        description: "Optional repo secret name override for the direct DB URL"
         required: false
         default: ""
         type: string
@@ -66,20 +81,82 @@ jobs:
         id: resolve_db_url
         env:
           INPUT_DATABASE_URL: ${{ inputs.database_url }}
-          DEFAULT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL_CHINA }}
+          INPUT_DATABASE_URL_UNPOOLED: ${{ inputs.database_url_unpooled }}
+          INPUT_DATABASE_URL_SECRET_NAME: ${{ inputs.database_url_secret_name }}
+          INPUT_DATABASE_URL_UNPOOLED_SECRET_NAME: ${{ inputs.database_url_unpooled_secret_name }}
+          CUSTOMER_CODE: ${{ inputs.customer_code }}
+          DATABASE_URL_CN: ${{ secrets.DATABASE_URL_CN }}
+          DATABASE_URL_UNPOOLED_CN: ${{ secrets.DATABASE_URL_UNPOOLED_CN }}
+          DATABASE_URL_CHINA: ${{ secrets.DATABASE_URL_CHINA }}
+          DATABASE_URL_UNPOOLED_CHINA: ${{ secrets.DATABASE_URL_UNPOOLED_CHINA }}
+          DATABASE_URL_HK: ${{ secrets.DATABASE_URL_HK }}
+          DATABASE_URL_UNPOOLED_HK: ${{ secrets.DATABASE_URL_UNPOOLED_HK }}
         run: |
+          resolve_secret() {
+            local secret_name="$1"
+            case "$secret_name" in
+              DATABASE_URL_CN) echo "$DATABASE_URL_CN" ;;
+              DATABASE_URL_UNPOOLED_CN) echo "$DATABASE_URL_UNPOOLED_CN" ;;
+              DATABASE_URL_CHINA) echo "$DATABASE_URL_CHINA" ;;
+              DATABASE_URL_UNPOOLED_CHINA) echo "$DATABASE_URL_UNPOOLED_CHINA" ;;
+              DATABASE_URL_HK) echo "$DATABASE_URL_HK" ;;
+              DATABASE_URL_UNPOOLED_HK) echo "$DATABASE_URL_UNPOOLED_HK" ;;
+              *)
+                echo ""
+                ;;
+            esac
+          }
+
+          runtime_url=""
           if [ -n "$INPUT_DATABASE_URL" ]; then
-            echo "database_url=$INPUT_DATABASE_URL" >> "$GITHUB_OUTPUT"
-          elif [ -n "$DEFAULT_SECRET_DATABASE_URL" ]; then
-            echo "database_url=$DEFAULT_SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
+            runtime_url="$INPUT_DATABASE_URL"
           else
-            echo "No database URL provided. Set workflow input database_url or repo secret DATABASE_URL_CHINA."
-            exit 1
+            secret_name="$INPUT_DATABASE_URL_SECRET_NAME"
+            if [ -z "$secret_name" ]; then
+              upper_code="$(printf '%s' "$CUSTOMER_CODE" | tr '[:lower:]' '[:upper:]')"
+              secret_name="DATABASE_URL_${upper_code}"
+            fi
+
+            runtime_url="$(resolve_secret "$secret_name")"
+            if [ -z "$runtime_url" ] && [ "$secret_name" = "DATABASE_URL_CN" ]; then
+              runtime_url="$(resolve_secret 'DATABASE_URL_CHINA')"
+            fi
+            if [ -z "$runtime_url" ] && [ "$secret_name" = "DATABASE_URL_CHINA" ]; then
+              runtime_url="$(resolve_secret 'DATABASE_URL_CN')"
+            fi
+            if [ -z "$runtime_url" ]; then
+              echo "No database URL found. Set repo secret $secret_name or provide workflow input database_url."
+              exit 1
+            fi
           fi
+          echo "database_url=$runtime_url" >> "$GITHUB_OUTPUT"
+
+          unpooled_url=""
+          if [ -n "$INPUT_DATABASE_URL_UNPOOLED" ]; then
+            unpooled_url="$INPUT_DATABASE_URL_UNPOOLED"
+          else
+            secret_name="$INPUT_DATABASE_URL_UNPOOLED_SECRET_NAME"
+            if [ -z "$secret_name" ]; then
+              upper_code="$(printf '%s' "$CUSTOMER_CODE" | tr '[:lower:]' '[:upper:]')"
+              secret_name="DATABASE_URL_UNPOOLED_${upper_code}"
+            fi
+
+            unpooled_url="$(resolve_secret "$secret_name")"
+            if [ -z "$unpooled_url" ] && [ "$secret_name" = "DATABASE_URL_UNPOOLED_CN" ]; then
+              unpooled_url="$(resolve_secret 'DATABASE_URL_UNPOOLED_CHINA')"
+            fi
+            if [ -z "$unpooled_url" ] && [ "$secret_name" = "DATABASE_URL_UNPOOLED_CHINA" ]; then
+              unpooled_url="$(resolve_secret 'DATABASE_URL_UNPOOLED_CN')"
+            fi
+            if [ -z "$unpooled_url" ]; then
+              unpooled_url="$runtime_url"
+            fi
+          fi
+          echo "database_url_unpooled=$unpooled_url" >> "$GITHUB_OUTPUT"
 
       - name: Validate psql connectivity
         env:
-          DATABASE_URL: ${{ steps.resolve_db_url.outputs.database_url }}
+          DATABASE_URL: ${{ steps.resolve_db_url.outputs.database_url_unpooled }}
         run: |
           psql "$DATABASE_URL" -c "select now();"
 
@@ -88,6 +165,7 @@ jobs:
         run: |
           ./scripts/init-customer-db.ps1 `
             -DatabaseUrl "${{ steps.resolve_db_url.outputs.database_url }}" `
+            -DatabaseUrlUnpooled "${{ steps.resolve_db_url.outputs.database_url_unpooled }}" `
             -CustomerCode "${{ inputs.customer_code }}" `
             -CustomerName "${{ inputs.customer_name }}"
 
@@ -101,6 +179,7 @@ jobs:
             -CustomerCode "${{ inputs.customer_code }}" `
             -CustomerName "${{ inputs.customer_name }}" `
             -DatabaseUrl "${{ steps.resolve_db_url.outputs.database_url }}" `
+            -DatabaseUrlUnpooled "${{ steps.resolve_db_url.outputs.database_url_unpooled }}" `
             -VercelToken "$env:VERCEL_TOKEN" `
             -VercelOrgId "$env:VERCEL_ORG_ID" `
             -Domain "${{ inputs.domain }}" `

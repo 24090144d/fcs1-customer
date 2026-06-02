@@ -1,8 +1,6 @@
-﻿--
+--
 -- PostgreSQL database dump
 --
-
-\restrict dp3wuPBhbcjyPaLhqSSzOzKApE7uokM5Z2n6jEJNZ8yy3booDTrkXxfCahVhMSX
 
 -- Dumped from database version 18.3
 -- Dumped by pg_dump version 18.4 (Debian 18.4-1.pgdg13+1)
@@ -18,6 +16,8 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 --
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
@@ -767,13 +767,6 @@ CREATE INDEX upload_jobs_module_code_idx ON public.upload_jobs USING btree (modu
 
 
 --
--- Name: upload_jobs_module_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX upload_jobs_module_idx ON public.upload_jobs USING btree (module_code);
-
-
---
 -- Name: upload_jobs_org_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -949,5 +942,6 @@ ALTER TABLE public.uploaded_files ENABLE ROW LEVEL SECURITY;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dp3wuPBhbcjyPaLhqSSzOzKApE7uokM5Z2n6jEJNZ8yy3booDTrkXxfCahVhMSX
+
+
 

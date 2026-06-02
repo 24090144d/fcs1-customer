@@ -66,6 +66,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve GitHub repository metadata
+        id: resolve_repo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "repo_id=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.id')" >> "$GITHUB_OUTPUT"
+          echo "repo_owner=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.owner.login')" >> "$GITHUB_OUTPUT"
+          echo "repo_name=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.name')" >> "$GITHUB_OUTPUT"
+
       - name: Install PostgreSQL client
         run: |
           if command -v psql >/dev/null 2>&1; then
@@ -186,6 +195,9 @@ jobs:
             -CustomerName "${{ inputs.customer_name }}" `
             -DatabaseUrl "${{ steps.resolve_db_url.outputs.database_url }}" `
             -DatabaseUrlUnpooled "${{ steps.resolve_db_url.outputs.database_url_unpooled }}" `
+            -GitHubRepoId "${{ steps.resolve_repo.outputs.repo_id }}" `
+            -GitHubRepoOwner "${{ steps.resolve_repo.outputs.repo_owner }}" `
+            -GitHubRepoName "${{ steps.resolve_repo.outputs.repo_name }}" `
             -VercelToken "$env:VERCEL_TOKEN" `
             -VercelOrgId "$env:VERCEL_ORG_ID" `
             -Domain "${{ inputs.domain }}" `

@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Upload, BarChart2, LineChart, PieChart, X, Database, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Check, PieChart, BarChart2, LineChart } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
 import { APP_VERSION } from '@/lib/version';
 import { useI18n } from './I18nProvider';
+import { useTheme } from './ThemeProvider';
+import { getAppThemeTokens } from '@/lib/theme';
 
 interface AppSidebarProps {
   open:        boolean;
@@ -15,44 +17,9 @@ interface AppSidebarProps {
   onTogglePin: () => void;
 }
 
-// ── Surface elevation system ──────────────────────────────────────────────────
-// Aligned with the dashboard's card surfaces:
-//
-//   Dashboard outer bg ─────  #1A1916   (the "negative space" between cards)
-//   Toolbar / chart cards ──  #1F1D1A → #252220
-//   Sidebar surface ────────  #252220   (same plane as cards — an elevated panel)
-//
-// The sidebar now reads as a card-level panel anchored to the left edge,
-// not a backing surface that the cards float above.
-
-function tokens(dark: boolean) {
-  const lightVariant = false;
-  return {
-    // Surfaces
-    bg:        lightVariant ? '#e0d6c2' : '#2f2924',
-    band:      lightVariant ? '#d8cdb8' : '#29231f',
-    border:    lightVariant ? '#6b6253' : '#1f1a16',
-    rule:      lightVariant ? '#8a7f6f' : '#4a4238',
-    activeBg:  lightVariant ? '#d7ccb6' : '#35302a',
-    hoverBg:   lightVariant ? '#dcd1bc' : '#332d28',
-
-    // Accents (Editorial Vintage)
-    teal:      '#1f5e57',
-    orange:    dark ? '#E87030' : '#C55A10',
-
-    // Text
-    text:      lightVariant ? '#2f2924' : '#f3ebdf',
-    nav:       lightVariant ? '#6b6253' : '#e0d6c2',
-    dim:       lightVariant ? '#7b7264' : '#9a9083',
-    chrome:    lightVariant ? '#6b6253' : '#b9ae9f',
-  };
-}
-
-type T = ReturnType<typeof tokens>;
-
 // ── Section label with hair tick ──────────────────────────────────────────────
 
-function SectionLabel({ label, T: t }: { label: string; T: T }) {
+function SectionLabel({ label, T: t }: { label: string; T: { dim: string; rule: string } }) {
   return (
     <div className="px-4 pt-5 pb-1.5 flex items-center gap-2">
       <span
@@ -71,7 +38,7 @@ function SectionLabel({ label, T: t }: { label: string; T: T }) {
 function NavItem({
   href, active, onClose, onNavigateStart, T: t, collapsed, children,
 }: {
-  href: string; active: boolean; onClose: () => void; onNavigateStart?: () => void; T: T; collapsed: boolean; children: React.ReactNode;
+  href: string; active: boolean; onClose: () => void; onNavigateStart?: () => void; T: { text: string; nav: string; hoverBg: string; accent: string }; collapsed: boolean; children: React.ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -91,10 +58,10 @@ function NavItem({
         fontFamily: 'var(--font-mono)',
         fontWeight: active ? 600 : 500,
         color:      active || hovered ? t.text : t.nav,
-        background: active ? `${t.teal}2A` : hovered ? t.hoverBg : 'transparent',
+        background: active ? `${t.accent}2A` : hovered ? t.hoverBg : 'transparent',
         borderLeft: '4px solid transparent',
-        outline:    active ? `1px solid ${t.teal}66` : 'none',
-        boxShadow:  active ? `inset 4px 0 0 ${t.teal}, inset 0 0 0 1px ${t.teal}33` : 'none',
+        outline:    active ? `1px solid ${t.accent}66` : 'none',
+        boxShadow:  active ? `inset 4px 0 0 ${t.accent}, inset 0 0 0 1px ${t.accent}33` : 'none',
         borderRadius: '2px',
         position: 'relative',
         transition: 'color 150ms ease, background 150ms ease, border-color 150ms ease',
@@ -124,6 +91,9 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
   const [navigating, setNavigating] = useState(false);
   const [hasPublishedBuilder, setHasPublishedBuilder] = useState(false);
   const { t: tr } = useI18n();
+  const { theme, setTheme, options } = useTheme();
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const userId = typeof window !== 'undefined'
     ? (() => {
         const k = 'fcs1_user_id';
@@ -186,7 +156,22 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
     return () => window.clearTimeout(timer);
   }, [navigating]);
 
-  const t = tokens(dark);
+  useEffect(() => {
+    if (!themeMenuOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!themeMenuRef.current?.contains(event.target as Node)) {
+        setThemeMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [themeMenuOpen]);
+
+  const themeTokens = getAppThemeTokens(theme, dark);
+  const t = {
+    ...themeTokens.sidebar,
+    accent: themeTokens.accent,
+  };
 
   async function handleResetDatabase() {
     if (resettingDb) return;
@@ -324,13 +309,17 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
           className={`flex items-center justify-between ${collapsed ? 'px-2' : 'px-4'} py-3.5 shrink-0`}
           style={{ background: t.band, borderBottom: `1px solid ${t.border}` }}
         >
-          <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'gap-2.5'} min-w-0`}>
-            <div
-              className="w-6 h-6 flex items-center justify-center shrink-0"
-              style={{ background: 'transparent', border: `1px solid ${t.teal}` }}
+          <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'gap-2.5'} min-w-0 relative`} ref={themeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setThemeMenuOpen((prev) => !prev)}
+              className="w-6 h-6 flex items-center justify-center shrink-0 transition-opacity hover:opacity-80"
+              style={{ background: 'transparent', border: `1px solid ${themeTokens.accent}` }}
+              aria-label="Select theme"
+              aria-expanded={themeMenuOpen}
             >
-              <Database size={12} style={{ color: t.teal }} />
-            </div>
+              <Palette size={12} style={{ color: themeTokens.accent }} />
+            </button>
             {!collapsed && (
               <span
                 className="font-mono uppercase truncate"
@@ -338,6 +327,43 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
               >
                 {tr('sidebar.brand_title', 'FCS1 Dashboard')}
               </span>
+            )}
+            {themeMenuOpen && (
+              <div
+                className="absolute left-0 top-9 z-50 min-w-[180px] p-1.5"
+                style={{
+                  background: t.menuBg,
+                  border: `1px solid ${t.menuBorder}`,
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+                }}
+              >
+                {options.map((option) => {
+                  const active = option.value === theme;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setTheme(option.value);
+                        setThemeMenuOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-2 text-left transition-colors"
+                      style={{
+                        background: active ? t.menuSelectedBg : 'transparent',
+                        color: active ? t.text : t.nav,
+                      }}
+                    >
+                      <span
+                        className="font-mono uppercase"
+                        style={{ fontSize: '0.68rem', letterSpacing: '0.14em' }}
+                      >
+                        {option.label}
+                      </span>
+                      {active && <Check size={12} style={{ color: themeTokens.accent }} />}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
 
@@ -549,10 +575,10 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
               className="w-6 h-6 flex items-center justify-center shrink-0"
               style={{
                 background: 'transparent',
-                border:     `1px solid ${t.teal}66`,
+                border:     `1px solid ${t.accent}66`,
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.teal }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.accent }} />
             </div>
             {!collapsed && (
               <>
@@ -569,8 +595,8 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                   style={{
                     fontSize:    '0.52rem',
                     letterSpacing: '0.04em',
-                    color:       t.teal,
-                    border:      `1px solid ${t.teal}55`,
+                    color:       t.accent,
+                    border:      `1px solid ${t.accent}55`,
                     padding:     '1px 5px',
                   }}
                 >

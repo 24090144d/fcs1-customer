@@ -162,6 +162,21 @@ export class PgSupabaseCompat {
   from<T extends QueryResultRow = QueryResultRow>(table: string) { return new QueryBuilder<T>(this.pool, table); }
 }
 
+function buildPoolConfig(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const host = (url.hostname || '').toLowerCase();
+    const sslmode = (url.searchParams.get('sslmode') || '').toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    const disableSsl = isLocalHost || sslmode === 'disable';
+    return disableSsl
+      ? { connectionString }
+      : { connectionString, ssl: { rejectUnauthorized: false } };
+  } catch {
+    return { connectionString, ssl: { rejectUnauthorized: false } };
+  }
+}
+
 let pool: Pool | null = null;
 const poolByConnectionString = new Map<string, Pool>();
 
@@ -169,7 +184,7 @@ export function getPool() {
   if (!pool) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error('DATABASE_URL is not set. Add Neon pooled connection string to .env.local.');
-    pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+    pool = new Pool(buildPoolConfig(connectionString));
   }
   return pool;
 }
@@ -177,7 +192,7 @@ export function getPool() {
 export function getPoolByConnectionString(connectionString: string) {
   const existing = poolByConnectionString.get(connectionString);
   if (existing) return existing;
-  const created = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  const created = new Pool(buildPoolConfig(connectionString));
   poolByConnectionString.set(connectionString, created);
   return created;
 }

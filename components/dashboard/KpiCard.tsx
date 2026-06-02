@@ -2,20 +2,20 @@
 
 import { useState } from 'react';
 import type { KpiDef } from '@/types/dashboard';
+import { useTheme } from '@/components/layout/ThemeProvider';
+import { getAppThemeTokens } from '@/lib/theme';
 
 // ── Accent assignment ─────────────────────────────────────────────────────────
 // Orange border: raw volume / count KPIs
 // Teal border:  performance / quality / VIP KPIs
 const TEAL_KPIS = new Set(['kpi_02', 'kpi_06', 'kpi_07', 'kpi_08', 'kpi_09', 'kpi_10']);
 
-function accentFor(id: string, dark: boolean) {
+function accentFor(id: string, accent: string, accentAlt: string, accentTint: string, accentAltTint: string) {
   const isTeal = TEAL_KPIS.has(id);
   return {
-    color:       isTeal ? (dark ? '#14A89E' : '#0E7470') : (dark ? '#E87030' : '#C55A10'),
-    colorAlt:    isTeal ? (dark ? '#E87030' : '#C55A10') : (dark ? '#14A89E' : '#0E7470'),
-    subtleBg:    isTeal
-      ? (dark ? 'rgba(20,168,158,0.10)' : 'rgba(14,116,112,0.06)')
-      : (dark ? 'rgba(232,112,48,0.10)' : 'rgba(197,90,16,0.06)'),
+    color:       isTeal ? accent : accentAlt,
+    colorAlt:    isTeal ? accentAlt : accent,
+    subtleBg:    isTeal ? accentTint : accentAltTint,
   };
 }
 
@@ -43,20 +43,22 @@ interface KpiCardProps { kpi: KpiDef; dark: boolean }
 export function KpiCard({ kpi, dark }: KpiCardProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [hovered, setHovered]   = useState(false);
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
 
-  const { color, colorAlt, subtleBg } = accentFor(kpi.id, dark);
+  const { color, colorAlt, subtleBg } = accentFor(kpi.id, tokens.accent, tokens.accentAlt, tokens.accentTint, tokens.accentAltTint);
   const borderColor = hovered ? colorAlt : color;
 
   const na      = !kpi.available;
-  const surface = dark ? '#252220' : '#FAF7F2';
-  const border  = dark ? '#3A3530' : '#B9A88A';
-  const label   = dark ? '#8A857E' : '#6B6560';
-  const value   = na ? (dark ? '#4E4A46' : '#C4B090') : (dark ? '#EDE8E0' : '#1A1714');
-  const sub     = dark ? '#6B6560' : '#8A857E';
+  const surface = tokens.card.bg;
+  const border  = tokens.card.border;
+  const label   = tokens.card.label;
+  const value   = na ? tokens.card.naValue : tokens.card.value;
+  const sub     = tokens.card.sub;
 
-  const tooltipSurface = dark ? '#1F1D1A' : '#FAF7F2';
-  const tooltipBorder  = dark ? '#302D2A' : '#D9C8A8';
-  const tooltipText    = dark ? '#C4B8A8' : '#4A4540';
+  const tooltipSurface = tokens.card.tooltipBg;
+  const tooltipBorder  = tokens.card.tooltipBorder;
+  const tooltipText    = tokens.card.tooltipText;
 
   return (
     <div
@@ -145,7 +147,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
             {kpi.formula}
           </p>
           {!kpi.available && (
-            <p className="font-mono font-semibold" style={{ fontSize: '0.62rem', color: dark ? '#E87030' : '#C55A10' }}>
+            <p className="font-mono font-semibold" style={{ fontSize: '0.62rem', color: tokens.accentAlt }}>
               Field not available in this upload
             </p>
           )}

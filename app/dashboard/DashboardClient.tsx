@@ -7,6 +7,8 @@ import Highcharts from 'highcharts';
 import { KpiCard }  from '@/components/dashboard/KpiCard';
 import type { ImDashboardJson, DailyBucket, KpiDef, ChartDef, ChainEntry } from '@/types/dashboard';
 import { useI18n } from '@/components/layout/I18nProvider';
+import { useTheme } from '@/components/layout/ThemeProvider';
+import { getAppThemeTokens } from '@/lib/theme';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -1180,6 +1182,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
 // ── Section label ─────────────────────────────────────────────────────────────
 
 function SectionHead({ label, dark }: { label: string; dark: boolean }) {
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
   return (
     <div className="print-section-head flex items-center gap-4">
       <span
@@ -1187,14 +1191,14 @@ function SectionHead({ label, dark }: { label: string; dark: boolean }) {
         style={{
           fontSize:      '0.625rem',
           letterSpacing: '0.18em',
-          color: dark ? '#6B6560' : '#8A857E',
+          color: tokens.dashboard.sectionLabel,
         }}
       >
         {label}
       </span>
       <div
         className="flex-1 h-px"
-        style={{ background: dark ? '#302D2A' : '#D9C8A8' }}
+        style={{ background: tokens.dashboard.sectionRule }}
         aria-hidden
       />
     </div>
@@ -1217,6 +1221,7 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
     ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${moduleLabel}${data.meta.country_code ? ` (${data.meta.country_code})` : ''}`
     : data.meta.source_name;
   const [dark,     setDark]     = useState(false);
+  const { theme: selectedTheme } = useTheme();
   const [worldMapData, setWorldMapData] = useState<Record<string, unknown> | null>(null);
   const [dateFrom, setDateFrom] = useState(data.meta.date_range.min ?? '');
   const [dateTo,   setDateTo]   = useState(data.meta.date_range.max ?? '');
@@ -1228,6 +1233,8 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
+
+  const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
 
   useEffect(() => {
     if (!isCorp || isJo) return;
@@ -2164,9 +2171,9 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
       const isHimGauge = /^him\d+$/i.test(def.id);
       const trackColor  = '#e6e6e6';
       const valueColor  = '#7cb5ec';
-      const sliceBorder = dark ? '#121110' : '#6B6253';
-      const labelColor  = dark ? '#EDE8E0' : '#1A1714';
-      const mutedColor  = dark ? '#8A857E' : '#6B6560';
+      const sliceBorder = themeTokens.surfaceAlt;
+      const labelColor  = themeTokens.chart.text;
+      const mutedColor  = themeTokens.chart.muted;
       const defOpts     = def.options as Record<string, unknown>;
       const baseSeries  = defOpts.series as Array<Record<string, unknown>> | undefined;
       // Extract original format string (e.g. "<b>{point.y:.1f}%</b>") to preserve unit
@@ -2233,19 +2240,19 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   }
 
   // ── Color tokens ─────────────────────────────────────────────────────────
-  const bg          = dark ? '#1A1916' : '#F5F0E8';
-  const toolbarBg   = dark ? '#1F1D1A' : '#FAF7F2';
-  const toolbarBd   = dark ? '#302D2A' : '#D9C8A8';
-  const metaTitle   = dark ? '#C4B8A8' : '#1A1714';
-  const metaSub     = dark ? '#6B6560' : '#8A857E';
-  const inputBg     = dark ? '#252220' : '#FAF7F2';
-  const inputBd     = dark ? '#3D3A36' : '#C4B090';
-  const inputText   = dark ? '#EDE8E0' : '#1A1714';
-  const teal        = dark ? '#14A89E' : '#0E7470';
-  const orange      = dark ? '#E87030' : '#C55A10';
-  const footerText  = dark ? '#4E4A46' : '#A89070';
-  const footerBd    = dark ? '#252220' : '#D9C8A8';
-  const naText      = dark ? '#4E4A46' : '#A89070';
+  const bg          = themeTokens.dashboard.bg;
+  const toolbarBg   = themeTokens.dashboard.toolbarBg;
+  const toolbarBd   = themeTokens.dashboard.toolbarBorder;
+  const metaTitle   = themeTokens.dashboard.metaTitle;
+  const metaSub     = themeTokens.dashboard.metaSub;
+  const inputBg     = themeTokens.dashboard.inputBg;
+  const inputBd     = themeTokens.dashboard.inputBorder;
+  const inputText   = themeTokens.dashboard.inputText;
+  const teal        = themeTokens.accent;
+  const orange      = themeTokens.accentAlt;
+  const footerText  = themeTokens.dashboard.footerText;
+  const footerBd    = themeTokens.dashboard.footerBorder;
+  const naText      = themeTokens.dashboard.naText;
 
   // Partition core charts
   const operationalCharts = isJo ? localizedCharts : localizedCharts.filter(c => {
@@ -2594,20 +2601,20 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
             <div
               className="mt-4 overflow-x-auto"
               style={{
-                background: dark ? '#252220' : '#FAF7F2',
-                border: `1px solid ${dark ? '#3A3530' : '#B9A88A'}`,
-                borderLeft: `4px solid ${dark ? '#14A89E' : '#0E7470'}`,
+                background: themeTokens.card.bg,
+                border: `1px solid ${themeTokens.card.border}`,
+                borderLeft: `4px solid ${themeTokens.accent}`,
                 borderRadius: '12px',
               }}
             >
               <table className="min-w-full">
                 <thead>
-                  <tr style={{ background: dark ? '#1F1D1A' : '#F5F0E8' }}>
+                  <tr style={{ background: themeTokens.dashboard.tableHeadBg }}>
                     {['Hotel', 'Total Cases', 'Critical %', 'VIP Cases', 'Avg Resolution Time', 'Incident/Night', 'Closure Rate'].map((h) => (
                       <th
                         key={h}
                         className="text-left px-3 py-2 font-mono uppercase"
-                        style={{ fontSize: '0.62rem', letterSpacing: '0.08em', color: dark ? '#C4B8A8' : '#4A4540', borderBottom: `1px solid ${dark ? '#302D2A' : '#D9C8A8'}` }}
+                        style={{ fontSize: '0.62rem', letterSpacing: '0.08em', color: themeTokens.dashboard.tableHeadText, borderBottom: `1px solid ${themeTokens.dashboard.toolbarBorder}` }}
                       >
                         {h}
                       </th>
@@ -2617,13 +2624,13 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
                 <tbody>
                   {corpBenchmarkRows.map((r, idx) => (
                     <tr key={`${r.hotel}-${idx}`}>
-                      <td className="px-3 py-2 font-sans" style={{ fontSize: '0.78rem', color: dark ? '#EDE8E0' : '#1A1714', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.hotel}</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#EDE8E0' : '#1A1714', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.total}</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#EDE8E0' : '#1A1714', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.criticalPct}%</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#EDE8E0' : '#1A1714', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.vipCases}</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#8A857E' : '#6B6560', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.avgResolution}</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#8A857E' : '#6B6560', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.incidentPerNight}</td>
-                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: dark ? '#EDE8E0' : '#1A1714', borderBottom: `1px solid ${dark ? '#302D2A' : '#EFE3CF'}` }}>{r.closureRate}%</td>
+                      <td className="px-3 py-2 font-sans" style={{ fontSize: '0.78rem', color: themeTokens.text, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.hotel}</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.text, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.total}</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.text, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.criticalPct}%</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.text, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.vipCases}</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.dashboard.tableMuted, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.avgResolution}</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.dashboard.tableMuted, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.incidentPerNight}</td>
+                      <td className="px-3 py-2 font-mono" style={{ fontSize: '0.72rem', color: themeTokens.text, borderBottom: `1px solid ${themeTokens.dashboard.tableCellBorder}` }}>{r.closureRate}%</td>
                     </tr>
                   ))}
                 </tbody>

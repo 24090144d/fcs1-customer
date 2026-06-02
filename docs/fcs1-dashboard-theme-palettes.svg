@@ -1,0 +1,183 @@
+<svg width="1600" height="1200" viewBox="0 0 1600 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="pageBg" x1="0" y1="0" x2="1600" y2="1200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5F0E8"/>
+      <stop offset="1" stop-color="#EDE8E0"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#8A857E" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 42px Georgia, serif; fill: #1A1714; }
+      .subtitle { font: 500 18px 'Segoe UI', sans-serif; fill: #6B6560; }
+      .panelTitle { font: 700 26px Georgia, serif; fill: #1A1714; }
+      .sectionTitle { font: 700 16px 'Segoe UI', sans-serif; fill: #3D3A35; letter-spacing: 1.5px; }
+      .label { font: 600 14px 'Segoe UI', sans-serif; fill: #4A4540; }
+      .hex { font: 500 13px Consolas, monospace; fill: #6B6560; }
+      .note { font: 500 15px 'Segoe UI', sans-serif; fill: #4A4540; }
+      .chipTextLight { font: 700 12px Consolas, monospace; fill: #F8F4EE; }
+      .chipTextDark { font: 700 12px Consolas, monospace; fill: #1A1714; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1200" fill="url(#pageBg)"/>
+
+  <text x="80" y="90" class="title">FCS1 Dashboard Theme Palette</text>
+  <text x="80" y="126" class="subtitle">Current implemented palette plus two replacement directions aligned to the same editorial dashboard style.</text>
+
+  <g filter="url(#cardShadow)">
+    <rect x="80" y="170" width="450" height="930" rx="24" fill="#FAF7F2" stroke="#D9C8A8"/>
+    <rect x="575" y="170" width="450" height="930" rx="24" fill="#FAF7F2" stroke="#D9C8A8"/>
+    <rect x="1070" y="170" width="450" height="930" rx="24" fill="#FAF7F2" stroke="#D9C8A8"/>
+  </g>
+
+  <g>
+    <text x="115" y="225" class="panelTitle">Current Theme</text>
+    <text x="115" y="252" class="subtitle">Warm editorial vintage</text>
+    <text x="115" y="295" class="sectionTitle">SURFACES</text>
+
+    <rect x="115" y="315" width="190" height="76" rx="14" fill="#1A1916"/>
+    <text x="330" y="343" class="label">Outer background</text>
+    <text x="330" y="368" class="hex">#1A1916</text>
+    <text x="135" y="360" class="chipTextLight">#1A1916</text>
+
+    <rect x="115" y="407" width="190" height="76" rx="14" fill="#252220"/>
+    <text x="330" y="435" class="label">Sidebar / dark card</text>
+    <text x="330" y="460" class="hex">#252220</text>
+    <text x="135" y="452" class="chipTextLight">#252220</text>
+
+    <rect x="115" y="499" width="190" height="76" rx="14" fill="#FAF7F2" stroke="#D9C8A8"/>
+    <text x="330" y="527" class="label">Card surface</text>
+    <text x="330" y="552" class="hex">#FAF7F2</text>
+    <text x="135" y="544" class="chipTextDark">#FAF7F2</text>
+
+    <rect x="115" y="591" width="190" height="76" rx="14" fill="#F5F0E8" stroke="#D9C8A8"/>
+    <text x="330" y="619" class="label">Page light background</text>
+    <text x="330" y="644" class="hex">#F5F0E8</text>
+    <text x="135" y="636" class="chipTextDark">#F5F0E8</text>
+
+    <text x="115" y="715" class="sectionTitle">ACCENTS</text>
+    <rect x="115" y="735" width="90" height="90" rx="18" fill="#0E7470"/>
+    <rect x="220" y="735" width="90" height="90" rx="18" fill="#C55A10"/>
+    <rect x="325" y="735" width="90" height="90" rx="18" fill="#C4922A"/>
+    <text x="115" y="850" class="label">Teal</text>
+    <text x="115" y="872" class="hex">#0E7470</text>
+    <text x="220" y="850" class="label">Orange</text>
+    <text x="220" y="872" class="hex">#C55A10</text>
+    <text x="325" y="850" class="label">Gold</text>
+    <text x="325" y="872" class="hex">#C4922A</text>
+
+    <text x="115" y="920" class="sectionTitle">CHART PALETTE</text>
+    <g transform="translate(115 942)">
+      <rect width="38" height="38" rx="10" fill="#C55A10"/>
+      <rect x="48" width="38" height="38" rx="10" fill="#0E7470"/>
+      <rect x="96" width="38" height="38" rx="10" fill="#7B3F28"/>
+      <rect x="144" width="38" height="38" rx="10" fill="#1A6E6A"/>
+      <rect x="192" width="38" height="38" rx="10" fill="#D4774A"/>
+      <rect x="240" width="38" height="38" rx="10" fill="#3A9E9A"/>
+      <rect x="288" width="38" height="38" rx="10" fill="#9B6A3A"/>
+      <rect x="336" width="38" height="38" rx="10" fill="#5A8A6A"/>
+    </g>
+    <text x="115" y="1032" class="note">Balanced for cream backgrounds, serif headlines, mono labels, and KPI border accents.</text>
+  </g>
+
+  <g>
+    <text x="610" y="225" class="panelTitle">Recommended Palette 1</text>
+    <text x="610" y="252" class="subtitle">Midnight Brass</text>
+    <text x="610" y="295" class="sectionTitle">SURFACES</text>
+
+    <rect x="610" y="315" width="190" height="76" rx="14" fill="#12161A"/>
+    <text x="825" y="343" class="label">Outer background</text>
+    <text x="825" y="368" class="hex">#12161A</text>
+    <text x="630" y="360" class="chipTextLight">#12161A</text>
+
+    <rect x="610" y="407" width="190" height="76" rx="14" fill="#1B2126"/>
+    <text x="825" y="435" class="label">Sidebar / dark card</text>
+    <text x="825" y="460" class="hex">#1B2126</text>
+    <text x="630" y="452" class="chipTextLight">#1B2126</text>
+
+    <rect x="610" y="499" width="190" height="76" rx="14" fill="#F6F1E8" stroke="#D6C9B8"/>
+    <text x="825" y="527" class="label">Card surface</text>
+    <text x="825" y="552" class="hex">#F6F1E8</text>
+    <text x="630" y="544" class="chipTextDark">#F6F1E8</text>
+
+    <rect x="610" y="591" width="190" height="76" rx="14" fill="#ECE5D8" stroke="#D6C9B8"/>
+    <text x="825" y="619" class="label">Page light background</text>
+    <text x="825" y="644" class="hex">#ECE5D8</text>
+    <text x="630" y="636" class="chipTextDark">#ECE5D8</text>
+
+    <text x="610" y="715" class="sectionTitle">ACCENTS</text>
+    <rect x="610" y="735" width="90" height="90" rx="18" fill="#2B7A78"/>
+    <rect x="715" y="735" width="90" height="90" rx="18" fill="#B86124"/>
+    <rect x="820" y="735" width="90" height="90" rx="18" fill="#C2A24D"/>
+    <text x="610" y="850" class="label">Teal</text>
+    <text x="610" y="872" class="hex">#2B7A78</text>
+    <text x="715" y="850" class="label">Copper</text>
+    <text x="715" y="872" class="hex">#B86124</text>
+    <text x="820" y="850" class="label">Brass</text>
+    <text x="820" y="872" class="hex">#C2A24D</text>
+
+    <text x="610" y="920" class="sectionTitle">CHART PALETTE</text>
+    <g transform="translate(610 942)">
+      <rect width="38" height="38" rx="10" fill="#B86124"/>
+      <rect x="48" width="38" height="38" rx="10" fill="#2B7A78"/>
+      <rect x="96" width="38" height="38" rx="10" fill="#6A4C3C"/>
+      <rect x="144" width="38" height="38" rx="10" fill="#376C88"/>
+      <rect x="192" width="38" height="38" rx="10" fill="#C9834C"/>
+      <rect x="240" width="38" height="38" rx="10" fill="#4D9F99"/>
+      <rect x="288" width="38" height="38" rx="10" fill="#9F7A41"/>
+      <rect x="336" width="38" height="38" rx="10" fill="#7A8E52"/>
+    </g>
+    <text x="610" y="1032" class="note">Best if you want a more executive, lower-glare dark shell while preserving the current warm editorial identity.</text>
+  </g>
+
+  <g>
+    <text x="1105" y="225" class="panelTitle">Recommended Palette 2</text>
+    <text x="1105" y="252" class="subtitle">Stone Pine</text>
+    <text x="1105" y="295" class="sectionTitle">SURFACES</text>
+
+    <rect x="1105" y="315" width="190" height="76" rx="14" fill="#1C1F1B"/>
+    <text x="1320" y="343" class="label">Outer background</text>
+    <text x="1320" y="368" class="hex">#1C1F1B</text>
+    <text x="1125" y="360" class="chipTextLight">#1C1F1B</text>
+
+    <rect x="1105" y="407" width="190" height="76" rx="14" fill="#262B25"/>
+    <text x="1320" y="435" class="label">Sidebar / dark card</text>
+    <text x="1320" y="460" class="hex">#262B25</text>
+    <text x="1125" y="452" class="chipTextLight">#262B25</text>
+
+    <rect x="1105" y="499" width="190" height="76" rx="14" fill="#F7F4EC" stroke="#D5CBB7"/>
+    <text x="1320" y="527" class="label">Card surface</text>
+    <text x="1320" y="552" class="hex">#F7F4EC</text>
+    <text x="1125" y="544" class="chipTextDark">#F7F4EC</text>
+
+    <rect x="1105" y="591" width="190" height="76" rx="14" fill="#EEE7DA" stroke="#D5CBB7"/>
+    <text x="1320" y="619" class="label">Page light background</text>
+    <text x="1320" y="644" class="hex">#EEE7DA</text>
+    <text x="1125" y="636" class="chipTextDark">#EEE7DA</text>
+
+    <text x="1105" y="715" class="sectionTitle">ACCENTS</text>
+    <rect x="1105" y="735" width="90" height="90" rx="18" fill="#2E6F61"/>
+    <rect x="1210" y="735" width="90" height="90" rx="18" fill="#A85C32"/>
+    <rect x="1315" y="735" width="90" height="90" rx="18" fill="#8C6E3D"/>
+    <text x="1105" y="850" class="label">Pine</text>
+    <text x="1105" y="872" class="hex">#2E6F61</text>
+    <text x="1210" y="850" class="label">Clay</text>
+    <text x="1210" y="872" class="hex">#A85C32</text>
+    <text x="1315" y="850" class="label">Olive bronze</text>
+    <text x="1315" y="872" class="hex">#8C6E3D</text>
+
+    <text x="1105" y="920" class="sectionTitle">CHART PALETTE</text>
+    <g transform="translate(1105 942)">
+      <rect width="38" height="38" rx="10" fill="#2E6F61"/>
+      <rect x="48" width="38" height="38" rx="10" fill="#A85C32"/>
+      <rect x="96" width="38" height="38" rx="10" fill="#6F7C45"/>
+      <rect x="144" width="38" height="38" rx="10" fill="#567D8C"/>
+      <rect x="192" width="38" height="38" rx="10" fill="#C18952"/>
+      <rect x="240" width="38" height="38" rx="10" fill="#4B9A8B"/>
+      <rect x="288" width="38" height="38" rx="10" fill="#95744A"/>
+      <rect x="336" width="38" height="38" rx="10" fill="#899A62"/>
+    </g>
+    <text x="1105" y="1032" class="note">Best if you want the dashboard to feel more hospitality and operations oriented, with calmer greens and less orange dominance.</text>
+  </g>
+</svg>

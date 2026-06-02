@@ -1,11 +1,11 @@
 {
   "name": "incident-dashboard",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3010",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3010",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "provision:customer-db": "node scripts/provision-customer-db.js"

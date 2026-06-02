@@ -5,6 +5,8 @@ import { Menu } from 'lucide-react';
 import { AppSidebar } from './AppSidebar';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useI18n } from './I18nProvider';
+import { useTheme } from './ThemeProvider';
+import { getAppThemeTokens } from '@/lib/theme';
 
 interface Breadcrumb {
   label: string;
@@ -24,7 +26,17 @@ export function AppLayout({ children, breadcrumbs, headerRight }: AppLayoutProps
 function AppLayoutInner({ children, breadcrumbs, headerRight }: AppLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pinned, setPinned] = useState(true);
+  const [dark, setDark] = useState(false);
   const { t } = useI18n();
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    const html = document.documentElement;
+    setDark(html.classList.contains('dark'));
+    const obs = new MutationObserver(() => setDark(html.classList.contains('dark')));
+    obs.observe(html, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     try {
@@ -42,8 +54,10 @@ function AppLayoutInner({ children, breadcrumbs, headerRight }: AppLayoutProps) 
     });
   }
 
+  const tokens = getAppThemeTokens(theme, dark);
+
   return (
-    <div className="grain flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible" style={{ background: '#F5F0E8' }}>
+    <div className="grain flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible" style={{ background: tokens.appBg }}>
       <Suspense fallback={null}>
         <AppSidebar
           open={sidebarOpen}
@@ -59,12 +73,12 @@ function AppLayoutInner({ children, breadcrumbs, headerRight }: AppLayoutProps) 
         {/* Top bar */}
         <header
           className="flex items-center gap-3 px-4 md:px-6 h-12 shrink-0 print:hidden"
-          style={{ background: '#FAF7F2', borderBottom: '1px solid #D9C8A8' }}
+          style={{ background: tokens.header.bg, borderBottom: `1px solid ${tokens.header.border}` }}
         >
           <button
             onClick={() => setSidebarOpen(true)}
             className={['transition-colors -ml-1', pinned ? 'lg:hidden' : ''].join(' ')}
-            style={{ color: '#6B6560' }}
+            style={{ color: tokens.header.icon }}
             aria-label={t('layout.open_menu', 'Open menu')}
           >
             <Menu size={18} />
@@ -75,13 +89,13 @@ function AppLayoutInner({ children, breadcrumbs, headerRight }: AppLayoutProps) 
               {breadcrumbs.map((bc, i) => (
                 <span key={i} className="flex items-center gap-1">
                   {i > 0 && (
-                    <span style={{ fontSize: '0.65rem', color: '#C4B090', userSelect: 'none' }}>/</span>
+                    <span style={{ fontSize: '0.65rem', color: tokens.header.border, userSelect: 'none' }}>/</span>
                   )}
                   <span
                     style={{
                       fontSize:      '0.65rem',
                       letterSpacing: '0.04em',
-                      color: i === breadcrumbs.length - 1 ? '#1A1714' : '#8A857E',
+                      color: i === breadcrumbs.length - 1 ? tokens.header.crumbActive : tokens.header.crumb,
                       fontWeight: i === breadcrumbs.length - 1 ? 600 : 400,
                     }}
                   >

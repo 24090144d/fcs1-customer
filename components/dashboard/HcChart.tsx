@@ -5,6 +5,8 @@ import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import type { ChartDef } from '@/types/dashboard';
 import { useI18n } from '@/components/layout/I18nProvider';
+import { useTheme } from '@/components/layout/ThemeProvider';
+import { getAppThemeTokens } from '@/lib/theme';
 
 // ── Optional Highcharts modules (load once) ───────────────────────────────────
 if (typeof Highcharts === 'object') {
@@ -51,13 +53,13 @@ function deepMerge(
   return out;
 }
 
-function applyLabelRules(raw: Highcharts.Options): Highcharts.Options {
+function applyLabelRules(raw: Highcharts.Options, textColor: string, pointPalette: string[]): Highcharts.Options {
   const opts = { ...raw };
   const series = (opts.series ?? []) as Highcharts.SeriesOptionsType[];
   const seriesType = String((series[0] as { type?: string } | undefined)?.type ?? '');
   const chartType = String((opts.chart as { type?: string } | undefined)?.type ?? '');
   const firstType = seriesType || chartType;
-  const labelStyle = { color: '#1A1714', textOutline: 'none', fontWeight: '600' as const };
+  const labelStyle = { color: textColor, textOutline: 'none', fontWeight: '600' as const };
 
   // Pie/Donut: show label + value
   if (firstType === 'pie') {
@@ -217,7 +219,6 @@ function applyLabelRules(raw: Highcharts.Options): Highcharts.Options {
   // Treemap: show data labels for top 3 by value
   if (firstType === 'treemap') {
     const tmSeries = series as Array<{ type?: string; data?: Array<Record<string, unknown>> }>;
-    const pointPalette = ['#C55A10', '#0E7470', '#7B3F28', '#1A6E6A', '#D4774A', '#3A9E9A', '#9B6A3A', '#5A8A6A'];
     const enhanced = tmSeries.map((s) => {
       const data = Array.isArray(s.data) ? [...s.data] : [];
       const ranked = data
@@ -253,6 +254,7 @@ function applyForcedDistinctPointColors(
   raw: Highcharts.Options,
   ids: Set<string>,
   chartId: string,
+  pointPalette: string[],
 ): Highcharts.Options {
   if (!ids.has(chartId)) return raw;
   const opts = { ...raw };
@@ -260,7 +262,6 @@ function applyForcedDistinctPointColors(
   const firstType = String((series[0] as { type?: string } | undefined)?.type ?? '');
   if (firstType !== 'bar' && firstType !== 'column') return opts;
 
-  const pointPalette = ['#C55A10', '#0E7470', '#7B3F28', '#1A6E6A', '#D4774A', '#3A9E9A', '#9B6A3A', '#5A8A6A'];
   opts.series = series.map((s) => {
     const so = s as unknown as Record<string, unknown>;
     const data = (so.data as unknown[] | undefined) ?? [];
@@ -287,17 +288,12 @@ function applyForcedDistinctPointColors(
   return opts;
 }
 
-// ── Editorial Vintage Highcharts theme ───────────────────────────────────────
-
-const LIGHT_PALETTE = ['#C55A10', '#0E7470', '#7B3F28', '#1A6E6A', '#D4774A', '#3A9E9A', '#9B6A3A', '#5A8A6A'];
-const DARK_PALETTE  = ['#E87030', '#14A89E', '#C07050', '#20C4B8', '#F5A060', '#45D8CC', '#E8C078', '#88C098'];
-
-function makeTheme(dark: boolean): Highcharts.Options {
-  const text    = dark ? '#EDE8E0' : '#1A1714';
-  const muted   = dark ? '#8A857E' : '#6B6560';
-  const grid    = dark ? '#302D2A' : '#D9C8A8';
-  const tooltip = dark ? '#1F1D1A' : '#FAF7F2';
-  const palette = dark ? DARK_PALETTE : LIGHT_PALETTE;
+function makeTheme(tokens: ReturnType<typeof getAppThemeTokens>): Highcharts.Options {
+  const text    = tokens.chart.text;
+  const muted   = tokens.chart.muted;
+  const grid    = tokens.chart.grid;
+  const tooltip = tokens.chart.tooltipBg;
+  const palette = tokens.chart.palette;
 
   return {
     colors: palette,
@@ -326,11 +322,11 @@ function makeTheme(dark: boolean): Highcharts.Options {
     },
     legend: {
       itemStyle:      { color: text, fontWeight: '500', fontSize: '11px', fontFamily: "'Manrope', sans-serif" },
-      itemHoverStyle: { color: dark ? '#FAF7F2' : '#1A1714' },
+      itemHoverStyle: { color: text },
     },
     tooltip: {
       backgroundColor: tooltip,
-      borderColor:     dark ? '#302D2A' : '#C4B090',
+      borderColor:     tokens.chart.tooltipBorder,
       borderRadius:    2,
       style:           { color: text, fontFamily: "'Manrope', sans-serif", fontSize: '11px' },
     },
@@ -352,9 +348,9 @@ function makeTheme(dark: boolean): Highcharts.Options {
       },
     },
     navigation: {
-      menuStyle:         { background: tooltip, borderColor: dark ? '#302D2A' : '#C4B090' },
+      menuStyle:         { background: tooltip, borderColor: tokens.chart.tooltipBorder },
       menuItemStyle:     { color: text, fontFamily: "'Manrope', sans-serif", fontSize: '12px' },
-      menuItemHoverStyle:{ background: dark ? '#302D2A' : '#EDE8E0', color: text },
+      menuItemHoverStyle:{ background: tokens.chart.menuHoverBg, color: text },
     },
     credits: {
       enabled: false,
@@ -375,8 +371,10 @@ interface HcChartProps {
 
 export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLabel }: HcChartProps) {
   const { t } = useI18n();
+  const { theme: selectedTheme } = useTheme();
   const chartRef = useRef<HighchartsReact.RefObject>(null);
-  const theme    = useMemo(() => makeTheme(dark), [dark]);
+  const tokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
+  const theme    = useMemo(() => makeTheme(tokens), [tokens]);
 
   const options = useMemo<Highcharts.Options>(() => {
     const base = overrideOptions ?? (def.options as Highcharts.Options);
@@ -386,10 +384,10 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
     ) as unknown as Highcharts.Options;
     // Keep a single visible title source (card header) to avoid duplicate naming.
     merged.title = { ...((merged.title ?? {}) as Highcharts.TitleOptions), text: undefined };
-    const withLabelRules = applyLabelRules(merged);
+    const withLabelRules = applyLabelRules(merged, tokens.chart.text, tokens.chart.palette);
     const forceDistinctIds = new Set(['him06', 'him22', 'him26', 'him28', 'him29', 'him33', 'him37']);
-    return applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id);
-  }, [theme, def.options, overrideOptions]);
+    return applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id, tokens.chart.palette);
+  }, [theme, def.options, overrideOptions, tokens, def.id]);
 
   const constructorType = useMemo(() => {
     const series = (options.series ?? []) as Array<{ type?: string }>;
@@ -406,14 +404,14 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
   }, [theme]);
 
   // ── Card surface colors ───────────────────────────────────────────────────
-  const surface  = dark ? '#252220' : '#FAF7F2';
-  const border   = dark ? '#3A3530' : '#B9A88A';
-  const teal     = dark ? '#14A89E' : '#0E7470';
-  const titleCol = dark ? '#EDE8E0' : '#1A1714';
-  const footMut  = dark ? '#6B6560' : '#8A857E';
-  const footBd   = dark ? '#302D2A' : '#D9C8A8';
+  const surface  = tokens.chart.cardBg;
+  const border   = tokens.chart.cardBorder;
+  const teal     = tokens.chart.cardAccent;
+  const titleCol = tokens.chart.titleText;
+  const footMut  = tokens.chart.footerMuted;
+  const footBd   = tokens.chart.footerBorder;
   const codeCol  = teal;
-  const codeBg   = dark ? 'rgba(20,168,158,0.10)' : 'rgba(14,116,112,0.07)';
+  const codeBg   = tokens.chart.codeBg;
 
   return (
     <div
@@ -439,7 +437,7 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
                 letterSpacing: '0.04em',
                 fontWeight:    700,
                 color:         teal,
-                background:    dark ? 'rgba(20,168,158,0.10)' : 'rgba(14,116,112,0.07)',
+                background:    tokens.chart.codeBg,
                 border:        `1px solid ${teal}40`,
                 padding:       '1px 5px',
                 lineHeight:    1.4,
@@ -457,9 +455,9 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
               fontSize:   '0.58rem',
               letterSpacing: '0.08em',
               padding:    '2px 6px',
-              background: dark ? 'rgba(232,112,48,0.12)' : 'rgba(197,90,16,0.08)',
-              color:      dark ? '#E87030' : '#C55A10',
-              border:     `1px solid ${dark ? 'rgba(232,112,48,0.25)' : 'rgba(197,90,16,0.2)'}`,
+              background: tokens.chart.alertBg,
+              color:      tokens.chart.alertText,
+              border:     `1px solid ${tokens.chart.alertBorder}`,
             }}
           >
             FULL PERIOD
@@ -487,14 +485,14 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
           className="font-sans leading-relaxed"
           style={{ fontSize: '0.67rem', color: footMut }}
         >
-            <span className="font-semibold" style={{ color: dark ? '#C4B8A8' : '#4A4540' }}>{t('dashboard_ui.note', 'Note')}</span>
+            <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>{t('dashboard_ui.note', 'Note')}</span>
             &nbsp;{def.note}
         </p>
         <p
           className="font-sans leading-relaxed"
           style={{ fontSize: '0.67rem', color: footMut }}
         >
-          <span className="font-semibold" style={{ color: dark ? '#C4B8A8' : '#4A4540' }}>{t('dashboard_ui.formula', 'Formula')}</span>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>{t('dashboard_ui.formula', 'Formula')}</span>
           {' '}
           <code
             className="font-mono"

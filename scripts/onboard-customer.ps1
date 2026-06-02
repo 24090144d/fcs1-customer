@@ -42,10 +42,7 @@ if ($DatabaseUrlUnpooled) {
 Write-Host "Ensuring Vercel project $projectName exists"
 $gitRepository = @{
   type = "github"
-  org = $GitHubRepoOwner
-  repo = $GitHubRepoName
-  repoId = [long]$GitHubRepoId
-  productionBranch = $GitRef
+  repo = "$GitHubRepoOwner/$GitHubRepoName"
 }
 $projectBody = @{
   name = $projectName

@@ -81,17 +81,42 @@ catch {
   }
 }
 
-Write-Host "Ensuring Vercel project $projectName is linked to GitHub"
+Write-Host "Looking up Vercel project id for $projectName"
+$projectLookup = $null
 try {
-  Invoke-RestMethod `
-    -Method Patch `
-    -Uri "https://api.vercel.com/v9/projects/$projectName?teamId=$VercelOrgId" `
-    -Headers $headers `
-    -Body (@{ gitRepository = $gitRepository } | ConvertTo-Json -Depth 4) | Out-Null
-  Write-Host "GitHub repository linked."
+  $projectLookup = Invoke-RestMethod `
+    -Method Get `
+    -Uri "https://api.vercel.com/v10/projects?teamId=$VercelOrgId" `
+    -Headers $headers
 }
 catch {
-  Write-Host "Warning: unable to link GitHub repository to project. $_"
+  Write-Host "Warning: unable to list Vercel projects. $_"
+}
+
+$projectId = $null
+if ($projectLookup -and $projectLookup.projects) {
+  $matchedProject = $projectLookup.projects | Where-Object { $_.name -eq $projectName } | Select-Object -First 1
+  if ($matchedProject) {
+    $projectId = $matchedProject.id
+  }
+}
+
+Write-Host "Ensuring Vercel project $projectName is linked to GitHub"
+if ($projectId) {
+  try {
+    Invoke-RestMethod `
+        -Method Patch `
+      -Uri "https://api.vercel.com/v9/projects/$projectId?teamId=$VercelOrgId" `
+      -Headers $headers `
+      -Body (@{ gitRepository = $gitRepository } | ConvertTo-Json -Depth 4) | Out-Null
+    Write-Host "GitHub repository linked."
+  }
+  catch {
+    Write-Host "Warning: unable to link GitHub repository to project. $_"
+  }
+}
+else {
+  Write-Host "Warning: unable to determine Vercel project id for $projectName."
 }
 
 $envValues = @(

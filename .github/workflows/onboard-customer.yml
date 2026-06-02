@@ -164,7 +164,7 @@ jobs:
         env:
           DATABASE_URL: ${{ steps.resolve_db_url.outputs.database_url_unpooled }}
         run: |
-          psql "$DATABASE_URL" -c "select now();"
+          psql --dbname="$DATABASE_URL" -c "select now();"
 
       - name: Initialize database schema and seed
         shell: pwsh

@@ -1257,11 +1257,43 @@ function buildCorpJoCharts(entries: ChainEntry[]): ChartDef[] {
   });
 
   return [
-    make('cjo_chart_01', 'Jobs by Hotel', 'Cross-hotel JO volume comparison.', 'COUNT(*) BY hotel_code', {
-      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Jobs', data: totalByHotel }],
+    make('cjo_chart_01', 'Total Jobs by Hotel -> Top Service Category', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its top service categories.', 'COUNT(*) BY hotel_code, then TOP service_item_category BY hotel_code', {
+      chart: { type: 'pie' },
+      series: [{
+        type: 'pie',
+        name: 'Jobs',
+        innerSize: '45%',
+        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `hotel-cat:${e.hotel_code}` })),
+      }],
+      drilldown: {
+        series: entries.map((e) => ({
+          id: `hotel-cat:${e.hotel_code}`,
+          type: 'pie',
+          name: `${e.hotel_code} Top Service Categories`,
+          innerSize: '45%',
+          data: topN(e.summary.category_map ?? {}, 10).map(([name, y]) => ({ name, y })),
+        })),
+      },
     }),
-    make('cjo_chart_02', 'Completion Rate by Hotel', 'Compares closing effectiveness across hotels.', 'completed_jobs / total_jobs * 100 BY hotel_code', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'column', name: 'Completion %', data: completionRate }],
+    make('cjo_chart_02', 'Total Jobs by Hotel -> Job Status', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its job status distribution.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code', {
+      chart: { type: 'pie' },
+      series: [{
+        type: 'pie',
+        name: 'Jobs',
+        innerSize: '45%',
+        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `hotel-status:${e.hotel_code}` })),
+      }],
+      drilldown: {
+        series: entries.map((e) => ({
+          id: `hotel-status:${e.hotel_code}`,
+          type: 'pie',
+          name: `${e.hotel_code} Job Status`,
+          innerSize: '45%',
+          data: Object.entries(e.summary.status_map ?? {})
+            .sort(([, a], [, b]) => Number(b) - Number(a))
+            .map(([name, y]) => ({ name, y: Number(y) })),
+        })),
+      },
     }),
     make('cjo_chart_03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
@@ -1342,6 +1374,136 @@ function SectionHead({ label, dark }: { label: string; dark: boolean }) {
         style={{ background: tokens.dashboard.sectionRule }}
         aria-hidden
       />
+    </div>
+  );
+}
+
+function CorpJoPerformanceTable({
+  entries,
+  dark,
+  index,
+}: {
+  entries: ChainEntry[];
+  dark: boolean;
+  index: number;
+}) {
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
+  const rows = [...entries]
+    .sort((a, b) => a.hotel_code.localeCompare(b.hotel_code))
+    .map((entry) => ({
+      hotel: entry.hotel_code,
+      jobs: entry.summary.total ?? 0,
+      completion: getChainKpiValue(entry, 'kpi_02') ?? (entry.summary.total > 0 ? r1((entry.summary.completed / entry.summary.total) * 100) : 0),
+      sla: getChainKpiValue(entry, 'kpi_03') ?? 0,
+      timeout: getChainKpiValue(entry, 'kpi_04') ?? (entry.summary.total > 0 ? r1((entry.summary.pending / entry.summary.total) * 100) : 0),
+      escalation: getChainKpiValue(entry, 'kpi_05') ?? (entry.summary.total > 0 ? r1((entry.summary.cancelled / entry.summary.total) * 100) : 0),
+      response: getChainKpiValue(entry, 'kpi_07') ?? 0,
+      resolution: getChainKpiValue(entry, 'kpi_09') ?? 0,
+    }));
+
+  const cardBg = tokens.chart.cardBg;
+  const cardBorder = tokens.chart.cardBorder;
+  const accent = tokens.chart.cardAccent;
+  const titleText = tokens.chart.titleText;
+  const codeBg = tokens.chart.codeBg;
+  const rule = tokens.chart.footerBorder;
+  const muted = tokens.chart.footerMuted;
+  const headBg = tokens.dashboard.toolbarBg;
+
+  return (
+    <div
+      className="chart-card flex flex-col overflow-hidden md:col-span-2"
+      style={{
+        background: cardBg,
+        border: `1px solid ${cardBorder}`,
+        borderLeft: `4px solid ${accent}`,
+        borderRadius: '12px',
+      }}
+    >
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3 shrink-0">
+        <h3
+          className="font-serif font-semibold leading-snug flex items-center gap-2"
+          style={{ fontSize: '0.9rem', color: titleText }}
+        >
+          <span
+            className="font-mono shrink-0"
+            style={{
+              fontSize: '0.62rem',
+              letterSpacing: '0.04em',
+              fontWeight: 700,
+              color: accent,
+              background: codeBg,
+              border: `1px solid ${accent}40`,
+              padding: '1px 5px',
+              lineHeight: 1.4,
+            }}
+          >
+            {String(index).padStart(2, '0')}
+          </span>
+          Hotel Performance
+        </h3>
+      </div>
+
+      <div className="px-4 pb-4 overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              {['Hotel', 'Jobs', 'Completion %', 'SLA %', 'Timeout %', 'Escalation %', 'Avg Response', 'Avg Resolution'].map((label) => (
+                <th
+                  key={label}
+                  className="text-left font-mono"
+                  style={{
+                    fontSize: '0.62rem',
+                    letterSpacing: '0.06em',
+                    color: muted,
+                    background: headBg,
+                    borderBottom: `1px solid ${rule}`,
+                    padding: '8px 10px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {label.toUpperCase()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.hotel}>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.78rem', fontWeight: 700 }}>{row.hotel}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.jobs.toLocaleString()}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r1(row.completion).toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r1(row.sla).toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r1(row.timeout).toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r1(row.escalation).toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r2(row.response).toFixed(2)}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{r2(row.resolution).toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div
+        className="px-4 pt-2.5 pb-3.5 space-y-1 shrink-0"
+        style={{ borderTop: `1px solid ${rule}` }}
+      >
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Note</span>
+          {' '}Executive hotel-level JO performance table for cross-hotel operational benchmarking.
+        </p>
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Formula</span>
+          {' '}
+          <code
+            className="font-mono"
+            style={{ fontSize: '0.6rem', padding: '1px 5px', background: codeBg, color: accent, borderRadius: '2px' }}
+          >
+            GROUP BY hotel_code with JO KPI aggregates and hotel-level response/resolution metrics
+          </code>
+        </p>
+      </div>
     </div>
   );
 }
@@ -2621,6 +2783,11 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
               })}
+              <CorpJoPerformanceTable
+                entries={activeChainEntries}
+                dark={dark}
+                index={nextChartIndex()}
+              />
             </div>
           </section>
         )}

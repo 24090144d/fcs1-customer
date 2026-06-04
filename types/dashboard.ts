@@ -40,6 +40,7 @@ export interface ChartDef {
 export type DashboardSchema = 'im-v1' | 'jo-v1' | 'mo-v1';
 export type MaintenanceType = 'MO' | 'PM';
 export type MaintenanceScoped<T> = Partial<Record<MaintenanceType, T>>;
+export type StandardDashboardSchema = 'im-v1' | 'jo-v1';
 
 // Compact per-hotel summary used for cross-hotel comparison charts
 export interface HotelSummary {
@@ -84,6 +85,19 @@ export interface ChainEntry {
 }
 
 // Full IM dashboard JSON stored in im_dashboard_json.generated_json
+interface DashboardMeta<TSchema extends DashboardSchema> {
+  upload_job_id: string;
+  source_name:   string;
+  chain_code:    string;
+  hotel_code:    string;
+  hotel_name:    string;
+  country_code:  string;
+  total_records: number;
+  date_range:    { min: string | null; max: string | null };
+  generated_at:  string;
+  schema:        TSchema;
+}
+
 export interface ImDashboardJson {
   meta: {
     upload_job_id: string;
@@ -95,15 +109,26 @@ export interface ImDashboardJson {
     total_records: number;
     date_range:    { min: string | null; max: string | null };
     generated_at:  string;
-    schema:        DashboardSchema;
+    schema:        StandardDashboardSchema;
   };
   kpis:       KpiDef[];
   eac:        ChartDef[];   // 6 Executive Analysis Charts
   charts:     ChartDef[];   // 24 GM Core Charts
   raw_daily:  DailyBucket[];
   summary:    HotelSummary; // compact summary for cross-hotel comparison
+}
+
+export interface MoDashboardJson {
+  meta: DashboardMeta<'mo-v1'>;
+  kpis:       KpiDef[];
+  eac:        ChartDef[];
+  charts:     ChartDef[];
+  raw_daily:  DailyBucket[];
+  summary:    HotelSummary;
   kpis_by_type?: MaintenanceScoped<KpiDef[]>;
   charts_by_type?: MaintenanceScoped<ChartDef[]>;
   raw_daily_by_type?: MaintenanceScoped<DailyBucket[]>;
   summary_by_type?: MaintenanceScoped<HotelSummary>;
 }
+
+export type DashboardJson = ImDashboardJson | MoDashboardJson;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { UploadJobInsert, UploadedFileInsert, UploadMode, ModuleCodeDb } from '@/types';
 
-// Fallback org when chain_code doesn't match any known organization_code.
+// Preferred fallback org when chain_code doesn't match any known organization_code.
 const DEFAULT_ORG_ID = 'b6a52445-70d4-4d41-9603-de410ba8265c';
 
 export interface CreateJobRequest {
@@ -25,6 +25,42 @@ export interface CreateJobResponse {
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
+async function resolveOrganizationId(
+  supabase: ReturnType<typeof createAdminClient>,
+  chain_code: string | null,
+): Promise<string | null> {
+  if (chain_code) {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('id')
+      .ilike('organization_code', chain_code)
+      .maybeSingle() as unknown as SbResult<{ id: string }>;
+    if (org?.id) return org.id;
+  }
+
+  const { data: preferredDefault } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('id', DEFAULT_ORG_ID)
+    .maybeSingle() as unknown as SbResult<{ id: string }>;
+  if (preferredDefault?.id) return preferredDefault.id;
+
+  const { data: localOrg } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('organization_code', 'LOCAL')
+    .maybeSingle() as unknown as SbResult<{ id: string }>;
+  if (localOrg?.id) return localOrg.id;
+
+  const { data: anyOrg } = await supabase
+    .from('organizations')
+    .select('id')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle() as unknown as SbResult<{ id: string }>;
+  return anyOrg?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     let body: CreateJobRequest;
@@ -45,15 +81,10 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1. Resolve organization — match by chain_code, fall back to default org
-    let organization_id = DEFAULT_ORG_ID;
-    if (chain_code) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id')
-        .ilike('organization_code', chain_code)
-        .maybeSingle() as unknown as SbResult<{ id: string }>;
-      if (org?.id) organization_id = org.id;
+    // 1. Resolve organization — match by chain_code, then use a real fallback org
+    const organization_id = await resolveOrganizationId(supabase, chain_code);
+    if (!organization_id) {
+      return NextResponse.json({ error: 'No organization available for upload job' }, { status: 500 });
     }
 
     // 2. Create the upload_jobs row

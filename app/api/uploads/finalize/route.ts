@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, HotelSummary } from '@/types/dashboard';
+import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
+import { deriveMoType } from './mo-helpers.mjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ function parseFilename(fileName: string): { chainCode: string; hotelCode: string
   const parts = base.split('-');
   let moduleIdx = -1;
   for (let i = parts.length - 3; i >= 2; i--) {
-    if (/^(im|jo)$/i.test(parts[i])) { moduleIdx = i; break; }
+    if (/^(im|jo|mo)$/i.test(parts[i])) { moduleIdx = i; break; }
   }
   return {
     chainCode:   parts[0]?.toUpperCase() ?? '',
@@ -146,6 +147,114 @@ function normaliseJoForIm(rr: Record<string, unknown>): Record<string, unknown> 
     created_date: created,
     incident_datetime: created,
     investigation_updated_on_1: toStr(rr.acknowledged_datetime),
+  };
+}
+
+function isTruthyLike(val: unknown): boolean {
+  const normalized = String(val ?? '').trim().toLowerCase();
+  return ['true', 'yes', 'y', '1', 'pass', 'passed'].includes(normalized);
+}
+
+function mapMoStatusToIncidentStatus(status: string | null): string {
+  const s = (status ?? '').trim().toLowerCase();
+  if (!s) return 'Pending';
+  if (s.includes('cancel')) return 'Cancelled';
+  if (s.includes('complete') || s.includes('close') || s.includes('done') || s.includes('finish')) return 'Completed';
+  return 'Pending';
+}
+
+function mapMoSeverity(rr: Record<string, unknown>): string {
+  const escalation = toNum(rr.escalation_level) ?? 0;
+  const status = mapMoStatusToIncidentStatus(toStr(rr.job_status));
+  if (escalation >= 3) return 'Critical';
+  if (escalation >= 2) return 'High';
+  if (status === 'Pending') return 'Medium';
+  return 'Low';
+}
+
+function normaliseMoForIm(rr: Record<string, unknown>): Record<string, unknown> {
+  const created = toStr(rr.created_datetime);
+  return {
+    incident_status: mapMoStatusToIncidentStatus(toStr(rr.job_status)),
+    incident_category: toStr(rr.category) ?? 'Uncategorized',
+    incident_item_name: toStr(rr.defect) ?? toStr(rr.asset) ?? toStr(rr.job_order) ?? null,
+    incident_location: findField(rr, 'location', 'building', 'floor'),
+    severity: mapMoSeverity(rr),
+    source_of_complaint: findField(rr, 'created_by_department', 'created_by'),
+    room_no: toStr(rr.location) ?? null,
+    nights: null,
+    department: toStr(rr.category) ?? null,
+    created_date: created,
+    incident_datetime: created,
+    investigation_updated_on_1: toStr(rr.completed_datetime),
+  };
+}
+
+function buildMoKpis(acc: ImAcc, type: MaintenanceType): KpiDef[] {
+  const total = acc.total;
+  const completionRate = total > 0 ? (acc.completed / total) * 100 : 0;
+  const cancellationRate = total > 0 ? (acc.cancelled / total) * 100 : 0;
+  const open = Math.max(total - acc.completed - acc.cancelled, 0);
+  const openRate = total > 0 ? (open / total) * 100 : 0;
+  const severityAvg = total > 0 ? acc.severitySum / total : 0;
+  const categoryConcentration = total > 0 ? ((topN(acc.categoryMap, 1)[0]?.[1] ?? 0) / total) * 100 : 0;
+
+  if (type === 'PM') {
+    return [
+      { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM' },
+      { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM' },
+      { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM' },
+      { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM' },
+      { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM' },
+    ];
+  }
+
+  return [
+    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO' },
+    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO' },
+    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO' },
+    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO' },
+    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO' },
+    { id: 'mo_guest_related', label: 'Guest Related Orders', value: acc.vipTotal, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO' },
+    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(categoryConcentration), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
+    { id: 'mo_unique_categories', label: 'Active Categories', value: Object.keys(acc.categoryMap).length, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
+    { id: 'mo_unique_assets', label: 'Touched Assets', value: Object.keys(acc.itemMap).length, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect/asset combinations touched.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO' },
+    { id: 'mo_daily_average', label: 'Daily Average Orders', value: r2(total / Math.max(Object.keys(acc.dailyMap).length, 1)), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO order volume.', formula: 'COUNT(*) / active_days WHERE type = MO' },
+  ];
+}
+
+function buildMoJson(
+  overall: ImAcc,
+  byType: Record<MaintenanceType, ImAcc>,
+  upload_job_id: string,
+  source_name: string,
+  hotel: HotelInfo,
+): MoDashboardJson {
+  const moAcc = byType.MO.total > 0 ? byType.MO : overall;
+  const pmAcc = byType.PM;
+  const base = buildImJson(moAcc, upload_job_id, source_name, hotel);
+  const pmBase = buildImJson(pmAcc, upload_job_id, source_name, hotel);
+
+  return {
+    ...base,
+    meta: { ...base.meta, schema: 'mo-v1' },
+    kpis: buildMoKpis(moAcc, 'MO'),
+    kpis_by_type: {
+      MO: buildMoKpis(moAcc, 'MO'),
+      PM: buildMoKpis(pmAcc, 'PM'),
+    },
+    charts_by_type: {
+      MO: base.charts,
+      PM: pmBase.charts,
+    },
+    raw_daily_by_type: {
+      MO: base.raw_daily,
+      PM: pmBase.raw_daily,
+    },
+    summary_by_type: {
+      MO: base.summary,
+      PM: pmBase.summary,
+    },
   };
 }
 
@@ -1338,7 +1447,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  type JobRow = { organization_id: string; module_code: 'im' | 'jo'; source_name: string | null };
+  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo'; source_name: string | null };
   const { data: job, error: jobError } = await supabase
     .from('upload_jobs').select('organization_id, module_code, source_name')
     .eq('id', upload_job_id).single() as unknown as SbResult<JobRow>;
@@ -1346,9 +1455,21 @@ export async function POST(req: NextRequest) {
   if (jobError || !job) return NextResponse.json({ error: 'Upload job not found' }, { status: 404 });
 
   const { organization_id, module_code, source_name } = job;
-  const stagingTable   = module_code === 'im' ? 'im_staging_rows'   : 'jo_staging_rows';
-  const recordTable    = module_code === 'im' ? 'im_records'        : 'jo_records';
-  const dashboardTable = module_code === 'im' ? 'im_dashboard_json' : 'jo_dashboard_json';
+  const stagingTable = module_code === 'im'
+    ? 'im_staging_rows'
+    : module_code === 'jo'
+      ? 'jo_staging_rows'
+      : 'mo_staging_rows';
+  const recordTable = module_code === 'im'
+    ? 'im_records'
+    : module_code === 'jo'
+      ? 'jo_records'
+      : 'mo_records';
+  const dashboardTable = module_code === 'im'
+    ? 'im_dashboard_json'
+    : module_code === 'jo'
+      ? 'jo_dashboard_json'
+      : 'mo_dashboard_json';
 
   type FileRow = { id: string; file_name: string };
   let { data: fileRow } = await supabase
@@ -1382,6 +1503,10 @@ export async function POST(req: NextRequest) {
 
   const acc = newImAcc();
   const joKpiAcc = newJoKpiAcc();
+  const moTypeAcc: Record<MaintenanceType, ImAcc> = {
+    MO: newImAcc(),
+    PM: newImAcc(),
+  };
   let totalInserted = 0;
   let lastId = 0;
 
@@ -1459,7 +1584,7 @@ export async function POST(req: NextRequest) {
           normalized_row:     rr,
         };
       });
-    } else {
+    } else if (module_code === 'jo') {
       payload = rows.map(r => {
         const rr = r.raw_row;
         accumulate(acc, normaliseJoForIm(rr));
@@ -1493,6 +1618,126 @@ export async function POST(req: NextRequest) {
           normalized_row:        rr,
         };
       });
+    } else if (module_code === 'mo') {
+      payload = rows.map(r => {
+        const rr = r.raw_row;
+        const type = deriveMoType(rr.job_order);
+        const createdIso = toIso(rr.created_datetime);
+        const deadlineIso = toIso(rr.deadline_datetime);
+        const completedIso = toIso(rr.completed_datetime);
+        const createdAt = createdIso ? new Date(createdIso) : null;
+        const deadlineAt = deadlineIso ? new Date(deadlineIso) : null;
+        const completedAt = completedIso ? new Date(completedIso) : null;
+        const status = mapMoStatusToIncidentStatus(toStr(rr.job_status));
+        const isCompleted = status === 'Completed';
+        const isCancelled = status === 'Cancelled';
+        const isStopped = !!toStr(rr.stop_reason);
+        const isOpen = !isCompleted && !isCancelled;
+        const isEscalated = (toNum(rr.escalation_level) ?? 0) > 0 || !!toStr(rr.escalation_to);
+        const isGuestRelated = isTruthyLike(rr.guest_related);
+        const hasAttachment = !!toStr(rr.attachment);
+        const hasChecklist = !!toStr(rr.checklist_name) || !!toStr(rr.checklist_status);
+        const hasInventoryUsage = (toNum(rr.stock_out_qty) ?? 0) > 0 || !!toStr(rr.inventory_item);
+        const hasEsignature = isTruthyLike(rr.e_signature);
+        const hasInspection = !!toStr(rr.inspection_result) || !!toStr(rr.inspection_remark) || !!toStr(rr.inspected_by);
+        const inspectionPassed = isTruthyLike(rr.inspection_result);
+        const inspectionFailed = hasInspection && !inspectionPassed;
+        const resolutionMinutes = createdAt && completedAt ? Math.max(0, (completedAt.getTime() - createdAt.getTime()) / 60000) : null;
+        const slaMinutes = createdAt && deadlineAt ? Math.max(0, (deadlineAt.getTime() - createdAt.getTime()) / 60000) : null;
+        const deadlineVarianceMinutes = completedAt && deadlineAt ? (completedAt.getTime() - deadlineAt.getTime()) / 60000 : null;
+        const completedWithinSla = typeof deadlineVarianceMinutes === 'number' ? deadlineVarianceMinutes <= 0 : false;
+        const isOverdue = !!deadlineAt && ((!completedAt && deadlineAt.getTime() < Date.now()) || (typeof deadlineVarianceMinutes === 'number' && deadlineVarianceMinutes > 0));
+        const createdDate = createdAt ? createdAt.toISOString().slice(0, 10) : null;
+        const createdHour = createdAt ? createdAt.getUTCHours() : null;
+        const createdWeek = createdAt ? toWeekKey(createdAt) : null;
+        const createdMonth = createdAt ? createdAt.toISOString().slice(0, 7) : null;
+        const createdQuarter = createdAt ? `${createdAt.getUTCFullYear()}-Q${Math.floor(createdAt.getUTCMonth() / 3) + 1}` : null;
+        const completedDate = completedAt ? completedAt.toISOString().slice(0, 10) : null;
+        const stockOutQtyNum = toNum(rr.stock_out_qty);
+        const escalationLevelNum = toNum(rr.escalation_level);
+
+        const imLike = {
+          ...normaliseMoForIm(rr),
+          vip_code: isGuestRelated ? 'Y' : null,
+        };
+        accumulate(acc, imLike);
+        accumulate(moTypeAcc[type], imLike);
+
+        return {
+          organization_id,
+          upload_job_id,
+          uploaded_file_id: uploaded_file_id ?? r.uploaded_file_id,
+          source_row_id: r.id,
+          chain_code: hotel.chainCode || null,
+          hotel_code: hotel.hotelCode || null,
+          module_code,
+          country_code: hotel.countryCode || null,
+          created_datetime: createdIso,
+          job_status: toStr(rr.job_status),
+          job_order: toStr(rr.job_order),
+          guest_name: toStr(rr.guest_name),
+          location: toStr(rr.location),
+          category: toStr(rr.category),
+          defect: toStr(rr.defect),
+          remarks: toStr(rr.remarks),
+          deadline_datetime: deadlineIso,
+          completed_datetime: completedIso,
+          escalation_level: toStr(rr.escalation_level),
+          escalation_to: toStr(rr.escalation_to),
+          building: toStr(rr.building),
+          floor: toStr(rr.floor),
+          asset: toStr(rr.asset),
+          created_by: toStr(rr.created_by),
+          created_by_department: toStr(rr.created_by_department),
+          assigned_to: toStr(rr.assigned_to),
+          completed_by: toStr(rr.completed_by),
+          inspected_by: toStr(rr.inspected_by),
+          attachment: toStr(rr.attachment),
+          checklist_name: toStr(rr.checklist_name),
+          checklist_status: toStr(rr.checklist_status),
+          stock_out_by: toStr(rr.stock_out_by),
+          stock_out_qty: toStr(rr.stock_out_qty),
+          inventory_item: toStr(rr.inventory_item),
+          comment: toStr(rr.comment),
+          remarks_proof_of_completion: toStr(rr.remarks_proof_of_completion),
+          e_signature: toStr(rr.e_signature),
+          inspection_remark: toStr(rr.inspection_remark),
+          inspection_result: toStr(rr.inspection_result),
+          guest_related: toStr(rr.guest_related),
+          cancel_reason: toStr(rr.cancel_reason),
+          stop_reason: toStr(rr.stop_reason),
+          type: deriveMoType(rr.job_order),
+          is_completed: isCompleted,
+          is_cancelled: isCancelled,
+          is_stopped: isStopped,
+          is_open: isOpen,
+          is_overdue: isOverdue,
+          is_escalated: isEscalated,
+          is_guest_related: isGuestRelated,
+          has_attachment: hasAttachment,
+          has_checklist: hasChecklist,
+          has_inventory_usage: hasInventoryUsage,
+          has_esignature: hasEsignature,
+          has_inspection: hasInspection,
+          inspection_passed: inspectionPassed,
+          inspection_failed: inspectionFailed,
+          resolution_minutes: resolutionMinutes !== null ? r2(resolutionMinutes) : null,
+          sla_minutes: slaMinutes !== null ? r2(slaMinutes) : null,
+          deadline_variance_minutes: deadlineVarianceMinutes !== null ? r2(deadlineVarianceMinutes) : null,
+          completed_within_sla: completedWithinSla,
+          created_date: createdDate,
+          created_hour: createdHour,
+          created_week: createdWeek,
+          created_month: createdMonth,
+          created_quarter: createdQuarter,
+          completed_date: completedDate,
+          stock_out_qty_num: stockOutQtyNum,
+          escalation_level_num: escalationLevelNum,
+          normalized_row: rr,
+        };
+      });
+    } else {
+      return NextResponse.json({ error: `Unsupported module_code: ${module_code}` }, { status: 400 });
     }
 
     for (let i = 0; i < payload.length; i += INSERT_BATCH) {
@@ -1519,12 +1764,15 @@ export async function POST(req: NextRequest) {
 
   // ── Build + upsert dashboard JSON ────────────────────────────────────────
 
-  const generatedJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
+  let generatedJson: ImDashboardJson | MoDashboardJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
   if (module_code === 'jo') {
     generatedJson.meta.schema = 'jo-v1';
     generatedJson.kpis = buildJoKpis(joKpiAcc);
     generatedJson.eac = buildJoEac(acc, joKpiAcc);
     generatedJson.charts = buildJoCharts(acc, joKpiAcc);
+  } else if (module_code === 'mo') {
+    generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
+    generatedJson.meta.schema = 'mo-v1';
   }
 
   const now = new Date().toISOString();

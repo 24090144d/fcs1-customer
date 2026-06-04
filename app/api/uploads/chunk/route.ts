@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   // ── Resolve upload job ─────────────────────────────────────────────────────
 
-  type JobRow = { organization_id: string; module_code: 'im' | 'jo' };
+  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo' };
   const { data: job, error: jobError } = await supabase
     .from('upload_jobs')
     .select('organization_id, module_code')
@@ -68,7 +68,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Upload job not found' }, { status: 404 });
   }
 
-  const table = job.module_code === 'im' ? 'im_staging_rows' : 'jo_staging_rows';
+  const table = job.module_code === 'im'
+    ? 'im_staging_rows'
+    : job.module_code === 'jo'
+      ? 'jo_staging_rows'
+      : 'mo_staging_rows';
 
   // ── Empty-row fast path (still finalizes job if last chunk) ───────────────
 

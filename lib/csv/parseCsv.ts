@@ -1,5 +1,5 @@
 /**
- * Browser-side CSV streaming parser — IM and JO modules.
+ * Browser-side CSV streaming parser — IM, JO, and MO modules.
  * Uses PapaParse in chunk mode for files ≥ CHUNK_THRESHOLD_BYTES (10 MB).
  * Files below the threshold are parsed in a single pass for lower overhead.
  *
@@ -23,7 +23,7 @@ import type {
   ParseResult,
   ValidationError,
 } from '@/types/csv';
-import { validateHeaders, validateImRow, validateJoRow } from '@/lib/validation/csvSchema';
+import { validateHeaders, validateImRow, validateJoRow, validateMoRow } from '@/lib/validation/csvSchema';
 
 // ── Internal parse state ──────────────────────────────────────────────────────
 
@@ -97,7 +97,9 @@ function processRow(
   const { row, errors } =
     module === 'IM'
       ? validateImRow(raw, rowNum)
-      : validateJoRow(raw, rowNum);
+      : module === 'JO'
+        ? validateJoRow(raw, rowNum)
+        : validateMoRow(raw, rowNum);
 
   if (row) {
     state.validRows++;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ModuleCode, ImRow, JoRow, ValidationError } from '@/types/csv';
+import type { ModuleCode, ImRow, JoRow, MoRow, ValidationError } from '@/types/csv';
 
 // ── Required column lists ─────────────────────────────────────────────────────
 
@@ -10,6 +10,12 @@ export const IM_REQUIRED_COLUMNS = [
 ] as const;
 
 export const JO_REQUIRED_COLUMNS = [
+  'job_order',
+  'job_status',
+  'created_datetime',
+] as const;
+
+export const MO_REQUIRED_COLUMNS = [
   'job_order',
   'job_status',
   'created_datetime',
@@ -128,6 +134,45 @@ export const JoRowSchema = z.object({
   escalation_group:      optStr,
 });
 
+// ── MO Zod schema ─────────────────────────────────────────────────────────────
+
+export const MoRowSchema = z.object({
+  created_datetime:      reqStr,
+  job_status:            reqStr,
+  job_order:             reqStr,
+  guest_name:            optStr,
+  location:              optStr,
+  category:              optStr,
+  defect:                optStr,
+  remarks:               optStr,
+  deadline_datetime:     optStr,
+  completed_datetime:    optStr,
+  escalation_level:      optStr,
+  escalation_to:         optStr,
+  building:              optStr,
+  floor:                 optStr,
+  asset:                 optStr,
+  created_by:            optStr,
+  created_by_department: optStr,
+  assigned_to:           optStr,
+  completed_by:          optStr,
+  inspected_by:          optStr,
+  attachment:            optStr,
+  checklist_name:        optStr,
+  checklist_status:      optStr,
+  stock_out_by:          optStr,
+  stock_out_qty:         optStr,
+  inventory_item:        optStr,
+  comment:               optStr,
+  remarks_proof_of_completion: optStr,
+  e_signature:           optStr,
+  inspection_remark:     optStr,
+  inspection_result:     optStr,
+  guest_related:         optStr,
+  cancel_reason:         optStr,
+  stop_reason:           optStr,
+});
+
 // ── Key normalisation ─────────────────────────────────────────────────────────
 
 /**
@@ -151,6 +196,15 @@ const JO_KEY_ALIASES: Record<string, string> = {
   job_completed_date_time: 'completed_datetime',
 };
 
+const MO_KEY_ALIASES: Record<string, string> = {
+  date_time_created: 'created_datetime',
+  date_time_deadline: 'deadline_datetime',
+  date_time_completed: 'completed_datetime',
+  created_by_dept: 'created_by_department',
+  remarks_in_proof_of_completion: 'remarks_proof_of_completion',
+  esignature: 'e_signature',
+};
+
 function canonicalKey(rawKey: string): string {
   const base = rawKey
     .trim()
@@ -158,7 +212,8 @@ function canonicalKey(rawKey: string): string {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
   const imAliased = IM_KEY_ALIASES[base] ?? base;
-  return JO_KEY_ALIASES[imAliased] ?? imAliased;
+  const joAliased = JO_KEY_ALIASES[imAliased] ?? imAliased;
+  return MO_KEY_ALIASES[joAliased] ?? joAliased;
 }
 
 /**
@@ -183,6 +238,10 @@ function makeImKey(d: z.infer<typeof ImRowSchema>): string {
 
 function makeJoKey(d: z.infer<typeof JoRowSchema>): string {
   return `JO::${d.job_order}::${d.created_datetime ?? ''}`;
+}
+
+function makeMoKey(d: z.infer<typeof MoRowSchema>): string {
+  return `MO::${d.job_order}::${d.created_datetime ?? ''}`;
 }
 
 // ── Per-row validators ────────────────────────────────────────────────────────
@@ -323,6 +382,69 @@ export function validateJoRow(
   };
 }
 
+export function validateMoRow(
+  raw: Record<string, string>,
+  rowNumber: number,
+): { row: MoRow | null; errors: ValidationError[] } {
+  const norm   = normaliseKeys(raw);
+  const result = MoRowSchema.safeParse(norm);
+
+  if (!result.success) {
+    return {
+      row: null,
+      errors: result.error.issues.map((issue) => ({
+        rowNumber,
+        field:   String(issue.path[0] ?? 'unknown'),
+        value:   norm[String(issue.path[0])] ?? '',
+        message: issue.message,
+      })),
+    };
+  }
+
+  const d = result.data;
+  return {
+    row: {
+      row_key:               makeMoKey(d),
+      row_number:            rowNumber,
+      created_datetime:      d.created_datetime,
+      job_status:            d.job_status,
+      job_order:             d.job_order,
+      guest_name:            d.guest_name ?? null,
+      location:              d.location ?? null,
+      category:              d.category ?? null,
+      defect:                d.defect ?? null,
+      remarks:               d.remarks ?? null,
+      deadline_datetime:     d.deadline_datetime ?? null,
+      completed_datetime:    d.completed_datetime ?? null,
+      escalation_level:      d.escalation_level ?? null,
+      escalation_to:         d.escalation_to ?? null,
+      building:              d.building ?? null,
+      floor:                 d.floor ?? null,
+      asset:                 d.asset ?? null,
+      created_by:            d.created_by ?? null,
+      created_by_department: d.created_by_department ?? null,
+      assigned_to:           d.assigned_to ?? null,
+      completed_by:          d.completed_by ?? null,
+      inspected_by:          d.inspected_by ?? null,
+      attachment:            d.attachment ?? null,
+      checklist_name:        d.checklist_name ?? null,
+      checklist_status:      d.checklist_status ?? null,
+      stock_out_by:          d.stock_out_by ?? null,
+      stock_out_qty:         d.stock_out_qty ?? null,
+      inventory_item:        d.inventory_item ?? null,
+      comment:               d.comment ?? null,
+      remarks_proof_of_completion: d.remarks_proof_of_completion ?? null,
+      e_signature:           d.e_signature ?? null,
+      inspection_remark:     d.inspection_remark ?? null,
+      inspection_result:     d.inspection_result ?? null,
+      guest_related:         d.guest_related ?? null,
+      cancel_reason:         d.cancel_reason ?? null,
+      stop_reason:           d.stop_reason ?? null,
+    },
+    errors: [],
+  };
+}
+
 // ── Header validation ─────────────────────────────────────────────────────────
 
 /**
@@ -335,7 +457,7 @@ export function validateHeaders(
 ): { ok: boolean; missing: string[] } {
   const normalised = headers.map(canonicalKey);
   const required =
-    module === 'IM' ? IM_REQUIRED_COLUMNS : JO_REQUIRED_COLUMNS;
+    module === 'IM' ? IM_REQUIRED_COLUMNS : module === 'JO' ? JO_REQUIRED_COLUMNS : MO_REQUIRED_COLUMNS;
   const missing = required.filter((col) => !normalised.includes(col));
   return { ok: missing.length === 0, missing };
 }

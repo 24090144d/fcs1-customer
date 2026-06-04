@@ -4,24 +4,27 @@ import { unstable_noStore as noStore } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardClient } from './DashboardClient';
-import type { ImDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
 
 export const dynamic = 'force-dynamic';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
-function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' {
-  return String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo_dashboard_json' : 'im_dashboard_json';
+function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' {
+  const mod = String(moduleCode ?? '').toLowerCase();
+  if (mod === 'jo') return 'jo_dashboard_json';
+  if (mod === 'mo') return 'mo_dashboard_json';
+  return 'im_dashboard_json';
 }
 
-async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<ImDashboardJson | null> {
+async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<DashboardJson | null> {
   noStore();
   try {
     const supabase = createAdminClient();
-    type DashRow = { generated_json: ImDashboardJson };
+    type DashRow = { generated_json: DashboardJson };
     const table = resolveDashboardTable(moduleCode);
     const isJo = String(moduleCode ?? '').toLowerCase() === 'jo';
-    const expectedSchema = String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo-v1' : 'im-v1';
+    const expectedSchema = String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo-v1' : String(moduleCode ?? '').toLowerCase() === 'mo' ? 'mo-v1' : 'im-v1';
     const base = supabase
       .from(table)
       .select('generated_json')
@@ -45,7 +48,7 @@ async function fetchChainEntries(chainCode: string, currentHotelCode: string, mo
   noStore();
   try {
     const supabase = createAdminClient();
-    type DashRow = { generated_json: ImDashboardJson; created_at: string };
+    type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
     const { data: rows } = await supabase
       .from(table)
@@ -65,6 +68,9 @@ async function fetchChainEntries(chainCode: string, currentHotelCode: string, mo
         country_code: json.meta.country_code ?? '',
         summary:      json.summary,
         raw_daily:    json.raw_daily ?? [],
+        kpis_by_type: 'kpis_by_type' in json ? json.kpis_by_type : undefined,
+        raw_daily_by_type: 'raw_daily_by_type' in json ? json.raw_daily_by_type : undefined,
+        summary_by_type: 'summary_by_type' in json ? json.summary_by_type : undefined,
       });
     }
     return Array.from(seen.values()).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
@@ -390,7 +396,7 @@ export default async function DashboardPage({
             </div>
             <h1 className="font-serif text-2xl font-bold text-slate-800">No Dashboard Data</h1>
             <p className="font-sans text-sm text-slate-500 max-w-sm">
-              Upload an IM or JO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
+              Upload an IM, JO, or MO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
             </p>
             <Link
               href="/onboarding"

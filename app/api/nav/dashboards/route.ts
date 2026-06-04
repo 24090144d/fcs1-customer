@@ -21,7 +21,7 @@ type DashRow = {
 };
 
 export interface NavDashItem {
-  module:       'im' | 'jo';
+  module:       'im' | 'jo' | 'mo';
   hotel_code:   string;
   hotel_name:   string;
   country_code: string;
@@ -39,15 +39,16 @@ export async function GET() {
   noStore();
   try {
     const sb = createAdminClient();
-    const [{ data: imRows }, { data: joRows }] = await Promise.all([
+    const [{ data: imRows }, { data: joRows }, { data: moRows }] = await Promise.all([
       sb.from('im_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
       sb.from('jo_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
+      sb.from('mo_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
     ]);
 
-    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<'im' | 'jo'> }>>();
+    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<'im' | 'jo' | 'mo'> }>>();
     const seen = new Set<string>(); // module|chain|hotel
 
-    const addRow = (module: 'im' | 'jo', row: DashRow) => {
+    const addRow = (module: 'im' | 'jo' | 'mo', row: DashRow) => {
       const m = row.generated_json?.meta;
       if (!m) return;
       const chain = (m.chain_code ?? '').trim().toUpperCase();
@@ -70,18 +71,19 @@ export async function GET() {
 
     for (const r of (imRows ?? [])) addRow('im', r);
     for (const r of (joRows ?? [])) addRow('jo', r);
+    for (const r of (moRows ?? [])) addRow('mo', r);
 
     if (chainMap.size === 0) return NextResponse.json({ chains: [] });
 
     const chains: NavChain[] = Array.from(chainMap.entries()).map(([chain, hotelMap]) => {
       const items: NavDashItem[] = [];
 
-      for (const moduleCode of ['im', 'jo'] as const) {
+      for (const moduleCode of ['im', 'jo', 'mo'] as const) {
         const hotelsForModule = Array.from(hotelMap.entries())
           .filter(([, { mods }]) => mods.has(moduleCode))
           .sort(([a], [b]) => a.localeCompare(b));
 
-        if (hotelsForModule.length >= 2) {
+        if (moduleCode !== 'mo' && hotelsForModule.length >= 2) {
           items.push({
             module: moduleCode,
             hotel_code: 'CORP',
@@ -99,10 +101,10 @@ export async function GET() {
             hotel_code,
             hotel_name,
             country_code,
-            label: moduleCode === 'im' ? 'IM Dashboard' : 'JO Dashboard',
+            label: moduleCode === 'im' ? 'IM Dashboard' : moduleCode === 'jo' ? 'JO Dashboard' : 'MO Dashboard',
             href: moduleCode === 'im'
               ? `/dashboard?hotel=${hotel_code}`
-              : `/dashboard?module=jo&hotel=${hotel_code}`,
+              : `/dashboard?module=${moduleCode}&hotel=${hotel_code}`,
             scope: 'hotel',
           });
         }

@@ -74,7 +74,7 @@ CREATE TABLE public.ai_chart_definitions (
     is_published boolean DEFAULT false NOT NULL,
     published_at timestamp with time zone,
     display_order integer,
-    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text])))
+    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text, 'mo'::text])))
 );
 
 
@@ -423,7 +423,8 @@ CREATE TABLE public.mo_records (
     escalation_level_num numeric,
     normalized_row jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT mo_records_type_check CHECK ((type = ANY (ARRAY['MO'::text, 'PM'::text])))
 );
 
 

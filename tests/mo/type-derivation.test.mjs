@@ -10,3 +10,9 @@ test('deriveMoType maps MO and PM prefixes', () => {
 test('deriveMoType rejects unknown prefixes', () => {
   assert.throws(() => deriveMoType('JO-0001'), /Invalid Job Order prefix/);
 });
+
+test('deriveMoType rejects malformed MO and PM prefixes', () => {
+  assert.throws(() => deriveMoType('MONTHLY-0001'), /Invalid Job Order prefix/);
+  assert.throws(() => deriveMoType('PMX-0001'), /Invalid Job Order prefix/);
+  assert.throws(() => deriveMoType('MO12345'), /Invalid Job Order prefix/);
+});

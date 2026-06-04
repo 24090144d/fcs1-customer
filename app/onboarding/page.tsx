@@ -25,6 +25,7 @@ import type { FinalizeRequest, FinalizeResponse } from '@/app/api/uploads/finali
 import type { UploadRow, ChunkUploadProgress } from '@/lib/csv/uploadChunks';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { MAX_FILE_BYTES, MAX_ERRORS_COLLECTED } from '@/types/csv';
+import type { ModuleCodeDb } from '@/types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ function parseFileName(filename: string): ParsedFileName | null {
   };
 }
 
-const KNOWN_MODULES: ModuleCode[] = ['IM', 'JO'];
+const KNOWN_MODULES: ModuleCode[] = ['IM', 'JO', 'MO'];
 
 function buildValidationMessages(file: File, parsed: ParsedFileName | null): ValidationMessage[] {
   const msgs: ValidationMessage[] = [];
@@ -359,7 +360,7 @@ export default function OnboardingPage() {
       file_hash:    fileHash,
       file_name:    file.name,
       file_size:    file.size,
-      module_code:  moduleCode.toLowerCase() as 'im' | 'jo',
+      module_code:  moduleCode.toLowerCase() as ModuleCodeDb,
       upload_mode:  uploadMode,
       chain_code:   parsed.chainCode   ?? null,
       hotel_code:   parsed.hotelCode   ?? null,
@@ -406,7 +407,7 @@ export default function OnboardingPage() {
 
     const moduleCode = parsed.module.toUpperCase() as ModuleCode;
     if (!KNOWN_MODULES.includes(moduleCode)) {
-      addMsg({ id: 'module-invalid', severity: 'error', message: `Cannot parse: module "${parsed.module}" is not IM or JO.` });
+      addMsg({ id: 'module-invalid', severity: 'error', message: `Cannot parse: module "${parsed.module}" is not IM, JO, or MO.` });
       return;
     }
 
@@ -638,7 +639,7 @@ export default function OnboardingPage() {
                   ['ChainCode',   'e.g. Hyatt'],
                   ['HotelCode',   'e.g. TYOTY'],
                   ['HotelName',   'e.g. Hyatt Regency Tokyo'],
-                  ['Module',      'IM or JO'],
+                  ['Module',      'IM, JO, or MO'],
                   ['CountryCode', 'e.g. JP'],
                   ['DataRange',   'e.g. 4m or 2024Q1'],
                 ].map(([seg, hint]) => (

@@ -163,9 +163,44 @@ export interface MoCsvRow {
   'Stop Reason': string;
 }
 
-export interface MoRow extends MoCsvRow {
+/** Maintenance Orders parsed row — normalized to app/database field names */
+export interface MoRow {
   row_key: string;
   row_number: number;
+  created_datetime: string | null;
+  job_status: string;
+  job_order: string;
+  guest_name: string | null;
+  location: string | null;
+  category: string | null;
+  defect: string | null;
+  remarks: string | null;
+  deadline_datetime: string | null;
+  completed_datetime: string | null;
+  escalation_level: string | null;
+  escalation_to: string | null;
+  building: string | null;
+  floor: string | null;
+  asset: string | null;
+  created_by: string | null;
+  created_by_department: string | null;
+  assigned_to: string | null;
+  completed_by: string | null;
+  inspected_by: string | null;
+  attachment: string | null;
+  checklist_name: string | null;
+  checklist_status: string | null;
+  stock_out_by: string | null;
+  stock_out_qty: string | null;
+  inventory_item: string | null;
+  comment: string | null;
+  remarks_proof_of_completion: string | null;
+  e_signature: string | null;
+  inspection_remark: string | null;
+  inspection_result: string | null;
+  guest_related: string | null;
+  cancel_reason: string | null;
+  stop_reason: string | null;
 }
 
 export type ParsedRow = ImRow | JoRow | MoRow;

@@ -64,7 +64,7 @@ export type IncidentInsert = Omit<IncidentRecord, "id" | "inserted_at">;
 
 export type UploadJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type UploadMode      = 'replace' | 'append'    | 'upsert';
-export type ModuleCodeDb    = 'im'      | 'jo';
+export type ModuleCodeDb    = 'im'      | 'jo'      | 'mo';
 
 export interface UploadJobRow {
   id:              string;

@@ -3,6 +3,13 @@
 
 alter type public.module_code add value if not exists 'mo';
 
+alter table public.ai_chart_definitions
+  drop constraint if exists ai_chart_definitions_module_code_check;
+
+alter table public.ai_chart_definitions
+  add constraint ai_chart_definitions_module_code_check
+  check ((module_code = any (array['im'::text, 'jo'::text, 'mo'::text])));
+
 create table if not exists public.mo_dashboard_json (
   id uuid default gen_random_uuid() not null primary key,
   organization_id uuid not null,
@@ -60,7 +67,9 @@ create table if not exists public.mo_records (
   guest_related text,
   cancel_reason text,
   stop_reason text,
-  type text not null,
+  type text not null
+    constraint mo_records_type_check
+    check ((type = any (array['MO'::text, 'PM'::text]))),
   is_completed boolean not null default false,
   is_cancelled boolean not null default false,
   is_stopped boolean not null default false,

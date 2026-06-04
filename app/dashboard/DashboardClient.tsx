@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { Sun, Moon, Printer, CalendarDays, X } from 'lucide-react';
 import Highcharts from 'highcharts';
 import { KpiCard }  from '@/components/dashboard/KpiCard';
-import type { ImDashboardJson, DailyBucket, KpiDef, ChartDef, ChainEntry } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, MoDashboardJson, MaintenanceType, DailyBucket, KpiDef, ChartDef, ChainEntry } from '@/types/dashboard';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
@@ -1510,7 +1510,164 @@ function CorpJoPerformanceTable({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboardJson; chainEntries?: ChainEntry[] }) {
+function maintenanceModeLabel(type: MaintenanceType): string {
+  return type === 'PM' ? 'Preventive Maintenance' : 'Maintenance Order';
+}
+
+function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
+  const { t } = useI18n();
+  const { theme: selectedTheme } = useTheme();
+  const [dark, setDark] = useState(false);
+  const [maintenanceType, setMaintenanceType] = useState<MaintenanceType>('MO');
+  const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+  }, [dark]);
+
+  const scopedKpis = useMemo(
+    () => data.kpis_by_type?.[maintenanceType] ?? data.kpis,
+    [data, maintenanceType],
+  );
+  const scopedCharts = useMemo(
+    () => data.charts_by_type?.[maintenanceType] ?? data.charts,
+    [data, maintenanceType],
+  );
+  const scopedSummary = useMemo(
+    () => data.summary_by_type?.[maintenanceType] ?? data.summary,
+    [data, maintenanceType],
+  );
+
+  const bg = themeTokens.dashboard.bg;
+  const toolbarBg = themeTokens.dashboard.toolbarBg;
+  const toolbarBd = themeTokens.dashboard.toolbarBorder;
+  const metaTitle = themeTokens.dashboard.metaTitle;
+  const metaSub = themeTokens.dashboard.metaSub;
+  const inputBg = themeTokens.dashboard.inputBg;
+  const inputBd = themeTokens.dashboard.inputBorder;
+  const inputText = themeTokens.dashboard.inputText;
+  const accent = themeTokens.accent;
+  const accentAlt = themeTokens.accentAlt;
+  const footerText = themeTokens.dashboard.footerText;
+  const footerBd = themeTokens.dashboard.footerBorder;
+
+  let chartSequence = 0;
+  const nextChartIndex = () => {
+    chartSequence += 1;
+    return chartSequence;
+  };
+
+  return (
+    <div className="grain transition-colors print:bg-white" style={{ background: bg, minHeight: '100vh' }} data-print-root>
+      <div
+        className="sticky top-0 z-20 px-6 py-3 flex flex-wrap items-center gap-3 print-hidden"
+        style={{ background: toolbarBg, borderBottom: `1px solid ${toolbarBd}` }}
+      >
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>
+            {data.meta.hotel_name
+              ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${maintenanceType}`
+              : `${data.meta.source_name} · ${maintenanceType}`}
+          </h3>
+          <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
+            {scopedSummary.total.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
+            {' · '}{maintenanceModeLabel(maintenanceType)}
+            {' · '}{data.meta.date_range.min ?? 'N/A'} → {data.meta.date_range.max ?? 'N/A'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div
+            className="inline-flex items-center rounded-md overflow-hidden"
+            style={{ border: `1px solid ${inputBd}`, background: inputBg }}
+          >
+            <button
+              type="button"
+              onClick={() => setMaintenanceType('MO')}
+              className="px-3 py-1.5 font-mono text-[0.68rem]"
+              style={{
+                background: maintenanceType === 'MO' ? accent : 'transparent',
+                color: maintenanceType === 'MO' ? '#f8f7f2' : inputText,
+              }}
+            >MO</button>
+            <button
+              type="button"
+              onClick={() => setMaintenanceType('PM')}
+              className="px-3 py-1.5 font-mono text-[0.68rem]"
+              style={{
+                background: maintenanceType === 'PM' ? accentAlt : 'transparent',
+                color: maintenanceType === 'PM' ? '#f8f7f2' : inputText,
+              }}
+            >PM</button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="h-8 w-8 grid place-items-center transition-opacity hover:opacity-80"
+            style={{ border: `1px solid ${inputBd}`, background: inputBg, color: inputText }}
+            aria-label="Print dashboard"
+          >
+            <Printer size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setDark((v) => !v)}
+            className="h-8 w-8 grid place-items-center transition-opacity hover:opacity-80"
+            style={{ border: `1px solid ${inputBd}`, background: inputBg, color: inputText }}
+            aria-label="Toggle dark mode"
+          >
+            {dark ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-6 py-5 space-y-8">
+        <section>
+          <SectionHead label={`${maintenanceType} KPI`} dark={dark} />
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+            {scopedKpis.map((kpi) => (
+              <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <SectionHead label={`${maintenanceType} Charts`} dark={dark} />
+          <div className="chart-grid mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {scopedCharts.map((def) => (
+              <HcChart
+                key={`${maintenanceType}-${def.id}`}
+                def={{
+                  ...def,
+                  title: def.title || `${maintenanceType} Chart`,
+                  note: def.note || `${maintenanceType} scoped chart`,
+                  formula: def.formula || `Source rows filtered by type = ${maintenanceType}`,
+                }}
+                dark={dark}
+                fullPeriod={false}
+                index={nextChartIndex()}
+              />
+            ))}
+          </div>
+        </section>
+
+        <footer
+          className="pt-6 flex items-center justify-between font-mono"
+          style={{ borderTop: `1px solid ${footerBd}`, fontSize: '0.6rem', letterSpacing: '0.08em', color: footerText }}
+        >
+          <span>
+            fcs1-dash · {maintenanceType} · {maintenanceModeLabel(maintenanceType)}
+            {' · '}{scopedSummary.total.toLocaleString()} work orders
+          </span>
+          <span>Highcharts · PostgreSQL · Next.js</span>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboardJson; chainEntries?: ChainEntry[] }) {
   const isJo = data.meta.schema === 'jo-v1';
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
   const isBuilder = data.meta.upload_job_id === 'builder-dashboard-im';
@@ -1531,6 +1688,16 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   const [filtered, setFiltered] = useState(false);
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [deptScopedSummary, setDeptScopedSummary] = useState<DeptScopedSummary | null>(null);
+  const dashboardIdentity = useMemo(
+    () => [
+      data.meta.schema,
+      data.meta.chain_code,
+      data.meta.hotel_code,
+      data.meta.upload_job_id,
+      data.meta.generated_at,
+    ].join('|'),
+    [data.meta],
+  );
 
   // Sync dark class to <html> so Tailwind dark: variants work globally
   useEffect(() => {
@@ -1538,6 +1705,14 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   }, [dark]);
 
   const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
+
+  useEffect(() => {
+    setDateFrom(data.meta.date_range.min ?? '');
+    setDateTo(data.meta.date_range.max ?? '');
+    setFiltered(false);
+    setDepartmentFilter('ALL');
+    setDeptScopedSummary(null);
+  }, [dashboardIdentity, data.meta.date_range.min, data.meta.date_range.max]);
 
   useEffect(() => {
     if (!isCorp || isJo) return;
@@ -2977,3 +3152,10 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   );
 }
 
+export function DashboardClient({ data, chainEntries = [] }: { data: DashboardJson; chainEntries?: ChainEntry[] }) {
+  const isMo = data.meta.schema === 'mo-v1';
+  if (isMo) {
+    return <MaintenanceDashboardView data={data as MoDashboardJson} />;
+  }
+  return <StandardDashboardClient data={data as ImDashboardJson} chainEntries={chainEntries} />;
+}

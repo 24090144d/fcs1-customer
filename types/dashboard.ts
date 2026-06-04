@@ -60,6 +60,10 @@ export interface HotelSummary {
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;
+  assigned_dept_map?: Record<string, number>;
+  created_by_dept_map?: Record<string, number>;
+  completed_by_dept_map?: Record<string, number>;
+  location_map?: Record<string, number>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts
@@ -67,6 +71,7 @@ export interface ChainEntry {
   hotel_code:   string;
   hotel_name:   string;
   country_code: string;
+  kpis?:        KpiDef[];
   summary:      HotelSummary;
   raw_daily?:   DailyBucket[];
 }

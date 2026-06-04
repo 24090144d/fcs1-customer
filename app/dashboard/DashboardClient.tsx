@@ -50,6 +50,16 @@ function mergeRecords(maps: Record<string, number>[]): Record<string, number> {
 
 function r1(n: number) { return Math.round(n * 10) / 10; }
 function r2(n: number) { return Math.round(n * 100) / 100; }
+function topN(map: Record<string, number>, n: number): [string, number][] {
+  return Object.entries(map).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, n);
+}
+
+function getChainKpiValue(entry: ChainEntry, id: string): number | null {
+  const raw = entry.kpis?.find((k) => k.id === id)?.value;
+  if (raw === null || raw === undefined) return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
 
 function joCodeById(id: string, isCorp: boolean): string {
   const prefix = isCorp ? 'cjo' : 'hjo';
@@ -1179,6 +1189,137 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   return undefined;
 }
 
+function buildCorpJoCharts(entries: ChainEntry[]): ChartDef[] {
+  if (entries.length < 2) return [];
+
+  const hotelCodes = entries.map((e) => e.hotel_code);
+  const statusKeys = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.status_map ?? {})))).sort();
+  const allCategories: Record<string, number> = {};
+  const allItems: Record<string, number> = {};
+  const allDepts: Record<string, number> = {};
+  const allAssignedDepts: Record<string, number> = {};
+  const allCreatedByDepts: Record<string, number> = {};
+  const allCompletedByDepts: Record<string, number> = {};
+  const weeklyTotals: Record<string, number> = {};
+
+  for (const entry of entries) {
+    for (const [k, v] of Object.entries(entry.summary.category_map ?? {})) allCategories[k] = (allCategories[k] ?? 0) + Number(v);
+    for (const [k, v] of Object.entries(entry.summary.item_map ?? {})) allItems[k] = (allItems[k] ?? 0) + Number(v);
+    for (const [k, v] of Object.entries(entry.summary.dept_map ?? {})) allDepts[k] = (allDepts[k] ?? 0) + Number(v);
+    for (const [k, v] of Object.entries(entry.summary.week_map ?? {})) weeklyTotals[k] = (weeklyTotals[k] ?? 0) + Number(v);
+    const assignedMap = entry.summary.assigned_dept_map ?? {};
+    for (const [k, v] of Object.entries(assignedMap)) allAssignedDepts[k] = (allAssignedDepts[k] ?? 0) + Number(v);
+    const createdByMap = entry.summary.created_by_dept_map ?? {};
+    for (const [k, v] of Object.entries(createdByMap)) allCreatedByDepts[k] = (allCreatedByDepts[k] ?? 0) + Number(v);
+    const completedByMap = entry.summary.completed_by_dept_map ?? {};
+    for (const [k, v] of Object.entries(completedByMap)) allCompletedByDepts[k] = (allCompletedByDepts[k] ?? 0) + Number(v);
+  }
+
+  const topCategories = topN(allCategories, 10).map(([k]) => k);
+  const topItems = topN(allItems, 10).map(([k]) => k);
+  const topDepts = topN(allDepts, 10).map(([k]) => k);
+  const topAssigned = topN(allAssignedDepts, 10).map(([k]) => k);
+  const topCreatedBy = topN(allCreatedByDepts, 10).map(([k]) => k);
+  const topCompletedBy = topN(allCompletedByDepts, 10).map(([k]) => k);
+  const weeks = Object.keys(weeklyTotals).sort();
+
+  const make = (id: string, title: string, note: string, formula: string, options: Record<string, unknown>): ChartDef => ({
+    id,
+    title,
+    note,
+    formula,
+    filterable: false,
+    options,
+  });
+
+  const totalByHotel = entries.map((e) => e.summary.total ?? 0);
+  const completionRate = entries.map((e) => getChainKpiValue(e, 'kpi_02') ?? (e.summary.total > 0 ? r1((e.summary.completed / e.summary.total) * 100) : 0));
+  const slaRate = entries.map((e) => getChainKpiValue(e, 'kpi_03') ?? 0);
+  const timeoutRate = entries.map((e) => getChainKpiValue(e, 'kpi_04') ?? (e.summary.total > 0 ? r1((e.summary.pending / e.summary.total) * 100) : 0));
+  const escalationRate = entries.map((e) => getChainKpiValue(e, 'kpi_05') ?? (e.summary.total > 0 ? r1((e.summary.cancelled / e.summary.total) * 100) : 0));
+  const reassignmentRate = entries.map((e) => getChainKpiValue(e, 'kpi_06') ?? 0);
+  const avgResponse = entries.map((e) => getChainKpiValue(e, 'kpi_07') ?? 0);
+  const p90Response = entries.map((e) => getChainKpiValue(e, 'kpi_08') ?? 0);
+  const avgResolution = entries.map((e) => getChainKpiValue(e, 'kpi_09') ?? 0);
+  const totalQuantity = entries.map((e) => getChainKpiValue(e, 'kpi_10') ?? 0);
+
+  const weeklyCompletion = weeks.map((wk) => {
+    const daySet = entries.flatMap((e) => (e.raw_daily ?? []).filter((d) => dateToWeekKey(d.date) === wk));
+    const total = daySet.reduce((sum, d) => sum + d.total, 0);
+    const completed = daySet.reduce((sum, d) => sum + d.completed, 0);
+    return total > 0 ? r1((completed / total) * 100) : 0;
+  });
+  const weeklyTimeout = weeks.map((wk) => {
+    const daySet = entries.flatMap((e) => (e.raw_daily ?? []).filter((d) => dateToWeekKey(d.date) === wk));
+    const total = daySet.reduce((sum, d) => sum + d.total, 0);
+    const pending = daySet.reduce((sum, d) => sum + d.pending, 0);
+    return total > 0 ? r1((pending / total) * 100) : 0;
+  });
+
+  return [
+    make('cjo_chart_01', 'Jobs by Hotel', 'Cross-hotel JO volume comparison.', 'COUNT(*) BY hotel_code', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Jobs', data: totalByHotel }],
+    }),
+    make('cjo_chart_02', 'Completion Rate by Hotel', 'Compares closing effectiveness across hotels.', 'completed_jobs / total_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'column', name: 'Completion %', data: completionRate }],
+    }),
+    make('cjo_chart_03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
+    }),
+    make('cjo_chart_04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: timeoutRate }],
+    }),
+    make('cjo_chart_05', 'Escalation Rate by Hotel', 'Escalation comparison for service stability review.', 'escalated_jobs / total_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Escalation %' } }, series: [{ type: 'column', name: 'Escalation %', data: escalationRate }],
+    }),
+    make('cjo_chart_06', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Reassignment %' } }, series: [{ type: 'column', name: 'Reassignment %', data: reassignmentRate }],
+    }),
+    make('cjo_chart_07', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
+    }),
+    make('cjo_chart_08', 'P90 Response Minutes by Hotel', 'Tail response time comparison by hotel.', 'P90(response_min) BY hotel_code', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'P90 Response (min)', data: p90Response }],
+    }),
+    make('cjo_chart_09', 'Avg Resolution Minutes by Hotel', 'Average create-to-complete duration by hotel.', 'AVG(resolution_min) BY hotel_code', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Resolution (min)', data: avgResolution }],
+    }),
+    make('cjo_chart_10', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Total Quantity', data: totalQuantity }],
+    }),
+    make('cjo_chart_11', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
+      chart: { type: 'line' }, xAxis: { categories: weeks }, series: entries.map((e) => ({ type: 'line', name: e.hotel_code, data: weeks.map((wk) => e.summary.week_map?.[wk] ?? 0) })),
+    }),
+    make('cjo_chart_12', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
+      chart: { type: 'line' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'line', name: 'Completion %', data: weeklyCompletion }],
+    }),
+    make('cjo_chart_13', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
+      chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: weeklyTimeout }],
+    }),
+    make('cjo_chart_14', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: statusKeys.map((status) => ({ type: 'column', name: status, data: entries.map((e) => e.summary.status_map?.[status] ?? 0) })),
+    }),
+    make('cjo_chart_15', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
+    }),
+    make('cjo_chart_16', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topItems.slice(0, 6).map((item) => ({ type: 'bar', name: item, data: entries.map((e) => e.summary.item_map?.[item] ?? 0) })),
+    }),
+    make('cjo_chart_17', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topDepts.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.dept_map?.[dept] ?? 0) })),
+    }),
+    make('cjo_chart_18', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topAssigned.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.assigned_dept_map?.[dept] ?? 0) })),
+    }),
+    make('cjo_chart_19', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
+    }),
+    make('cjo_chart_20', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
+    }),
+  ];
+}
+
 // ── Section label ─────────────────────────────────────────────────────────────
 
 function SectionHead({ label, dark }: { label: string; dark: boolean }) {
@@ -1367,7 +1508,7 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
   }, [isBuilder, isCorp, isJo, departmentFilter, data.meta, data.meta.chain_code, data.meta.hotel_code, dateFrom, dateTo]);
 
   const activeChainEntries = useMemo<ChainEntry[]>(() => {
-    if (!(isCorp && !isJo && filtered && dateFrom && dateTo)) return chainEntries;
+    if (!(isCorp && filtered && dateFrom && dateTo)) return chainEntries;
     return chainEntries.map((entry) => {
       const daily = entry.raw_daily ?? [];
       const efd = reAggregate(daily, dateFrom, dateTo);
@@ -1808,6 +1949,11 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
       filterable: false,
     }));
   }, [isJo, isCorp, t]);
+
+  const corpJoCharts = useMemo<ChartDef[]>(() => {
+    if (!isCorp || !isJo) return [];
+    return buildCorpJoCharts(activeChainEntries);
+  }, [isCorp, isJo, activeChainEntries]);
 
   const imHotelOverTimeCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
@@ -2462,6 +2608,18 @@ export function DashboardClient({ data, chainEntries = [] }: { data: ImDashboard
                 const { override, fullPeriod } = chartOpts(def);
                 const uiIndex = idx + 1;
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+              })}
+            </div>
+          </section>
+        )}
+
+        {isCorp && isJo && corpJoCharts.length > 0 && (
+          <section>
+            <SectionHead label={'Corp JO Benchmark Charts'} dark={dark} />
+            <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {corpJoCharts.map((def) => {
+                const { override, fullPeriod } = chartOpts(def);
+                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
               })}
             </div>
           </section>

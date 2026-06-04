@@ -236,6 +236,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
       hotel_code: d.meta.hotel_code,
       hotel_name: d.meta.hotel_name,
       country_code: d.meta.country_code ?? '',
+      kpis: d.kpis ?? [],
       summary: d.summary,
       raw_daily: d.raw_daily ?? [],
     })).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
@@ -284,6 +285,49 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
           entry.summary.dept_source_map = mapByHotel[entry.hotel_code] ?? entry.summary.dept_source_map ?? {};
           entry.summary.dept_item_map = itemByHotel[entry.hotel_code] ?? entry.summary.dept_item_map ?? {};
           entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
+        }
+      }
+    } else {
+      type JoLiveRow = {
+        hotel_code: string | null;
+        assigned_to_department: string | null;
+        created_by_department: string | null;
+        completed_by_department: string | null;
+        location: string | null;
+      };
+      const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
+      if (hotelCodes.length > 0) {
+        const assignedByHotel: Record<string, Record<string, number>> = {};
+        const createdByHotel: Record<string, Record<string, number>> = {};
+        const completedByHotel: Record<string, Record<string, number>> = {};
+        const locationByHotel: Record<string, Record<string, number>> = {};
+        const batch = await supabase
+          .from('jo_records')
+          .select('hotel_code, assigned_to_department, created_by_department, completed_by_department, location')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<JoLiveRow[]>;
+        const rows = batch.data ?? [];
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const assigned = r.assigned_to_department === null || String(r.assigned_to_department).trim() === '' ? 'Unknown Assigned Dept' : String(r.assigned_to_department);
+          const createdBy = r.created_by_department === null || String(r.created_by_department).trim() === '' ? 'Unknown Source Dept' : String(r.created_by_department);
+          const completedBy = r.completed_by_department === null || String(r.completed_by_department).trim() === '' ? 'Unknown Completed Dept' : String(r.completed_by_department);
+          const location = r.location === null || String(r.location).trim() === '' ? 'Unknown Location' : String(r.location);
+          if (!assignedByHotel[hotel]) assignedByHotel[hotel] = {};
+          if (!createdByHotel[hotel]) createdByHotel[hotel] = {};
+          if (!completedByHotel[hotel]) completedByHotel[hotel] = {};
+          if (!locationByHotel[hotel]) locationByHotel[hotel] = {};
+          assignedByHotel[hotel][assigned] = (assignedByHotel[hotel][assigned] ?? 0) + 1;
+          createdByHotel[hotel][createdBy] = (createdByHotel[hotel][createdBy] ?? 0) + 1;
+          completedByHotel[hotel][completedBy] = (completedByHotel[hotel][completedBy] ?? 0) + 1;
+          locationByHotel[hotel][location] = (locationByHotel[hotel][location] ?? 0) + 1;
+        }
+
+        for (const entry of chainEntries) {
+          entry.summary.assigned_dept_map = assignedByHotel[entry.hotel_code] ?? entry.summary.assigned_dept_map ?? {};
+          entry.summary.created_by_dept_map = createdByHotel[entry.hotel_code] ?? entry.summary.created_by_dept_map ?? {};
+          entry.summary.completed_by_dept_map = completedByHotel[entry.hotel_code] ?? entry.summary.completed_by_dept_map ?? {};
+          entry.summary.location_map = locationByHotel[entry.hotel_code] ?? entry.summary.location_map ?? {};
         }
       }
     }

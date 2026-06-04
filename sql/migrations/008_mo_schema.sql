@@ -3,13 +3,6 @@
 
 alter type public.module_code add value if not exists 'mo';
 
-alter table if exists public.ai_chart_definitions
-  drop constraint if exists ai_chart_definitions_module_code_check;
-
-alter table if exists public.ai_chart_definitions
-  add constraint ai_chart_definitions_module_code_check
-  check ((module_code = any (array['im'::text, 'jo'::text, 'mo'::text])));
-
 create table if not exists public.mo_dashboard_json (
   id uuid default gen_random_uuid() not null primary key,
   organization_id uuid not null,

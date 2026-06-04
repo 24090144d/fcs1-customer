@@ -74,7 +74,7 @@ CREATE TABLE public.ai_chart_definitions (
     is_published boolean DEFAULT false NOT NULL,
     published_at timestamp with time zone,
     display_order integer,
-    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text, 'mo'::text])))
+    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text])))
 );
 
 

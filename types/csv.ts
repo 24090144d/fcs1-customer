@@ -163,7 +163,12 @@ export interface MoCsvRow {
   'Stop Reason': string;
 }
 
-export type ParsedRow = ImRow | JoRow;
+export interface MoRow extends MoCsvRow {
+  row_key: string;
+  row_number: number;
+}
+
+export type ParsedRow = ImRow | JoRow | MoRow;
 
 // ── Parse result ──────────────────────────────────────────────────────────────
 

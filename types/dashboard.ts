@@ -37,6 +37,10 @@ export interface ChartDef {
   height?:     number;    // override default 280px container height
 }
 
+export type DashboardSchema = 'im-v1' | 'jo-v1' | 'mo-v1';
+export type MaintenanceType = 'MO' | 'PM';
+export type MaintenanceScoped<T> = Partial<Record<MaintenanceType, T>>;
+
 // Compact per-hotel summary used for cross-hotel comparison charts
 export interface HotelSummary {
   total:         number;
@@ -74,6 +78,9 @@ export interface ChainEntry {
   kpis?:        KpiDef[];
   summary:      HotelSummary;
   raw_daily?:   DailyBucket[];
+  kpis_by_type?: MaintenanceScoped<KpiDef[]>;
+  raw_daily_by_type?: MaintenanceScoped<DailyBucket[]>;
+  summary_by_type?: MaintenanceScoped<HotelSummary>;
 }
 
 // Full IM dashboard JSON stored in im_dashboard_json.generated_json
@@ -88,11 +95,15 @@ export interface ImDashboardJson {
     total_records: number;
     date_range:    { min: string | null; max: string | null };
     generated_at:  string;
-    schema:        'im-v1' | 'jo-v1';
+    schema:        DashboardSchema;
   };
   kpis:       KpiDef[];
   eac:        ChartDef[];   // 6 Executive Analysis Charts
   charts:     ChartDef[];   // 24 GM Core Charts
   raw_daily:  DailyBucket[];
   summary:    HotelSummary; // compact summary for cross-hotel comparison
+  kpis_by_type?: MaintenanceScoped<KpiDef[]>;
+  charts_by_type?: MaintenanceScoped<ChartDef[]>;
+  raw_daily_by_type?: MaintenanceScoped<DailyBucket[]>;
+  summary_by_type?: MaintenanceScoped<HotelSummary>;
 }

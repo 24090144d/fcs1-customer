@@ -7,7 +7,7 @@ export const PROGRESS_THROTTLE_MS  = 100;                 // min ms between prog
 
 // ── Module ────────────────────────────────────────────────────────────────────
 
-export type ModuleCode = 'IM' | 'JO';
+export type ModuleCode = 'IM' | 'JO' | 'MO';
 
 // ── Progress ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +123,44 @@ export interface JoRow {
   attachment:            string | null;
   reassigned_job:        string | null;
   escalation_group:      string | null;
+}
+
+/** Maintenance Orders CSV row — mirrors the 34 source MO/PM upload columns */
+export interface MoCsvRow {
+  'Date&Time (Created)': string;
+  'Job Status': string;
+  'Job Order': string;
+  'Guest Name': string;
+  Location: string;
+  Category: string;
+  Defect: string;
+  Remarks: string;
+  'Date&Time (Deadline)': string;
+  'Date&Time (Completed)': string;
+  'Escalation Level': string;
+  'Escalation To': string;
+  Building: string;
+  Floor: string;
+  Asset: string;
+  'Created By': string;
+  'Created By (Dept)': string;
+  'Assigned To': string;
+  'Completed By': string;
+  'Inspected By': string;
+  Attachment: string;
+  'Checklist Name': string;
+  'Checklist Status': string;
+  'Stock Out By': string;
+  'Stock Out Qty': string;
+  'Inventory Item': string;
+  Comment: string;
+  'Remarks in Proof of Completion': string;
+  eSignature: string;
+  'Inspection Remark': string;
+  'Inspection Result': string;
+  'Guest Related': string;
+  'Cancel Reason': string;
+  'Stop Reason': string;
 }
 
 export type ParsedRow = ImRow | JoRow;

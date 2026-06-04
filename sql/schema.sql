@@ -33,7 +33,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 CREATE TYPE public.module_code AS ENUM (
     'im',
-    'jo'
+    'jo',
+    'mo'
 );
 
 
@@ -73,7 +74,7 @@ CREATE TABLE public.ai_chart_definitions (
     is_published boolean DEFAULT false NOT NULL,
     published_at timestamp with time zone,
     display_order integer,
-    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text])))
+    CONSTRAINT ai_chart_definitions_module_code_check CHECK ((module_code = ANY (ARRAY['im'::text, 'jo'::text, 'mo'::text])))
 );
 
 
@@ -330,6 +331,158 @@ ALTER SEQUENCE public.jo_staging_rows_id_seq OWNED BY public.jo_staging_rows.id;
 
 
 --
+-- Name: mo_dashboard_json; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mo_dashboard_json (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    schema_version text NOT NULL,
+    generated_json jsonb NOT NULL,
+    generated_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mo_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mo_records (
+    id bigint NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    uploaded_file_id uuid,
+    source_row_id bigint,
+    chain_code text,
+    hotel_code text,
+    module_code text,
+    country_code text,
+    created_datetime timestamp with time zone,
+    job_status text,
+    job_order text,
+    guest_name text,
+    location text,
+    category text,
+    defect text,
+    remarks text,
+    deadline_datetime timestamp with time zone,
+    completed_datetime timestamp with time zone,
+    escalation_level text,
+    escalation_to text,
+    building text,
+    floor text,
+    asset text,
+    created_by text,
+    created_by_department text,
+    assigned_to text,
+    completed_by text,
+    inspected_by text,
+    attachment text,
+    checklist_name text,
+    checklist_status text,
+    stock_out_by text,
+    stock_out_qty text,
+    inventory_item text,
+    comment text,
+    remarks_proof_of_completion text,
+    e_signature text,
+    inspection_remark text,
+    inspection_result text,
+    guest_related text,
+    cancel_reason text,
+    stop_reason text,
+    type text NOT NULL,
+    is_completed boolean DEFAULT false NOT NULL,
+    is_cancelled boolean DEFAULT false NOT NULL,
+    is_stopped boolean DEFAULT false NOT NULL,
+    is_open boolean DEFAULT false NOT NULL,
+    is_overdue boolean DEFAULT false NOT NULL,
+    is_escalated boolean DEFAULT false NOT NULL,
+    is_guest_related boolean DEFAULT false NOT NULL,
+    has_attachment boolean DEFAULT false NOT NULL,
+    has_checklist boolean DEFAULT false NOT NULL,
+    has_inventory_usage boolean DEFAULT false NOT NULL,
+    has_esignature boolean DEFAULT false NOT NULL,
+    has_inspection boolean DEFAULT false NOT NULL,
+    inspection_passed boolean DEFAULT false NOT NULL,
+    inspection_failed boolean DEFAULT false NOT NULL,
+    resolution_minutes numeric,
+    sla_minutes numeric,
+    deadline_variance_minutes numeric,
+    completed_within_sla boolean DEFAULT false NOT NULL,
+    created_date date,
+    created_hour integer,
+    created_week text,
+    created_month text,
+    created_quarter text,
+    completed_date date,
+    stock_out_qty_num numeric,
+    escalation_level_num numeric,
+    normalized_row jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mo_records_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.mo_records_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: mo_records_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.mo_records_id_seq OWNED BY public.mo_records.id;
+
+
+--
+-- Name: mo_staging_rows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.mo_staging_rows (
+    id bigint NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    uploaded_file_id uuid NOT NULL,
+    row_number integer NOT NULL,
+    raw_row jsonb NOT NULL,
+    parse_error text,
+    is_valid boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: mo_staging_rows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.mo_staging_rows_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: mo_staging_rows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.mo_staging_rows_id_seq OWNED BY public.mo_staging_rows.id;
+
+
+--
 -- Name: organizations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -431,6 +584,20 @@ ALTER TABLE ONLY public.jo_staging_rows ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: mo_records id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_records ALTER COLUMN id SET DEFAULT nextval('public.mo_records_id_seq'::regclass);
+
+
+--
+-- Name: mo_staging_rows id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_staging_rows ALTER COLUMN id SET DEFAULT nextval('public.mo_staging_rows_id_seq'::regclass);
+
+
+--
 -- Name: ai_chart_definitions ai_chart_definitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -500,6 +667,38 @@ ALTER TABLE ONLY public.jo_records
 
 ALTER TABLE ONLY public.jo_staging_rows
     ADD CONSTRAINT jo_staging_rows_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mo_dashboard_json mo_dashboard_json_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_dashboard_json
+    ADD CONSTRAINT mo_dashboard_json_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mo_dashboard_json mo_dashboard_json_upload_job_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_dashboard_json
+    ADD CONSTRAINT mo_dashboard_json_upload_job_id_key UNIQUE (upload_job_id);
+
+
+--
+-- Name: mo_records mo_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_records
+    ADD CONSTRAINT mo_records_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: mo_staging_rows mo_staging_rows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_staging_rows
+    ADD CONSTRAINT mo_staging_rows_pkey PRIMARY KEY (id);
 
 
 --
@@ -747,6 +946,97 @@ CREATE INDEX jo_staging_rows_job_row_idx ON public.jo_staging_rows USING btree (
 
 
 --
+-- Name: mo_dashboard_json_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_dashboard_json_created_idx ON public.mo_dashboard_json USING btree (created_at);
+
+
+--
+-- Name: mo_dashboard_json_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_dashboard_json_job_idx ON public.mo_dashboard_json USING btree (upload_job_id);
+
+
+--
+-- Name: mo_records_asset_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_asset_idx ON public.mo_records USING btree (asset);
+
+
+--
+-- Name: mo_records_building_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_building_idx ON public.mo_records USING btree (building);
+
+
+--
+-- Name: mo_records_category_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_category_idx ON public.mo_records USING btree (category);
+
+
+--
+-- Name: mo_records_created_datetime_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_created_datetime_idx ON public.mo_records USING btree (created_datetime);
+
+
+--
+-- Name: mo_records_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_job_idx ON public.mo_records USING btree (upload_job_id);
+
+
+--
+-- Name: mo_records_job_order_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_job_order_idx ON public.mo_records USING btree (job_order);
+
+
+--
+-- Name: mo_records_scope_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_scope_idx ON public.mo_records USING btree (chain_code, hotel_code, module_code, country_code);
+
+
+--
+-- Name: mo_records_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_status_idx ON public.mo_records USING btree (job_status);
+
+
+--
+-- Name: mo_records_type_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_records_type_idx ON public.mo_records USING btree (type);
+
+
+--
+-- Name: mo_staging_rows_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_staging_rows_job_idx ON public.mo_staging_rows USING btree (upload_job_id);
+
+
+--
+-- Name: mo_staging_rows_job_row_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX mo_staging_rows_job_row_idx ON public.mo_staging_rows USING btree (upload_job_id, row_number);
+
+
+--
 -- Name: organizations_code_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -895,6 +1185,46 @@ ALTER TABLE ONLY public.jo_staging_rows
 
 ALTER TABLE ONLY public.jo_staging_rows
     ADD CONSTRAINT jo_staging_rows_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mo_dashboard_json mo_dashboard_json_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_dashboard_json
+    ADD CONSTRAINT mo_dashboard_json_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mo_records mo_records_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_records
+    ADD CONSTRAINT mo_records_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mo_records mo_records_uploaded_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_records
+    ADD CONSTRAINT mo_records_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id);
+
+
+--
+-- Name: mo_staging_rows mo_staging_rows_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_staging_rows
+    ADD CONSTRAINT mo_staging_rows_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: mo_staging_rows mo_staging_rows_uploaded_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.mo_staging_rows
+    ADD CONSTRAINT mo_staging_rows_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id) ON DELETE CASCADE;
 
 
 --

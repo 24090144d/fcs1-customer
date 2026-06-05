@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { KpiDef } from '@/types/dashboard';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
+import { benchmarkLines } from '@/lib/kpi-benchmarks';
 
 // ── Accent assignment ─────────────────────────────────────────────────────────
 // Orange border: raw volume / count KPIs
@@ -25,7 +26,7 @@ function fmtValue(kpi: KpiDef): string {
   if (kpi.fmt !== 'pct1' && Math.abs(kpi.value) >= 100000) {
     return `${Math.round(kpi.value / 1000)}K`;
   }
-  if (kpi.fmt === 'integer')  return kpi.value.toLocaleString();
+  if (kpi.fmt === 'integer')  return Math.round(kpi.value).toLocaleString();
   if (kpi.fmt === 'pct1')     return kpi.value.toFixed(1);
   if (kpi.fmt === 'decimal2') return kpi.value.toFixed(2);
   return String(kpi.value);
@@ -140,6 +141,22 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
           <p className="font-sans leading-relaxed" style={{ fontSize: '0.7rem', color: tooltipText }}>
             {kpi.note}
           </p>
+          {kpi.benchmark && (
+            <div className="space-y-0.5 pt-1">
+              <p className="font-mono uppercase" style={{ fontSize: '0.58rem', letterSpacing: '0.12em', color: tooltipText }}>
+                Benchmark
+              </p>
+              {benchmarkLines(kpi.benchmark).map((line) => (
+                <p
+                  key={line}
+                  className="font-mono leading-relaxed"
+                  style={{ fontSize: '0.62rem', color: sub }}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
           <p
             className="font-mono leading-relaxed"
             style={{ fontSize: '0.62rem', color: sub }}

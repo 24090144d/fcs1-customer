@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
+import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { deriveMoType } from './mo-helpers.mjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -201,26 +202,26 @@ function buildMoKpis(acc: ImAcc, type: MaintenanceType): KpiDef[] {
   const categoryConcentration = total > 0 ? ((topN(acc.categoryMap, 1)[0]?.[1] ?? 0) / total) * 100 : 0;
 
   if (type === 'PM') {
-    return [
-      { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM' },
-      { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM' },
-      { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM' },
-      { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM' },
-      { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM' },
-    ];
-  }
+  return [
+    { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM', benchmark: moBenchmarkFor('pm_total_orders') },
+    { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_completion_rate') },
+    { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_open_rate') },
+    { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_cancellation_rate') },
+    { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM', benchmark: moBenchmarkFor('pm_severity_index') },
+  ];
+}
 
   return [
-    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO' },
-    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO' },
-    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO' },
-    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO' },
-    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO' },
-    { id: 'mo_guest_related', label: 'Guest Related Orders', value: acc.vipTotal, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO' },
-    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(categoryConcentration), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
-    { id: 'mo_unique_categories', label: 'Active Categories', value: Object.keys(acc.categoryMap).length, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
-    { id: 'mo_unique_assets', label: 'Touched Assets', value: Object.keys(acc.itemMap).length, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect/asset combinations touched.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO' },
-    { id: 'mo_daily_average', label: 'Daily Average Orders', value: r2(total / Math.max(Object.keys(acc.dailyMap).length, 1)), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO order volume.', formula: 'COUNT(*) / active_days WHERE type = MO' },
+    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO', benchmark: moBenchmarkFor('mo_total_orders') },
+    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_completion_rate') },
+    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_open_rate') },
+    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_cancelled_rate') },
+    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO', benchmark: moBenchmarkFor('mo_severity_index') },
+    { id: 'mo_guest_related', label: 'Guest Related Orders', value: acc.vipTotal, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO', benchmark: moBenchmarkFor('mo_guest_related') },
+    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(categoryConcentration), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_peak_category') },
+    { id: 'mo_unique_categories', label: 'Active Categories', value: Object.keys(acc.categoryMap).length, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO', benchmark: moBenchmarkFor('mo_unique_categories') },
+    { id: 'mo_unique_assets', label: 'Touched Assets', value: Object.keys(acc.itemMap).length, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect/asset combinations touched.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO', benchmark: moBenchmarkFor('mo_unique_assets') },
+    { id: 'mo_daily_average', label: 'Daily Average Orders', value: r2(total / Math.max(Object.keys(acc.dailyMap).length, 1)), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO order volume.', formula: 'COUNT(*) / active_days WHERE type = MO', benchmark: moBenchmarkFor('mo_daily_average') },
   ];
 }
 
@@ -1325,16 +1326,16 @@ function buildJoKpis(acc: JoKpiAcc): KpiDef[] {
   const avgResolution = acc.resolutionMins.length > 0 ? acc.resolutionMins.reduce((a, b) => a + b, 0) / acc.resolutionMins.length : null;
 
   return [
-    { id: 'kpi_01', label: 'Total Job Orders', value: total, unit: 'jobs', fmt: 'integer', available: true, note: 'Total volume of job orders in scope.', formula: 'COUNT(JobOrder)' },
-    { id: 'kpi_02', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Percentage of jobs completed successfully.', formula: 'SUM(completed_flag)/COUNT(*)*100' },
-    { id: 'kpi_03', label: 'SLA Compliance', value: r1(slaCompliance), unit: '%', fmt: 'pct1', available: acc.completed > 0, note: 'Completed jobs delivered within SLA.', formula: '(1-SUM(sla_breach_flag)/SUM(completed_flag))*100' },
-    { id: 'kpi_04', label: 'Timeout Rate', value: r1(timeoutRate), unit: '%', fmt: 'pct1', available: true, note: 'Percentage of jobs ending in timeout.', formula: 'SUM(timeout_flag)/COUNT(*)*100' },
-    { id: 'kpi_05', label: 'Escalation Rate', value: r1(escalationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of jobs escalated for intervention.', formula: 'SUM(escalated_flag)/COUNT(*)*100' },
-    { id: 'kpi_06', label: 'Reassignment Rate', value: r1(reassignmentRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of jobs reassigned across teams.', formula: 'SUM(reassigned_flag)/COUNT(*)*100' },
-    { id: 'kpi_07', label: 'Avg Response (min)', value: avgResponse === null ? null : r2(avgResponse), unit: 'min', fmt: 'decimal2', available: avgResponse !== null, note: 'Average minutes from create to acknowledge.', formula: 'AVG(response_min)' },
-    { id: 'kpi_08', label: 'P90 Response (min)', value: p90Response === null ? null : r2(p90Response), unit: 'min', fmt: 'decimal2', available: p90Response !== null, note: '90th percentile of response time.', formula: 'P90(response_min)' },
-    { id: 'kpi_09', label: 'Avg Resolution (min)', value: avgResolution === null ? null : r2(avgResolution), unit: 'min', fmt: 'decimal2', available: avgResolution !== null, note: 'Average minutes from create to completion.', formula: 'AVG(resolution_min)' },
-    { id: 'kpi_10', label: 'Total Quantity', value: r2(acc.quantityTotal), unit: 'qty', fmt: 'decimal2', available: true, note: 'Total requested quantity across all jobs.', formula: 'SUM(quantity)' },
+    { id: 'kpi_01', label: 'Total Job Orders', value: total, unit: 'jobs', fmt: 'integer', available: true, note: 'Total volume of job orders in scope.', formula: 'COUNT(JobOrder)', benchmark: joBenchmarkFor('kpi_01') },
+    { id: 'kpi_02', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Percentage of jobs completed successfully.', formula: 'SUM(completed_flag)/COUNT(*)*100', benchmark: joBenchmarkFor('kpi_02') },
+    { id: 'kpi_03', label: 'SLA Compliance', value: r1(slaCompliance), unit: '%', fmt: 'pct1', available: acc.completed > 0, note: 'Completed jobs delivered within SLA.', formula: '(1-SUM(sla_breach_flag)/SUM(completed_flag))*100', benchmark: joBenchmarkFor('kpi_03') },
+    { id: 'kpi_04', label: 'Timeout Rate', value: r1(timeoutRate), unit: '%', fmt: 'pct1', available: true, note: 'Percentage of jobs ending in timeout.', formula: 'SUM(timeout_flag)/COUNT(*)*100', benchmark: joBenchmarkFor('kpi_04') },
+    { id: 'kpi_05', label: 'Escalation Rate', value: r1(escalationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of jobs escalated for intervention.', formula: 'SUM(escalated_flag)/COUNT(*)*100', benchmark: joBenchmarkFor('kpi_05') },
+    { id: 'kpi_06', label: 'Reassignment Rate', value: r1(reassignmentRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of jobs reassigned across teams.', formula: 'SUM(reassigned_flag)/COUNT(*)*100', benchmark: joBenchmarkFor('kpi_06') },
+    { id: 'kpi_07', label: 'Avg Response (min)', value: avgResponse === null ? null : r2(avgResponse), unit: 'min', fmt: 'decimal2', available: avgResponse !== null, note: 'Average minutes from create to acknowledge.', formula: 'AVG(response_min)', benchmark: joBenchmarkFor('kpi_07') },
+    { id: 'kpi_08', label: 'P90 Response (min)', value: p90Response === null ? null : r2(p90Response), unit: 'min', fmt: 'decimal2', available: p90Response !== null, note: '90th percentile of response time.', formula: 'P90(response_min)', benchmark: joBenchmarkFor('kpi_08') },
+    { id: 'kpi_09', label: 'Avg Resolution (min)', value: avgResolution === null ? null : r2(avgResolution), unit: 'min', fmt: 'decimal2', available: avgResolution !== null, note: 'Average minutes from create to completion.', formula: 'AVG(resolution_min)', benchmark: joBenchmarkFor('kpi_09') },
+    { id: 'kpi_10', label: 'Total Quantity', value: Math.round(acc.quantityTotal), unit: 'qty', fmt: 'integer', available: true, note: 'Total requested quantity across all jobs.', formula: 'SUM(quantity)', benchmark: joBenchmarkFor('kpi_10') },
   ];
 }
 

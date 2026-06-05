@@ -9,6 +9,7 @@ import type { DashboardJson, ImDashboardJson, MoDashboardJson, MaintenanceType, 
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
+import { benchmarkEmoji, joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -54,6 +55,17 @@ function r1(n: number) { return Math.round(n * 10) / 10; }
 function r2(n: number) { return Math.round(n * 100) / 100; }
 function topN(map: Record<string, number>, n: number): [string, number][] {
   return Object.entries(map).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, n);
+}
+
+function decorateBenchmarkLabels(kpis: KpiDef[]): KpiDef[] {
+  return kpis.map((kpi) => (
+    kpi.benchmark
+      ? {
+          ...kpi,
+          label: `${kpi.label} ${benchmarkEmoji(kpi.benchmark, kpi.value, kpi.available)}`.trim(),
+        }
+      : kpi
+  ));
 }
 
 function getChainKpiValue(entry: ChainEntry, id: string): number | null {
@@ -1579,18 +1591,18 @@ function buildCorpMoKpis(summary: HotelSummary): KpiDef[] {
   const activeWeeks = Math.max(1, Object.keys(summary.week_map ?? {}).length);
   const dailyAverage = total / activeWeeks / 7;
 
-  return [
-    { id: 'cmo_kpi_01', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total MO work orders across all hotels in the chain.', formula: 'COUNT(*) WHERE type = MO GROUP BY chain' },
-    { id: 'cmo_kpi_02', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders completed across the chain.', formula: 'completed / total * 100 WHERE type = MO' },
-    { id: 'cmo_kpi_03', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders still open across the chain.', formula: 'open / total * 100 WHERE type = MO' },
-    { id: 'cmo_kpi_04', label: 'Cancelled Order Rate', value: r1(cancelledRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders cancelled across the chain.', formula: 'cancelled / total * 100 WHERE type = MO' },
-    { id: 'cmo_kpi_05', label: 'Guest Related Share', value: r1(guestShare), unit: '%', fmt: 'pct1', available: true, note: 'Share of guest-related MO orders across the chain.', formula: 'guest_related_orders / total * 100 WHERE type = MO' },
-    { id: 'cmo_kpi_06', label: 'Severity Index', value: r2(severityIndex), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy across chain work orders.', formula: 'AVG(severity_weight) WHERE type = MO' },
-    { id: 'cmo_kpi_07', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share contributed by the largest maintenance category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
-    { id: 'cmo_kpi_08', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct maintenance categories active across the chain.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
-    { id: 'cmo_kpi_09', label: 'Touched Assets', value: touchedAssets, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect or asset combinations touched across the chain.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO' },
-    { id: 'cmo_kpi_10', label: 'Daily Average Orders', value: r2(dailyAverage), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO volume across the selected period.', formula: 'COUNT(*) / active_days WHERE type = MO' },
-  ];
+  return decorateBenchmarkLabels([
+    { id: 'cmo_kpi_01', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total MO work orders across all hotels in the chain.', formula: 'COUNT(*) WHERE type = MO GROUP BY chain', benchmark: moBenchmarkFor('cmo_kpi_01') },
+    { id: 'cmo_kpi_02', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders completed across the chain.', formula: 'completed / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_02') },
+    { id: 'cmo_kpi_03', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders still open across the chain.', formula: 'open / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_03') },
+    { id: 'cmo_kpi_04', label: 'Cancelled Order Rate', value: r1(cancelledRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders cancelled across the chain.', formula: 'cancelled / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_04') },
+    { id: 'cmo_kpi_05', label: 'Guest Related Share', value: r1(guestShare), unit: '%', fmt: 'pct1', available: true, note: 'Share of guest-related MO orders across the chain.', formula: 'guest_related_orders / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_05') },
+    { id: 'cmo_kpi_06', label: 'Severity Index', value: r2(severityIndex), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy across chain work orders.', formula: 'AVG(severity_weight) WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_06') },
+    { id: 'cmo_kpi_07', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share contributed by the largest maintenance category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_07') },
+    { id: 'cmo_kpi_08', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct maintenance categories active across the chain.', formula: 'COUNT(DISTINCT category) WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_08') },
+    { id: 'cmo_kpi_09', label: 'Touched Assets', value: touchedAssets, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect or asset combinations touched across the chain.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_09') },
+    { id: 'cmo_kpi_10', label: 'Daily Average Orders', value: r2(dailyAverage), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO volume across the selected period.', formula: 'COUNT(*) / active_days WHERE type = MO', benchmark: moBenchmarkFor('cmo_kpi_10') },
+  ]);
 }
 
 function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, unknown> | null): ChartDef[] {
@@ -1894,27 +1906,27 @@ function buildMaintenanceKpis(summary: HotelSummary, type: MaintenanceType): Kpi
   const activeCategories = Object.keys(summary.category_map ?? {}).length;
 
   if (type === 'PM') {
-    return [
-      { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM' },
-      { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM' },
-      { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM' },
-      { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM' },
-      { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM' },
-    ];
+    return decorateBenchmarkLabels([
+      { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM', benchmark: moBenchmarkFor('pm_total_orders') },
+      { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_completion_rate') },
+      { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_open_rate') },
+      { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM', benchmark: moBenchmarkFor('pm_cancellation_rate') },
+      { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM', benchmark: moBenchmarkFor('pm_severity_index') },
+    ]);
   }
 
-  return [
-    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO' },
-    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO' },
-    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO' },
-    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO' },
-    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO' },
-    { id: 'mo_guest_related', label: 'Guest Related Orders', value: summary.vip_total ?? 0, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO' },
-    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
-    { id: 'mo_unique_categories', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
-    { id: 'mo_pending_cases', label: 'Open Orders', value: open, unit: 'orders', fmt: 'integer', available: true, note: 'Open work orders awaiting completion.', formula: 'open = total - completed - cancelled WHERE type = MO' },
-    { id: 'mo_category_span', label: 'Category Coverage', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct categories active in the selected period.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
-  ];
+  return decorateBenchmarkLabels([
+    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO', benchmark: moBenchmarkFor('mo_total_orders') },
+    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_completion_rate') },
+    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_open_rate') },
+    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_cancelled_rate') },
+    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO', benchmark: moBenchmarkFor('mo_severity_index') },
+    { id: 'mo_guest_related', label: 'Guest Related Orders', value: summary.vip_total ?? 0, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO', benchmark: moBenchmarkFor('mo_guest_related') },
+    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO', benchmark: moBenchmarkFor('mo_peak_category') },
+    { id: 'mo_unique_categories', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO', benchmark: moBenchmarkFor('mo_unique_categories') },
+    { id: 'mo_pending_cases', label: 'Open Orders', value: open, unit: 'orders', fmt: 'integer', available: true, note: 'Open work orders awaiting completion.', formula: 'open = total - completed - cancelled WHERE type = MO', benchmark: moBenchmarkFor('mo_pending_cases') },
+    { id: 'mo_category_span', label: 'Category Coverage', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct categories active in the selected period.', formula: 'COUNT(DISTINCT category) WHERE type = MO', benchmark: moBenchmarkFor('mo_category_span') },
+  ]);
 }
 
 function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboardJson; chainEntries?: ChainEntry[] }) {
@@ -1961,7 +1973,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     [fd, baseScopedSummary],
   );
   const scopedKpis = useMemo(
-    () => (fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis)),
+    () => decorateBenchmarkLabels(fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis)),
     [fd, scopedSummary, maintenanceType, data],
   );
   const bg = themeTokens.dashboard.bg;
@@ -2760,6 +2772,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         label: `${t(`corp_kpi_labels.${k.id}`, k.label)} ${corpImKpiEmoji(k.id, k.value, k.available)}`.trim(),
         note: t(`corp_kpi_notes.${k.id}`, k.note),
         formula: t(`corp_kpi_formulas.${k.id}`, k.formula),
+        benchmark: k.benchmark,
       }));
     }
     if (hotelImKpis) {
@@ -2768,12 +2781,18 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         label: `${t(`hotel_im_kpi_labels.${k.id}`, k.label)} ${hotelImKpiEmoji(k.id, k.value, k.available)}`.trim(),
         note: t(`hotel_im_kpi_notes.${k.id}`, k.note),
         formula: t(`hotel_im_kpi_formulas.${k.id}`, k.formula),
+        benchmark: k.benchmark,
       }));
     }
     return kpis.map((k) => ({
       ...k,
-      label: t(`${isJo ? 'kpi_labels_jo' : 'kpi_labels_im'}.${k.id}`, k.label),
+      label: isJo
+        ? `${t(`kpi_labels_jo.${k.id}`, k.label)} ${benchmarkEmoji(k.benchmark, k.value, k.available)}`.trim()
+        : t(`kpi_labels_im.${k.id}`, k.label),
       note: t(`${isJo ? 'kpi_notes_jo' : 'kpi_notes_im'}.${k.id}`, k.note),
+      benchmark: isJo
+        ? (k.benchmark ?? joBenchmarkFor(k.id))
+        : k.benchmark,
     }));
   }, [isBuilder, corpImKpis, hotelImKpis, kpis, isJo, t, deptFd, fd, data.summary]);
 

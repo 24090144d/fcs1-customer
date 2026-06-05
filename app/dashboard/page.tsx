@@ -58,7 +58,36 @@ async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<
         });
       }
     }
-    return result.data?.generated_json ?? null;
+    const data = result.data?.generated_json ?? null;
+    if (!data) return null;
+
+    if (isJo && hotelCode) {
+      const currentKpis = Array.isArray(data.kpis) ? [...data.kpis] : [];
+      const totalQtyIdx = currentKpis.findIndex((k) => k.id === 'kpi_10');
+      if (totalQtyIdx >= 0) {
+        type QtyRow = { quantity: number | string | null };
+        const qtyResult = await supabase
+          .from('jo_records')
+          .select('quantity')
+          .eq('hotel_code', hotelCode.toUpperCase()) as unknown as SbResult<QtyRow[]>;
+        const totalQuantity = (qtyResult.data ?? []).reduce((sum, row) => {
+          const num = Number(row.quantity ?? 0);
+          return sum + (Number.isFinite(num) ? num : 0);
+        }, 0);
+        currentKpis[totalQtyIdx] = {
+          ...currentKpis[totalQtyIdx],
+          value: Math.round(totalQuantity),
+          unit: 'qty',
+          fmt: 'integer',
+        };
+        return {
+          ...data,
+          kpis: currentKpis,
+        } as DashboardJson;
+      }
+    }
+
+    return data;
   } catch (error) {
     console.error('[dashboard/fetchDashboard] unexpected failure', { hotelCode, moduleCode, error });
     return null;
@@ -233,6 +262,14 @@ function buildCorpKpis(template: ImDashboardJson, summary: HotelSummary): ImDash
   });
 }
 
+function sumChainKpiValue(entries: ChainEntry[], id: string): number {
+  return entries.reduce((sum, entry) => {
+    const raw = entry.kpis?.find((k) => k.id === id)?.value;
+    const num = Number(raw ?? 0);
+    return sum + (Number.isFinite(num) ? num : 0);
+  }, 0);
+}
+
 async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Promise<{ data: DashboardJson | null; chainEntries: ChainEntry[] }> {
   noStore();
   if (!chainCode) return { data: null, chainEntries: [] };
@@ -330,6 +367,35 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
           entry.summary.dept_source_map = mapByHotel[entry.hotel_code] ?? entry.summary.dept_source_map ?? {};
           entry.summary.dept_item_map = itemByHotel[entry.hotel_code] ?? entry.summary.dept_item_map ?? {};
           entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
+        }
+      }
+    } else if (String(moduleCode ?? '').toLowerCase() === 'jo') {
+      type QtyRow = {
+        hotel_code: string | null;
+        quantity: number | string | null;
+      };
+      const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
+      if (hotelCodes.length > 0) {
+        const qtyByHotel: Record<string, number> = {};
+        const batch = await supabase
+          .from('jo_records')
+          .select('hotel_code, quantity')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<QtyRow[]>;
+        const rows = batch.data ?? [];
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const qty = Number(r.quantity ?? 0);
+          qtyByHotel[hotel] = (qtyByHotel[hotel] ?? 0) + (Number.isFinite(qty) ? qty : 0);
+        }
+        for (const entry of chainEntries) {
+          const totalQty = Math.round(qtyByHotel[entry.hotel_code] ?? 0);
+          const kpis = Array.isArray(entry.kpis) ? [...entry.kpis] : [];
+          const idx = kpis.findIndex((k) => k.id === 'kpi_10');
+          if (idx >= 0) {
+            kpis[idx] = { ...kpis[idx], value: totalQty, unit: 'qty', fmt: 'integer' };
+          }
+          entry.kpis = kpis;
         }
       }
     } else if (!isMo) {
@@ -503,7 +569,13 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
         date_range: { min: dateMin, max: dateMax },
         generated_at: new Date().toISOString(),
       },
-      kpis: buildCorpKpis(imTemplate, summary),
+      kpis: moduleCode?.toLowerCase() === 'jo'
+        ? buildCorpKpis(imTemplate, summary).map((k) => (
+            k.id === 'kpi_10'
+              ? { ...k, value: Math.round(sumChainKpiValue(chainEntries, 'kpi_10')), unit: 'qty', fmt: 'integer' }
+              : k
+          ))
+        : buildCorpKpis(imTemplate, summary),
       raw_daily: rawDaily,
       summary: enrichedSummary,
     };

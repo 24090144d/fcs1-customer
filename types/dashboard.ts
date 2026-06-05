@@ -9,6 +9,17 @@ export interface KpiDef {
   available: boolean;
   note:      string;
   formula:   string;
+  benchmark?: KpiBenchmark;
+}
+
+export interface KpiBenchmark {
+  direction: 'higher' | 'lower' | 'neutral';
+  good?: number;
+  watch?: number;
+  goodLabel: string;
+  watchLabel: string;
+  badLabel: string;
+  neutralLabel?: string;
 }
 
 // One calendar day of aggregated data — used for client-side date-range filtering

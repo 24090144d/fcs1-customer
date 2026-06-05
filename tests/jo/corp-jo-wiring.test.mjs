@@ -9,7 +9,9 @@ const source = fs.readFileSync(path.join(repoRoot, 'app', 'dashboard', 'Dashboar
 test('corp jo chart builder includes world map at chart 06', () => {
   assert.match(source, /function buildCorpJoCharts\(entries: ChainEntry\[\], worldMapData\?: Record<string, unknown> \| null\): ChartDef\[\]/);
   assert.match(source, /make\('cjo_chart_06', 'Worldmap Job Order by Hotel'/);
-  assert.match(source, /return buildCorpJoCharts\(activeChainEntries, worldMapData\);/);
+  assert.match(source, /return buildCorpJoCharts\(activeChainEntries, worldMapData\)\.map\(\(def\) => \(\{/);
+  assert.match(source, /title: t\(`chart_titles_jo\.\$\{def\.id\}`, def\.title\)/);
+  assert.match(source, /note: t\(`chart_notes_jo\.\$\{def\.id\}`, def\.note\)/);
 });
 
 test('corp dashboards expose hotel filter with ALL default', () => {

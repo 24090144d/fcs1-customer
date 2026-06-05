@@ -1884,6 +1884,10 @@ function maintenanceModeLabel(type: MaintenanceType): string {
   return type === 'PM' ? 'Preventive Maintenance' : 'Maintenance Order';
 }
 
+function moLocalizationScope(isCorp: boolean): 'cmo' | 'hmo' {
+  return isCorp ? 'cmo' : 'hmo';
+}
+
 function orderChartDefs(defs: ChartDef[], orderedIds: string[]): ChartDef[] {
   const rank = new Map(orderedIds.map((id, index) => [id, index]));
   return [...defs].sort((a, b) => {
@@ -1956,9 +1960,20 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     () => data.raw_daily_by_type?.[maintenanceType] ?? data.raw_daily,
     [data, maintenanceType],
   );
+  const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
+  const isMo = maintenanceType === 'MO';
   const scopedCharts = useMemo(
-    () => orderChartDefs(data.charts_by_type?.[maintenanceType] ?? data.charts, HOTEL_MO_CHART_DISPLAY_ORDER),
-    [data, maintenanceType],
+    () => orderChartDefs(data.charts_by_type?.[maintenanceType] ?? data.charts, HOTEL_MO_CHART_DISPLAY_ORDER).map((def) => {
+      if (!isMo) return def;
+      const scope = moLocalizationScope(isCorp);
+      return {
+        ...def,
+        title: t(`${scope}_chart_titles.${def.id}`, def.title),
+        note: t(`${scope}_chart_notes.${def.id}`, def.note),
+        formula: t(`${scope}_chart_formulas.${def.id}`, def.formula),
+      };
+    }),
+    [data, maintenanceType, isCorp, isMo, t],
   );
   const baseScopedSummary = useMemo(
     () => data.summary_by_type?.[maintenanceType] ?? data.summary,
@@ -1973,8 +1988,19 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     [fd, baseScopedSummary],
   );
   const scopedKpis = useMemo(
-    () => decorateBenchmarkLabels(fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis)),
-    [fd, scopedSummary, maintenanceType, data],
+    () => {
+      const base = decorateBenchmarkLabels(fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis));
+      if (!isMo) return base;
+      const scope = moLocalizationScope(isCorp);
+      return base.map((k) => ({
+        ...k,
+        label: `${t(`${scope}_kpi_labels.${k.id}`, k.label)} ${benchmarkEmoji(k.benchmark, k.value, k.available)}`.trim(),
+        note: t(`${scope}_kpi_notes.${k.id}`, k.note),
+        formula: t(`${scope}_kpi_formulas.${k.id}`, k.formula),
+        benchmark: k.benchmark,
+      }));
+    },
+    [fd, scopedSummary, maintenanceType, data, isMo, isCorp, t],
   );
   const bg = themeTokens.dashboard.bg;
   const toolbarBg = themeTokens.dashboard.toolbarBg;
@@ -1988,9 +2014,6 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const accentAlt = themeTokens.accentAlt;
   const footerText = themeTokens.dashboard.footerText;
   const footerBd = themeTokens.dashboard.footerBorder;
-  const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
-  const isMo = maintenanceType === 'MO';
-  const corpMaintenanceLabel = maintenanceModeLabel(maintenanceType);
   const contextTitle = isCorp
     ? `${(data.meta.chain_code ?? 'CORP').toUpperCase()} · ${maintenanceType}`
     : data.meta.hotel_name
@@ -2113,11 +2136,15 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     if (!isCorp) return [];
     return orderChartDefs(buildCorpMoCharts(activeCorpEntries, worldMapData), CORP_MO_CHART_DISPLAY_ORDER).map((def) => ({
       ...def,
-      title: def.title.replace(/\bWork Orders\b/g, corpMaintenanceLabel).replace(/\bMaintenance\b/g, corpMaintenanceLabel),
-      note: def.note.replace(/\bmaintenance\b/g, corpMaintenanceLabel.toLowerCase()),
-      formula: def.formula.replace(/type = MO/g, `type = ${maintenanceType}`),
+      title: t(`cmo_chart_titles.${def.id}`, def.title),
+      note: t(`cmo_chart_notes.${def.id}`, def.note),
+      formula: t(`cmo_chart_formulas.${def.id}`, def.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
     }));
-  }, [isCorp, activeCorpEntries, worldMapData, corpMaintenanceLabel, maintenanceType]);
+  }, [isCorp, activeCorpEntries, worldMapData, maintenanceType, t]);
+
+  const corpBenchmarkChartsLabel = maintenanceType === 'MO'
+    ? t('dashboard_ui.corp_mo_benchmark_charts', 'Corp MO Benchmark Charts')
+    : t('dashboard_ui.corp_pm_benchmark_charts', 'Corp PM Benchmark Charts');
 
   const corpKpis = useMemo(() => {
     if (!isCorp) return null;
@@ -2128,16 +2155,16 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
             .replace('Work Orders', 'PM Orders')
             .replace('Open Work Order Rate', 'Open PM Order Rate')
             .replace('Guest Related Orders', 'Guest Related PM Orders')
-        : kpi.label,
+        : t(`cmo_kpi_labels.${kpi.id}`, kpi.label),
       note: maintenanceType === 'PM'
         ? kpi.note
             .replace(/\bmaintenance orders\b/gi, 'preventive maintenance orders')
             .replace(/\bmaintenance\b/gi, 'preventive maintenance')
             .replace(/\bwork orders\b/gi, 'PM orders')
-        : kpi.note,
-      formula: kpi.formula.replace(/type = MO/g, `type = ${maintenanceType}`),
+        : t(`cmo_kpi_notes.${kpi.id}`, kpi.note),
+      formula: t(`cmo_kpi_formulas.${kpi.id}`, kpi.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
     }));
-  }, [isCorp, corpActiveSummary, maintenanceType]);
+  }, [isCorp, corpActiveSummary, maintenanceType, t]);
 
   let chartSequence = 0;
   const nextChartIndex = () => {
@@ -2156,8 +2183,8 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
             {((isCorp ? corpActiveSummary.total : scopedSummary.total) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
             {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
-            {!isCorp && <>{' · '}{maintenanceModeLabel(maintenanceType)}</>}
-            {isCorp && <> {' · '}Corp {maintenanceModeLabel(maintenanceType).toLowerCase()} view</>}
+            {!isCorp && isMo && <>{' · '}{t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')}</>}
+            {isCorp && isMo && <> {' · '}Corp {t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')} view</>}
           </p>
         </div>
 
@@ -2271,7 +2298,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
 
         <section>
           {!isCorp && <SectionHead label={`${maintenanceType} Charts`} dark={dark} />}
-          {isCorp && <SectionHead label={`Corp ${maintenanceType} Benchmark Charts`} dark={dark} />}
+          {isCorp && <SectionHead label={corpBenchmarkChartsLabel} dark={dark} />}
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             {(isCorp ? corpMoCharts : scopedCharts).map((def) => (
               (() => {
@@ -2309,7 +2336,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           style={{ borderTop: `1px solid ${footerBd}`, fontSize: '0.6rem', letterSpacing: '0.08em', color: footerText }}
         >
           <span>
-            fcs1-dash · {maintenanceType} · {maintenanceModeLabel(maintenanceType)}
+            fcs1-dash · {maintenanceType} · {isMo ? t('dashboard_ui.dashboard_label_mo', 'MO Dashboard') : maintenanceModeLabel(maintenanceType)}
             {' · '}{scopedSummary.total.toLocaleString()} work orders
           </span>
           <span>Highcharts · PostgreSQL · Next.js</span>
@@ -2805,12 +2832,20 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         note: t(`chart_notes_jo.${code}`, c.note),
       };
     }
+    if (String(data.meta.schema) === 'mo-v1') {
+      const scope = moLocalizationScope(isCorp);
+      return {
+        ...c,
+        title: t(`${scope}_chart_titles.${c.id}`, c.title),
+        note: t(`${scope}_chart_notes.${c.id}`, c.note),
+      };
+    }
     return {
       ...c,
       title: t(`chart_titles_im.${c.id}`, c.title),
       note: t(`chart_notes_im.${c.id}`, c.note),
     };
-  }), [data.eac, isJo, isCorp, t]);
+  }), [data.eac, isJo, data.meta.schema, isCorp, t]);
 
   const localizedCharts = useMemo(() => data.charts.map((c) => {
     if (isJo) {
@@ -2821,12 +2856,20 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         note: t(`chart_notes_jo.${code}`, c.note),
       };
     }
+    if (String(data.meta.schema) === 'mo-v1') {
+      const scope = moLocalizationScope(isCorp);
+      return {
+        ...c,
+        title: t(`${scope}_chart_titles.${c.id}`, c.title),
+        note: t(`${scope}_chart_notes.${c.id}`, c.note),
+      };
+    }
     return {
       ...c,
       title: t(`chart_titles_im.${c.id}`, c.title),
       note: t(`chart_notes_im.${c.id}`, c.note),
     };
-  }), [data.charts, isJo, isCorp, t]);
+  }), [data.charts, isJo, data.meta.schema, isCorp, t]);
 
   const imHotelExecutiveCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
@@ -2969,8 +3012,12 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
   const corpJoCharts = useMemo<ChartDef[]>(() => {
     if (!isCorp || !isJo) return [];
-    return buildCorpJoCharts(activeChainEntries, worldMapData);
-  }, [isCorp, isJo, activeChainEntries, worldMapData]);
+    return buildCorpJoCharts(activeChainEntries, worldMapData).map((def) => ({
+      ...def,
+      title: t(`chart_titles_jo.${def.id}`, def.title),
+      note: t(`chart_notes_jo.${def.id}`, def.note),
+    }));
+  }, [isCorp, isJo, activeChainEntries, worldMapData, t]);
 
   const imHotelOverTimeCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
@@ -3649,7 +3696,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
         {isCorp && isJo && corpJoCharts.length > 0 && (
           <section>
-            <SectionHead label={'Corp JO Benchmark Charts'} dark={dark} />
+            <SectionHead label={t('dashboard_ui.corp_jo_benchmark_charts', 'Corp JO Benchmark Charts')} dark={dark} />
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
               {corpJoCharts.map((def) => {
                 const { override, fullPeriod } = chartOpts(def);

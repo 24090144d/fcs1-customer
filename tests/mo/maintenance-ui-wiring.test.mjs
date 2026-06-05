@@ -6,6 +6,9 @@ import path from 'node:path';
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const source = fs.readFileSync(path.join(repoRoot, 'app', 'dashboard', 'DashboardClient.tsx'), 'utf8');
 const finalizeSource = fs.readFileSync(path.join(repoRoot, 'app', 'api', 'uploads', 'finalize', 'route.ts'), 'utf8');
+const zhCnLang = JSON.parse(fs.readFileSync(path.join(repoRoot, 'i18n', 'zh-CN_lang.json'), 'utf8'));
+const zhTwLang = JSON.parse(fs.readFileSync(path.join(repoRoot, 'i18n', 'zh-TW_lang.json'), 'utf8'));
+const jaLang = JSON.parse(fs.readFileSync(path.join(repoRoot, 'i18n', 'ja_lang.json'), 'utf8'));
 
 test('dashboard client tracks mo module state', () => {
   assert.match(source, /const isMo = data\.meta\.schema === 'mo-v1'/);
@@ -28,7 +31,10 @@ test('dashboard client builds corp mo charts and renders corp mo section', () =>
   assert.match(source, /function buildCorpMoCharts\(entries: ChainEntry\[\], worldMapData\?: Record<string, unknown> \| null\): ChartDef\[\]/);
   assert.match(source, /const corpMoCharts = useMemo<ChartDef\[\]>\(\(\) => \{/);
   assert.match(source, /if \(entries\.length === 0\) return \[\];/);
-  assert.match(source, /<SectionHead label=\{`Corp \$\{maintenanceType\} Benchmark Charts`\} dark=\{dark\} \/>/);
+  assert.match(source, /const corpBenchmarkChartsLabel = maintenanceType === 'MO'/);
+  assert.match(source, /dashboard_ui\.corp_mo_benchmark_charts/);
+  assert.match(source, /dashboard_ui\.corp_pm_benchmark_charts/);
+  assert.match(source, /<SectionHead label=\{corpBenchmarkChartsLabel\} dark=\{dark\} \/>/);
   assert.match(source, /<CorpMoPerformanceTable/);
 });
 
@@ -55,7 +61,8 @@ test('corp mo hotel performance table uses executive index columns and risk rank
 test('mo chart display order swaps hotel 02 with 07 and corp 03 with 12', () => {
   assert.match(source, /const HOTEL_MO_CHART_DISPLAY_ORDER = \['chart_01', 'chart_07', 'chart_03', 'chart_04', 'chart_05', 'chart_06', 'chart_02', 'chart_08', 'chart_09', 'chart_10'\];/);
   assert.match(source, /const CORP_MO_CHART_DISPLAY_ORDER = \['cmo_chart_01', 'cmo_chart_02', 'cmo_chart_12', 'cmo_chart_04', 'cmo_chart_05', 'cmo_chart_06', 'cmo_chart_07', 'cmo_chart_08', 'cmo_chart_09', 'cmo_chart_10', 'cmo_chart_11', 'cmo_chart_03'\];/);
-  assert.match(source, /const scopedCharts = useMemo\(\s*\(\) => orderChartDefs\(data\.charts_by_type\?\.\[maintenanceType\] \?\? data\.charts, HOTEL_MO_CHART_DISPLAY_ORDER\),/s);
+  assert.match(source, /const scopedCharts = useMemo\(\s*\(\) => orderChartDefs\(data\.charts_by_type\?\.\[maintenanceType\] \?\? data\.charts, HOTEL_MO_CHART_DISPLAY_ORDER\)\.map\(\(def\) => \{/s);
+  assert.match(source, /title: t\(`\$\{scope\}_chart_titles\.\$\{def\.id\}`, def\.title\)/);
   assert.match(source, /<div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">/);
 });
 
@@ -67,4 +74,47 @@ test('mo chart 03 is status by hotel with created department drilldown', () => {
   assert.match(finalizeSource, /created_by_department: toStr\(rr\.created_by_department\) \?\? null/);
   assert.match(finalizeSource, /status_created_dept_map: acc\.statusCreatedDeptMap/);
   assert.match(source, /if \(def\.id === 'chart_03' && storedOptions\.drilldown\) return \{ fullPeriod: true \};/);
+});
+
+test('hotel mo chinese kpi labels cover live kpi ids without question placeholders', () => {
+  const ids = [
+    'mo_total_orders',
+    'mo_completion_rate',
+    'mo_open_rate',
+    'mo_cancelled_rate',
+    'mo_severity_index',
+    'mo_guest_related',
+    'mo_peak_category',
+    'mo_unique_categories',
+    'mo_pending_cases',
+    'mo_category_span',
+  ];
+  for (const id of ids) {
+    assert.ok(zhCnLang.hmo_kpi_labels[id], `missing hmo_kpi_labels.${id}`);
+    assert.equal(zhCnLang.hmo_kpi_labels[id].includes('?'), false, `placeholder in hmo_kpi_labels.${id}`);
+    assert.ok(zhCnLang.hmo_kpi_notes[id], `missing hmo_kpi_notes.${id}`);
+    assert.ok(zhCnLang.hmo_kpi_formulas[id], `missing hmo_kpi_formulas.${id}`);
+  }
+});
+
+test('hotel mo kpi labels are present in zh-tw and ja', () => {
+  const ids = [
+    'mo_total_orders',
+    'mo_completion_rate',
+    'mo_open_rate',
+    'mo_cancelled_rate',
+    'mo_severity_index',
+    'mo_guest_related',
+    'mo_peak_category',
+    'mo_unique_categories',
+    'mo_pending_cases',
+    'mo_category_span',
+  ];
+  for (const lang of [zhTwLang, jaLang]) {
+    for (const id of ids) {
+      assert.ok(lang.hmo_kpi_labels[id], `missing hmo_kpi_labels.${id}`);
+      assert.ok(lang.hmo_kpi_notes[id], `missing hmo_kpi_notes.${id}`);
+      assert.ok(lang.hmo_kpi_formulas[id], `missing hmo_kpi_formulas.${id}`);
+    }
+  }
 });

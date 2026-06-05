@@ -816,7 +816,14 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       id: 'chart_03', title: 'Status by Hotel', filterable: true,
       options: {
         chart: { type: 'pie' },
-        series: [{ name: 'Incidents', type: 'pie', innerSize: '50%', data: pieSeries(acc.statusMap, STAT_COLORS) }],
+        series: [{
+          name: 'Incidents',
+          type: 'pie',
+          innerSize: '50%',
+          data: Object.entries(acc.statusMap)
+            .sort(([, a], [, b]) => b - a)
+            .map(([name, y]) => ({ name, y, drilldown: name, ...(STAT_COLORS[name] ? { color: STAT_COLORS[name] } : {}) })),
+        }],
         plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
         drilldown: {
           series: Object.entries(statusCreatedDeptMap ?? {})

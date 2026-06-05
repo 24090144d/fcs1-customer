@@ -61,6 +61,7 @@ test('mo chart display order swaps hotel 02 with 07 and corp 03 with 12', () => 
 
 test('mo chart 03 is status by hotel with created department drilldown', () => {
   assert.match(finalizeSource, /id: 'chart_03', title: 'Status by Hotel', filterable: true/);
+  assert.match(finalizeSource, /map\(\(\[name, y\]\) => \(\{ name, y, drilldown: name/);
   assert.match(finalizeSource, /name: `\$\{status\} Created Department`/);
   assert.match(finalizeSource, /COUNT by incident_status with drilldown COUNT by created_by_department within each status/);
   assert.match(finalizeSource, /created_by_department: toStr\(rr\.created_by_department\) \?\? null/);

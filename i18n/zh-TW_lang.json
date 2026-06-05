@@ -21,12 +21,13 @@
     "filter_apply": "套用",
     "filter_clear": "清除",
     "department_filter": "部門",
+    "hotel_filter": "酒店",
     "export_pdf": "匯出 PDF",
     "benchmarking_hint": "上傳同連鎖品牌其他飯店的 CSV 檔案，以啟用跨飯店標竿比較。"
   },
   "onboarding": {
     "page_title": "上傳 CSV",
-    "page_subtitle": "匯入事件或工作訂單資料。選擇檔案、選取上傳模式，然後提交。",
+    "page_subtitle": "上傳 IM、JO 或 MO CSV 資料。IM 用於事件儀表板，JO 用於工作訂單儀表板，MO 用於維護儀表板並支援 MO/PM 訂單分析。",
     "section_upload_mode": "上傳模式",
     "button_parse_upload": "解析並上傳",
     "status_uploading": "上傳中…",

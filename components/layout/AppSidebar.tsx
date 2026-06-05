@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Check, PieChart, BarChart2, LineChart } from 'lucide-react';
+import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
 import { APP_VERSION } from '@/lib/version';
@@ -84,9 +84,6 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
   const currentModule = searchParams.get('module') ?? 'im';
   const [chains, setChains] = useState<NavChain[]>([]);
   const [expandedChains, setExpandedChains] = useState<Set<string>>(new Set());
-  const [resettingDb, setResettingDb] = useState(false);
-  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
-  const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const [hasPublishedBuilder, setHasPublishedBuilder] = useState(false);
@@ -173,87 +170,8 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
     accent: themeTokens.accent,
   };
 
-  async function handleResetDatabase() {
-    if (resettingDb) return;
-    setResetPasswordInput('');
-    setResetPasswordOpen(true);
-  }
-
-  async function submitResetDatabase() {
-    const password = resetPasswordInput.trim();
-    if (!password) {
-      alert(tr('sidebar.reset_password_empty', 'Reset cancelled: password is required.'));
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `${tr('sidebar.confirm_reset_title', 'Reset Database?')}\n\n${tr('sidebar.confirm_reset_body', 'Yes: truncate all data and keep schema.\nNo: cancel.')}`
-    );
-    if (!confirmed) return;
-    setResetPasswordOpen(false);
-
-    setResettingDb(true);
-    try {
-      const res = await fetch('/api/admin/reset-database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(`${tr('sidebar.reset_failure_prefix', 'Reset failed:')} ${(body as { error?: string }).error ?? res.statusText}`);
-        return;
-      }
-      alert(tr('sidebar.reset_success', 'Database reset completed.'));
-      window.location.href = '/onboarding';
-    } catch (error) {
-      alert(`${tr('sidebar.reset_failure_prefix', 'Reset failed:')} ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setResettingDb(false);
-    }
-  }
-
   return (
     <>
-      {resetPasswordOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(20,18,16,0.55)' }}>
-          <div className="w-[min(92vw,360px)] p-4" style={{ background: '#FAF7F2', border: '1px solid #D9C8A8' }}>
-            <p className="font-mono uppercase" style={{ fontSize: '0.66rem', letterSpacing: '0.12em', color: '#2f2924' }}>
-              {tr('sidebar.reset_password_title', 'Reset password required')}
-            </p>
-            <input
-              type="password"
-              value={resetPasswordInput}
-              onChange={(e) => setResetPasswordInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitResetDatabase();
-              }}
-              className="mt-3 w-full px-2 py-1.5 font-mono outline-none"
-              style={{ border: '1px solid #C4B090', background: '#fff', color: '#2f2924', fontSize: '0.72rem' }}
-              placeholder={tr('sidebar.password', 'Password')}
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setResetPasswordOpen(false)}
-                className="px-3 py-1.5 font-mono"
-                style={{ fontSize: '0.66rem', border: '1px solid #C4B090', color: '#6b6253' }}
-              >
-                {tr('sidebar.cancel', 'Cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitResetDatabase()}
-                className="px-3 py-1.5 font-mono"
-                style={{ fontSize: '0.66rem', border: '1px solid #0E7470', background: '#0E7470', color: '#FAF7F2' }}
-              >
-                {tr('sidebar.confirm', 'Confirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Backdrop */}
       {navigating && (
         <div
@@ -433,7 +351,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                         (item.hotel_code !== 'CORP' && item.hotel_code === currentHotel)
                       )
             );
-            const moduleGroups = (['im', 'jo'] as const).map((m) => ({
+            const moduleGroups = (['im', 'jo', 'mo'] as const).map((m) => ({
               module: m,
               entries: items.filter((it) => it.module === m),
             })).filter((g) => g.entries.length > 0);
@@ -484,7 +402,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                               className="font-mono uppercase"
                               style={{ fontSize: '0.54rem', letterSpacing: '0.16em', color: t.dim }}
                             >
-                              {group.module === 'jo' ? 'JO' : 'IM'}
+                              {group.module.toUpperCase()}
                             </span>
                           </div>
                         )}
@@ -511,6 +429,8 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                                 <PieChart size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : item.module === 'jo' ? (
                                 <BarChart2 size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                              ) : item.module === 'mo' ? (
+                                <Wrench size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : (
                                 <LineChart size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               )}
@@ -562,13 +482,19 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
         </div>
 
         {/* ── User strip ─────────────────────────────────────────────────── */}
-        <button
-          type="button"
-          onClick={handleResetDatabase}
-          disabled={resettingDb}
-          aria-label={tr('sidebar.reset_database', 'Reset Database')}
+        <Link
+          href="/configuration"
+          onClick={() => {
+            if (pathname !== '/configuration') setNavigating(true);
+            onClose();
+          }}
+          aria-label={tr('sidebar.configuration', 'Configuration')}
           className={`${collapsed ? 'px-2' : 'px-4'} py-3 shrink-0`}
-          style={{ borderTop: `1px solid ${t.border}`, background: t.band }}
+          style={{
+            borderTop: `1px solid ${t.border}`,
+            background: pathname === '/configuration' ? `${t.accent}22` : t.band,
+            boxShadow: pathname === '/configuration' ? `inset 4px 0 0 ${t.accent}` : 'none',
+          }}
         >
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} min-w-0`}>
             <div
@@ -578,16 +504,16 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                 border:     `1px solid ${t.accent}66`,
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.accent }} />
+              <Settings size={12} style={{ color: t.accent }} />
             </div>
             {!collapsed && (
               <>
                 <div className="min-w-0 leading-tight flex-1">
                   <p className="font-mono uppercase truncate" style={{ fontSize: '0.58rem', letterSpacing: '0.14em', color: t.text }}>
-                    {tr('sidebar.reset_database', 'Reset Database')}
+                    {tr('sidebar.configuration', 'Configuration')}
                   </p>
                   <p className="font-mono truncate" style={{ fontSize: '0.55rem', letterSpacing: '0.06em', color: t.dim, marginTop: '2px' }}>
-                    {tr('sidebar.status_live', 'Status Live')}
+                    {tr('sidebar.configuration_status', 'System Settings')}
                   </p>
                 </div>
                 <span
@@ -600,12 +526,12 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                     padding:     '1px 5px',
                   }}
                 >
-                  {resettingDb ? 'Resetting…' : APP_VERSION}
+                  {APP_VERSION}
                 </span>
               </>
             )}
           </div>
-        </button>
+        </Link>
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}

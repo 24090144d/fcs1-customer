@@ -21,12 +21,13 @@
     "filter_apply": "適用",
     "filter_clear": "クリア",
     "department_filter": "部門",
+    "hotel_filter": "ホテル",
     "export_pdf": "PDF出力",
     "benchmarking_hint": "同じチェーン内の他のホテルのCSVをアップロードすると、ホテル間のベンチマークが有効になります。"
   },
   "onboarding": {
     "page_title": "CSVアップロード",
-    "page_subtitle": "インシデントまたはジョブオーダーのデータをインポートします。ファイルを選択し、アップロードモードを選んで送信してください。",
+    "page_subtitle": "IM、JO、MO のCSVデータをアップロードできます。IMはインシデント、JOはジョブオーダー、MOはMO/PMオーダー分析を含むメンテナンスダッシュボードに対応します。",
     "section_upload_mode": "アップロードモード",
     "button_parse_upload": "解析してアップロード",
     "status_uploading": "アップロード中…",

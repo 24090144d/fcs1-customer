@@ -95,11 +95,14 @@ export function DropZone({ onFileSelect, dragActive, onDragChange, disabled = fa
 
       {/* Format hint */}
       <div className="text-center pointer-events-none space-y-1">
+        <p className="font-sans text-xs font-semibold text-slate-500">
+          Supports IM, JO, and MO CSV files
+        </p>
         <p className="font-mono text-[11px] text-slate-400 bg-slate-100 rounded px-2.5 py-1 inline-block">
           [ChainCode]-[HotelCode]-[HotelName]-[Module]-[CountryCode]-[DataRange].csv
         </p>
         <p className="font-sans text-xs text-slate-400">
-          {t('onboarding.dropzone_limit', '.csv only · max 100 MB')}
+          {t('onboarding.dropzone_limit', '.csv only · max 50 MB')}
         </p>
       </div>
 

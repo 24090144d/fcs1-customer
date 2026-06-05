@@ -4,7 +4,7 @@ import { unstable_noStore as noStore } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardClient } from './DashboardClient';
-import type { DashboardJson, ImDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, MoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,13 +35,34 @@ async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<
         ? base.filter('generated_json->meta->>hotel_code', 'eq', hotelCode)
         : base
     ).limit(1).maybeSingle() as unknown as SbResult<DashRow>;
+    if (result.error) {
+      console.error('[dashboard/fetchDashboard] primary query failed', {
+        hotelCode,
+        moduleCode,
+        table,
+        expectedSchema,
+        error: result.error,
+      });
+    }
     if (!result.data && isJo && hotelCode) {
       // Some historical JO rows may lack parsed hotel_code due to file-hash dedupe.
       // Fallback to latest JO dashboard row so user still sees JO data.
       result = await base.limit(1).maybeSingle() as unknown as SbResult<DashRow>;
+      if (result.error) {
+        console.error('[dashboard/fetchDashboard] jo fallback query failed', {
+          hotelCode,
+          moduleCode,
+          table,
+          expectedSchema,
+          error: result.error,
+        });
+      }
     }
     return result.data?.generated_json ?? null;
-  } catch { return null; }
+  } catch (error) {
+    console.error('[dashboard/fetchDashboard] unexpected failure', { hotelCode, moduleCode, error });
+    return null;
+  }
 }
 
 async function fetchChainEntries(chainCode: string, currentHotelCode: string, moduleCode?: string): Promise<ChainEntry[]> {
@@ -74,7 +95,10 @@ async function fetchChainEntries(chainCode: string, currentHotelCode: string, mo
       });
     }
     return Array.from(seen.values()).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
-  } catch { return []; }
+  } catch (error) {
+    console.error('[dashboard/fetchChainEntries] unexpected failure', { chainCode, currentHotelCode, moduleCode, error });
+    return [];
+  }
 }
 
 function mergeNumMap(target: Record<string, number>, source: Record<string, number> | undefined) {
@@ -209,23 +233,32 @@ function buildCorpKpis(template: ImDashboardJson, summary: HotelSummary): ImDash
   });
 }
 
-async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Promise<{ data: ImDashboardJson | null; chainEntries: ChainEntry[] }> {
+async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Promise<{ data: DashboardJson | null; chainEntries: ChainEntry[] }> {
   noStore();
   if (!chainCode) return { data: null, chainEntries: [] };
   try {
     const supabase = createAdminClient();
-    type DashRow = { generated_json: ImDashboardJson; created_at: string };
+    const isMo = String(moduleCode ?? '').toLowerCase() === 'mo';
+    type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
     const rowsResult = await supabase
       .from(table)
       .select('generated_json, created_at')
       .filter('generated_json->meta->>chain_code', 'eq', chainCode.toUpperCase())
       .order('created_at', { ascending: false }) as unknown as SbResult<DashRow[]>;
+    if (rowsResult.error) {
+      console.error('[dashboard/fetchCorpDashboard] query failed', {
+        chainCode,
+        moduleCode,
+        table,
+        error: rowsResult.error,
+      });
+    }
 
     const rows = rowsResult.data ?? [];
     if (rows.length === 0) return { data: null, chainEntries: [] };
 
-    const latestByHotel = new Map<string, ImDashboardJson>();
+    const latestByHotel = new Map<string, DashboardJson>();
     for (const row of rows) {
       const json = row.generated_json;
       const hotelCode = (json?.meta?.hotel_code ?? '').trim().toUpperCase();
@@ -238,18 +271,24 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
     if (dashboards.length < 2) return { data: null, chainEntries: [] };
 
     const template = dashboards[0];
-    const chainEntries: ChainEntry[] = dashboards.map((d) => ({
-      hotel_code: d.meta.hotel_code,
-      hotel_name: d.meta.hotel_name,
-      country_code: d.meta.country_code ?? '',
-      kpis: d.kpis ?? [],
-      summary: d.summary,
-      raw_daily: d.raw_daily ?? [],
-    })).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
+    const chainEntries: ChainEntry[] = dashboards.map((d) => {
+      const maintenance = d.meta.schema === 'mo-v1' ? d as MoDashboardJson : null;
+      return {
+        hotel_code: d.meta.hotel_code,
+        hotel_name: d.meta.hotel_name,
+        country_code: d.meta.country_code ?? '',
+        kpis: d.kpis ?? [],
+        summary: d.summary,
+        raw_daily: d.raw_daily ?? [],
+        kpis_by_type: maintenance?.kpis_by_type,
+        raw_daily_by_type: maintenance?.raw_daily_by_type,
+        summary_by_type: maintenance?.summary_by_type,
+      };
+    }).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
 
     // Build accurate department->source_of_complaint and department->item maps
     // from live IM records so corp charts remain correct even for legacy summaries.
-    if (String(moduleCode ?? '').toLowerCase() !== 'jo') {
+    if (!isMo && String(moduleCode ?? '').toLowerCase() !== 'jo') {
       type SrcRow = {
         hotel_code: string | null;
         department: string | null;
@@ -293,7 +332,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
           entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
         }
       }
-    } else {
+    } else if (!isMo) {
       type JoLiveRow = {
         hotel_code: string | null;
         assigned_to_department: string | null;
@@ -338,6 +377,111 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
       }
     }
 
+    if (isMo) {
+      type MoLiveRow = {
+        hotel_code: string | null;
+        type: string | null;
+        location: string | null;
+        building: string | null;
+      };
+      const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
+      if (hotelCodes.length > 0) {
+        const locationByHotel: Record<string, Record<string, number>> = {};
+        const batch = await supabase
+          .from('mo_records')
+          .select('hotel_code, type, location, building')
+          .in('hotel_code', hotelCodes)
+          .eq('type', 'MO') as unknown as SbResult<MoLiveRow[]>;
+        const rows = batch.data ?? [];
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const location = r.location === null || String(r.location).trim() === ''
+            ? (r.building === null || String(r.building).trim() === '' ? 'Unknown Location' : String(r.building))
+            : String(r.location);
+          if (!locationByHotel[hotel]) locationByHotel[hotel] = {};
+          locationByHotel[hotel][location] = (locationByHotel[hotel][location] ?? 0) + 1;
+        }
+        for (const entry of chainEntries) {
+          for (const maintenanceType of ['MO', 'PM'] as const) {
+            if (!entry.summary_by_type?.[maintenanceType]) continue;
+            entry.summary_by_type[maintenanceType].location_map =
+              locationByHotel[entry.hotel_code] ?? entry.summary_by_type[maintenanceType].location_map ?? {};
+          }
+        }
+      }
+
+      const scopedEntriesByType = {
+        MO: chainEntries.map((entry) => ({
+          ...entry,
+          summary: entry.summary_by_type?.MO ?? entry.summary,
+          raw_daily: entry.raw_daily_by_type?.MO ?? entry.raw_daily ?? [],
+        })),
+        PM: chainEntries.map((entry) => ({
+          ...entry,
+          summary: entry.summary_by_type?.PM ?? entry.summary,
+          raw_daily: entry.raw_daily_by_type?.PM ?? entry.raw_daily ?? [],
+        })),
+      };
+
+      const scopedSummaryByType = {
+        MO: mergeSummary(scopedEntriesByType.MO.map((e) => e.summary)),
+        PM: mergeSummary(scopedEntriesByType.PM.map((e) => e.summary)),
+      };
+      const scopedRawDailyByType = {
+        MO: mergeRawDaily(scopedEntriesByType.MO.map((e) => e.raw_daily ?? [])),
+        PM: mergeRawDaily(scopedEntriesByType.PM.map((e) => e.raw_daily ?? [])),
+      };
+      const scopedDates = scopedRawDailyByType.MO.map((d) => d.date);
+      const scopedDateMin = scopedDates.length > 0 ? scopedDates[0] : null;
+      const scopedDateMax = scopedDates.length > 0 ? scopedDates[scopedDates.length - 1] : null;
+      const scopedTotalRecords = scopedEntriesByType.MO.reduce((sum, entry) => sum + (entry.summary.total ?? 0), 0);
+
+      const moTemplate = template as MoDashboardJson;
+      const corpMoData: MoDashboardJson = {
+        ...moTemplate,
+        meta: {
+          ...moTemplate.meta,
+          source_name: `${chainCode.toUpperCase()} Corp`,
+          chain_code: chainCode.toUpperCase(),
+          hotel_code: 'CORP',
+          hotel_name: 'Corp',
+          total_records: scopedTotalRecords,
+          date_range: { min: scopedDateMin, max: scopedDateMax },
+          generated_at: new Date().toISOString(),
+          schema: 'mo-v1',
+        },
+        kpis: moTemplate.kpis ?? [],
+        eac: moTemplate.eac ?? [],
+        charts: moTemplate.charts ?? [],
+        raw_daily: scopedRawDailyByType.MO,
+        summary: scopedSummaryByType.MO,
+        kpis_by_type: {
+          ...moTemplate.kpis_by_type,
+          MO: moTemplate.kpis_by_type?.MO ?? [],
+          PM: moTemplate.kpis_by_type?.PM ?? [],
+        },
+        charts_by_type: {
+          ...moTemplate.charts_by_type,
+          MO: moTemplate.charts_by_type?.MO ?? [],
+          PM: moTemplate.charts_by_type?.PM ?? [],
+        },
+        raw_daily_by_type: {
+          ...moTemplate.raw_daily_by_type,
+          MO: scopedRawDailyByType.MO,
+          PM: scopedRawDailyByType.PM,
+        },
+        summary_by_type: {
+          ...moTemplate.summary_by_type,
+          MO: scopedSummaryByType.MO,
+          PM: scopedSummaryByType.PM,
+        },
+      };
+
+      return { data: corpMoData, chainEntries };
+    }
+
+    const imTemplate = template as ImDashboardJson;
     const summary = mergeSummary(dashboards.map((d) => d.summary));
     // Re-merge summary from chainEntries in case live IM maps were enriched above.
     const enrichedSummary = mergeSummary(chainEntries.map((e) => e.summary));
@@ -348,9 +492,9 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
     const totalRecords = dashboards.reduce((s, d) => s + (d.meta.total_records ?? 0), 0);
 
     const data: ImDashboardJson = {
-      ...template,
+      ...imTemplate,
       meta: {
-        ...template.meta,
+        ...imTemplate.meta,
         source_name: `${chainCode.toUpperCase()} Corp`,
         chain_code: chainCode.toUpperCase(),
         hotel_code: 'CORP',
@@ -359,13 +503,14 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
         date_range: { min: dateMin, max: dateMax },
         generated_at: new Date().toISOString(),
       },
-      kpis: buildCorpKpis(template, summary),
+      kpis: buildCorpKpis(imTemplate, summary),
       raw_daily: rawDaily,
       summary: enrichedSummary,
     };
 
     return { data, chainEntries };
-  } catch {
+  } catch (error) {
+    console.error('[dashboard/fetchCorpDashboard] unexpected failure', { chainCode, moduleCode, error });
     return { data: null, chainEntries: [] };
   }
 }

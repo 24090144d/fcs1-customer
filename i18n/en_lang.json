@@ -21,12 +21,13 @@
     "filter_apply": "Apply",
     "filter_clear": "Clear",
     "department_filter": "DEPARTMENT",
+    "hotel_filter": "HOTEL",
     "export_pdf": "Export PDF",
     "benchmarking_hint": "Upload CSVs for other hotels in the same chain to enable cross-hotel benchmarking."
   },
   "onboarding": {
     "page_title": "Upload CSV",
-    "page_subtitle": "Import incident or job-order data. Select a file, choose an upload mode, and submit.",
+    "page_subtitle": "Upload IM, JO, or MO CSV data. IM supports incident dashboards, JO supports job-order dashboards, and MO supports maintenance dashboards with MO/PM order analysis.",
     "section_upload_mode": "Upload Mode",
     "button_parse_upload": "Parse & Upload",
     "status_uploading": "Uploading…",

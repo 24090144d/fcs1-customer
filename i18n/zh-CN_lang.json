@@ -21,12 +21,13 @@
     "filter_apply": "应用",
     "filter_clear": "清除",
     "department_filter": "部门",
+    "hotel_filter": "酒店",
     "export_pdf": "导出PDF",
     "benchmarking_hint": "上传同品牌其他酒店的CSV文件以启用跨酒店对标分析。"
   },
   "onboarding": {
     "page_title": "上传CSV",
-    "page_subtitle": "导入事件或工单数据。选择文件、上传模式并提交。",
+    "page_subtitle": "上传 IM、JO 或 MO CSV 数据。IM 用于事件仪表板，JO 用于工单仪表板，MO 用于维护仪表板并支持 MO/PM 工单分析。",
     "section_upload_mode": "上传模式",
     "button_parse_upload": "解析并上传",
     "status_uploading": "上传中…",

@@ -64,6 +64,9 @@ Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/002_jo_schema_alignment
 Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/003_record_scope_columns.sql")
 Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/004_bigint_id_defaults.sql")
 Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/005_ai_chart_playground.sql")
+Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/006_ai_chart_publish.sql")
+Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/007_ai_chart_display_order.sql")
+Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/008_mo_schema.sql")
 
 $escapedCode = $CustomerCode.Replace("'", "''")
 $escapedName = $CustomerName.Replace("'", "''")

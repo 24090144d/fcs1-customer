@@ -468,11 +468,26 @@ export default function OnboardingPage() {
 
         {/* Page header */}
         <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="font-serif text-2xl font-bold text-slate-800 leading-tight">{t('onboarding.page_title', 'Upload CSV')}</h1>
-            <p className="font-sans text-sm text-slate-500 mt-1 max-w-xl">
-              {t('onboarding.page_subtitle', 'Import incident or job-order data. Select a file, choose an upload mode, and submit.')}
+            <p className="font-sans text-sm text-slate-500 mt-1 max-w-2xl">
+              {t('onboarding.page_subtitle', 'Upload IM, JO, or MO CSV data. IM supports incident dashboards, JO supports job-order dashboards, and MO supports maintenance dashboards with MO/PM order analysis.')}
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                ['IM', 'Incident Management'],
+                ['JO', 'Job Order'],
+                ['MO', 'Maintenance Order / PM'],
+              ].map(([code, label]) => (
+                <span
+                  key={code}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 py-1 font-sans text-[11px] text-slate-500 shadow-sm"
+                >
+                  <code className="font-mono font-semibold text-teal-700">{code}</code>
+                  <span>{label}</span>
+                </span>
+              ))}
+            </div>
           </div>
           {file && (
             <button
@@ -634,6 +649,11 @@ export default function OnboardingPage() {
               <code className="block font-mono text-[11px] text-slate-500 break-all leading-relaxed">
                 [ChainCode]-[HotelCode]-[HotelName]-[Module]-[CountryCode]-[DataRange].csv
               </code>
+              <p className="font-sans text-[11px] text-slate-500 leading-relaxed">
+                Supported modules: <span className="font-semibold text-slate-700">IM</span> for incident data,{' '}
+                <span className="font-semibold text-slate-700">JO</span> for job-order data, and{' '}
+                <span className="font-semibold text-slate-700">MO</span> for maintenance CSVs containing MO and PM order numbers.
+              </p>
               <div className="space-y-1">
                 {[
                   ['ChainCode',   'e.g. Hyatt'],
@@ -650,8 +670,10 @@ export default function OnboardingPage() {
                 ))}
               </div>
               <p className="font-sans text-[11px] text-slate-400 pt-1 border-t border-slate-200">
-                Example:{' '}
+                Examples:{' '}
                 <code className="font-mono text-slate-500">Hyatt-TYOTY-Hyatt Regency Tokyo-IM-JP-4m.csv</code>
+                <br />
+                <code className="font-mono text-slate-500">Hilton-WAM-Waldorf Astoria Maldives-MO-MV-1m.csv</code>
               </p>
             </div>
           </div>

@@ -184,6 +184,7 @@ function normaliseMoForIm(rr: Record<string, unknown>): Record<string, unknown> 
     room_no: toStr(rr.location) ?? null,
     nights: null,
     department: toStr(rr.category) ?? null,
+    created_by_department: toStr(rr.created_by_department) ?? null,
     created_date: created,
     incident_datetime: created,
     investigation_updated_on_1: toStr(rr.completed_datetime),
@@ -293,6 +294,7 @@ interface ImAcc {
   wdMonthMap:    Record<string, Record<number, number>>;
   weekSourceMap: Record<string, Record<string, number>>; // week -> source -> count
   statusDeptMap: Record<string, Record<string, number>>; // status → dept → count
+  statusCreatedDeptMap: Record<string, Record<string, number>>; // status -> created dept -> count
   sourceDeptMap: Record<string, Record<string, number>>; // source → dept → count
   deptSourceMap: Record<string, Record<string, number>>; // dept -> source -> count
   deptCatMap:    Record<string, Record<string, number>>; // dept → category → count
@@ -314,7 +316,7 @@ function newImAcc(): ImAcc {
     dailyMap: {}, monthMap: {}, weekdayMap: {},
     catStatusMap: {}, catSevMap: {}, catDailyMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
     weekSourceMap: {},
-    statusDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {},
+    statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {},
     repeatMap: new Map(),
     nightsBkts: { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 },
     repeatCount: 0,
@@ -364,6 +366,9 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>) {
 
   if (!acc.statusDeptMap[status]) acc.statusDeptMap[status] = {};
   inc(acc.statusDeptMap[status], dept || null);
+  const createdDept = toStr(rr.created_by_department) ?? source;
+  if (!acc.statusCreatedDeptMap[status]) acc.statusCreatedDeptMap[status] = {};
+  inc(acc.statusCreatedDeptMap[status], createdDept || null);
 
   if (!acc.sourceDeptMap[source]) acc.sourceDeptMap[source] = {};
   inc(acc.sourceDeptMap[source], dept || null);
@@ -551,6 +556,10 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
   function dailyTotals(field: keyof DayBucket) {
     return sortedDays.map(d => (acc.dailyMap[d][field] as number) ?? 0);
   }
+
+  const statusCreatedDeptMap = Object.keys(acc.statusCreatedDeptMap).length > 0
+    ? acc.statusCreatedDeptMap
+    : acc.statusDeptMap;
 
   function catClosureRates(cats: string[]) {
     return cats.map(cat => {
@@ -804,14 +813,27 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     },
     // chart_03 — Status donut (filterable)
     {
-      id: 'chart_03', title: 'Status Distribution', filterable: true,
+      id: 'chart_03', title: 'Status by Hotel', filterable: true,
       options: {
         chart: { type: 'pie' },
         series: [{ name: 'Incidents', type: 'pie', innerSize: '50%', data: pieSeries(acc.statusMap, STAT_COLORS) }],
         plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
+        drilldown: {
+          series: Object.entries(statusCreatedDeptMap ?? {})
+            .filter(([, deptMap]) => Object.keys(deptMap ?? {}).length > 0)
+            .map(([status, deptMap]) => ({
+              id: status,
+              type: 'pie',
+              innerSize: '50%',
+              name: `${status} Created Department`,
+              data: Object.entries(deptMap)
+                .sort(([, a], [, b]) => Number(b) - Number(a))
+                .map(([dept, value]) => ({ name: dept, y: Number(value) })),
+            })),
+        },
       },
-      note: 'Proportion of incidents in each status.',
-      formula: 'COUNT by incident_status ÷ Total × 100',
+      note: 'Status distribution by hotel with drilldown into the created department responsible for each status group.',
+      formula: 'COUNT by incident_status with drilldown COUNT by created_by_department within each status',
     },
     // chart_04 — Daily trend spline (filterable)
     {
@@ -1110,6 +1132,8 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     week_map:     acc.weekMap,
     week_source_map: acc.weekSourceMap,
     dept_source_map: acc.deptSourceMap,
+    status_dept_map: acc.statusDeptMap,
+    status_created_dept_map: acc.statusCreatedDeptMap,
     booking_map:  acc.bookingMap,
     source_map:   acc.sourceMap,
     severity_map: acc.severityMap,

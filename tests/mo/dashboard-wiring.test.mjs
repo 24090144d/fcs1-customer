@@ -18,3 +18,9 @@ test('nav route loads mo dashboard rows and exposes mo module', () => {
   assert.match(navRoute, /sb\.from\('mo_dashboard_json'\)\.select\('generated_json, generated_at'\)/);
   assert.match(navRoute, /for \(const r of \(moRows \?\? \[\]\)\) addRow\('mo', r\)/);
 });
+
+test('nav route exposes corp mo item when at least two hotels exist', () => {
+  assert.match(navRoute, /if \(hotelsForModule\.length >= 2\) \{/);
+  assert.match(navRoute, /moduleCode === 'im' \? 'Corp · IM' : moduleCode === 'jo' \? 'Corp · JO' : 'Corp · MO'/);
+  assert.match(navRoute, /href: `\/dashboard\?hotel=corp&chain=\$\{encodeURIComponent\(chain\)\}&module=\$\{moduleCode\}`/);
+});

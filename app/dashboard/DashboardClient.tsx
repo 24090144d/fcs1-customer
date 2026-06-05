@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { Sun, Moon, Printer, CalendarDays, X } from 'lucide-react';
 import Highcharts from 'highcharts';
 import { KpiCard }  from '@/components/dashboard/KpiCard';
-import type { DashboardJson, ImDashboardJson, MoDashboardJson, MaintenanceType, DailyBucket, KpiDef, ChartDef, ChainEntry } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, MoDashboardJson, MaintenanceType, DailyBucket, KpiDef, ChartDef, ChainEntry, HotelSummary } from '@/types/dashboard';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
@@ -19,6 +19,8 @@ const GAUGE_CHARTS = new Set(['eac_06', 'chart_22', 'chart_23', 'chart_24', 'him
 const CORP_IM_TOP_IDS = new Set(['chart_18', 'chart_19', 'chart_20', 'chart_21', 'chart_22', 'chart_23', 'chart_24', 'chart_25', 'chart_26', 'chart_27', 'chart_28', 'chart_29', 'chart_30', 'chart_31', 'chart_33', 'chart_34', 'chart_35', 'chart_36']);
 const JO_EAC_ORDER = ['jo_eac_01', 'jo_eac_02', 'jo_eac_03', 'jo_eac_04'];
 const JO_CHART_ORDER = ['jo_chart_01', 'jo_chart_02', 'jo_chart_03', 'jo_chart_04', 'jo_chart_05', 'jo_chart_06', 'jo_chart_07', 'jo_chart_08', 'jo_chart_09', 'jo_chart_10', 'jo_chart_11', 'jo_chart_12', 'jo_chart_13', 'jo_chart_14', 'jo_chart_15', 'jo_chart_16', 'jo_chart_17', 'jo_chart_18'];
+const HOTEL_MO_CHART_DISPLAY_ORDER = ['chart_01', 'chart_07', 'chart_03', 'chart_04', 'chart_05', 'chart_06', 'chart_02', 'chart_08', 'chart_09', 'chart_10'];
+const CORP_MO_CHART_DISPLAY_ORDER = ['cmo_chart_01', 'cmo_chart_02', 'cmo_chart_12', 'cmo_chart_04', 'cmo_chart_05', 'cmo_chart_06', 'cmo_chart_07', 'cmo_chart_08', 'cmo_chart_09', 'cmo_chart_10', 'cmo_chart_11', 'cmo_chart_03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
   { code: 'cim01', id: 'chart_22', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
   { code: 'cim02', id: 'chart_18', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
@@ -1189,9 +1191,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   return undefined;
 }
 
-function buildCorpJoCharts(entries: ChainEntry[]): ChartDef[] {
-  if (entries.length < 2) return [];
-
+function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, unknown> | null): ChartDef[] {
+  if (entries.length === 0) return [];
   const hotelCodes = entries.map((e) => e.hotel_code);
   const statusKeys = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.status_map ?? {})))).sort();
   const allCategories: Record<string, number> = {};
@@ -1304,49 +1305,100 @@ function buildCorpJoCharts(entries: ChainEntry[]): ChartDef[] {
     make('cjo_chart_05', 'Escalation Rate by Hotel', 'Escalation comparison for service stability review.', 'escalated_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Escalation %' } }, series: [{ type: 'column', name: 'Escalation %', data: escalationRate }],
     }),
-    make('cjo_chart_06', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
+    make('cjo_chart_06', 'Worldmap Job Order by Hotel', 'Country-level map with hotel labels for chain-wide JO visibility.', 'Country Value = SUM(total_jobs) GROUP BY country_code; Label = CONCAT(hotel_code, total_jobs) list per country', {
+      chart: { type: 'map' },
+      mapNavigation: { enabled: true },
+      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
+      series: worldMapData ? [{
+        type: 'map',
+        name: 'Job Orders',
+        mapData: worldMapData,
+        data: Array.from(
+          entries.reduce((acc, entry) => {
+            const code = String(entry.country_code ?? '').trim().toUpperCase();
+            if (!code) return acc;
+            const prev = acc.get(code) ?? { total: 0, hotels: [] as string[] };
+            prev.total += entry.summary.total ?? 0;
+            prev.hotels.push(`${entry.hotel_code} ${entry.summary.total ?? 0}`);
+            acc.set(code, prev);
+            return acc;
+          }, new Map<string, { total: number; hotels: string[] }>()),
+        ).map(([code, agg]) => ({
+          code,
+          value: agg.total,
+          custom: { hotels: agg.hotels.join(', '), countryCode: code },
+        })),
+        joinBy: ['iso-a2', 'code'],
+        borderColor: '#B9A88A',
+        nullColor: '#F4EEE4',
+        states: { hover: { color: '#C55A10' } },
+        dataLabels: {
+          enabled: true,
+          allowOverlap: false,
+          crop: false,
+          overflow: 'allow',
+          padding: 2,
+          useHTML: true,
+          formatter: function (this: { point?: { options?: { custom?: { hotels?: string } }; series?: { chart?: { fullscreen?: { isOpen?: boolean } } } } }) {
+            const hotels = this.point?.options?.custom?.hotels ?? '';
+            const isFullscreen = this.point?.series?.chart?.fullscreen?.isOpen === true;
+            const size = isFullscreen ? 16 : 8;
+            return `<span style="font-size:${size}px;line-height:1.2;font-weight:700">${hotels}</span>`;
+          },
+          style: { fontSize: '8px', fontWeight: '600', textOutline: 'none' },
+        },
+        tooltip: {
+          pointFormatter: function (this: Highcharts.Point) {
+            const custom = (this as unknown as { custom?: { countryCode?: string; hotels?: string } }).custom;
+            const value = (this as unknown as { value?: number }).value ?? 0;
+            return `<b>${custom?.countryCode ?? ''}</b><br/>Jobs: ${value}<br/>${custom?.hotels ?? ''}`;
+          },
+        },
+      }] : [],
+    }),
+    make('cjo_chart_07', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Reassignment %' } }, series: [{ type: 'column', name: 'Reassignment %', data: reassignmentRate }],
     }),
-    make('cjo_chart_07', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
+    make('cjo_chart_08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
     }),
-    make('cjo_chart_08', 'P90 Response Minutes by Hotel', 'Tail response time comparison by hotel.', 'P90(response_min) BY hotel_code', {
+    make('cjo_chart_09', 'P90 Response Minutes by Hotel', 'Tail response time comparison by hotel.', 'P90(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'P90 Response (min)', data: p90Response }],
     }),
-    make('cjo_chart_09', 'Avg Resolution Minutes by Hotel', 'Average create-to-complete duration by hotel.', 'AVG(resolution_min) BY hotel_code', {
+    make('cjo_chart_10', 'Avg Resolution Minutes by Hotel', 'Average create-to-complete duration by hotel.', 'AVG(resolution_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Resolution (min)', data: avgResolution }],
     }),
-    make('cjo_chart_10', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
+    make('cjo_chart_11', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Total Quantity', data: totalQuantity }],
     }),
-    make('cjo_chart_11', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
+    make('cjo_chart_12', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
       chart: { type: 'line' }, xAxis: { categories: weeks }, series: entries.map((e) => ({ type: 'line', name: e.hotel_code, data: weeks.map((wk) => e.summary.week_map?.[wk] ?? 0) })),
     }),
-    make('cjo_chart_12', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
+    make('cjo_chart_13', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
       chart: { type: 'line' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'line', name: 'Completion %', data: weeklyCompletion }],
     }),
-    make('cjo_chart_13', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
+    make('cjo_chart_14', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
       chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: weeklyTimeout }],
     }),
-    make('cjo_chart_14', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
+    make('cjo_chart_15', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: statusKeys.map((status) => ({ type: 'column', name: status, data: entries.map((e) => e.summary.status_map?.[status] ?? 0) })),
     }),
-    make('cjo_chart_15', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
+    make('cjo_chart_16', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
     }),
-    make('cjo_chart_16', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
+    make('cjo_chart_17', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topItems.slice(0, 6).map((item) => ({ type: 'bar', name: item, data: entries.map((e) => e.summary.item_map?.[item] ?? 0) })),
     }),
-    make('cjo_chart_17', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
+    make('cjo_chart_18', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topDepts.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_18', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
+    make('cjo_chart_19', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topAssigned.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.assigned_dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_19', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
+    make('cjo_chart_20', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_20', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
+    make('cjo_chart_21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
   ];
@@ -1510,34 +1562,408 @@ function CorpJoPerformanceTable({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+function buildCorpMoKpis(summary: HotelSummary): KpiDef[] {
+  const total = summary.total ?? 0;
+  const completed = summary.completed ?? 0;
+  const cancelled = summary.cancelled ?? 0;
+  const open = Math.max(total - completed - cancelled, 0);
+  const completionRate = total > 0 ? (completed / total) * 100 : 0;
+  const openRate = total > 0 ? (open / total) * 100 : 0;
+  const cancelledRate = total > 0 ? (cancelled / total) * 100 : 0;
+  const guestShare = total > 0 ? ((summary.vip_total ?? 0) / total) * 100 : 0;
+  const severityIndex = total > 0 ? (summary.severity_sum ?? 0) / total : 0;
+  const topCategory = topN(summary.category_map ?? {}, 1)[0];
+  const topCategoryShare = total > 0 ? ((topCategory?.[1] ?? 0) / total) * 100 : 0;
+  const activeCategories = Object.keys(summary.category_map ?? {}).length;
+  const touchedAssets = Object.keys(summary.item_map ?? {}).length;
+  const activeWeeks = Math.max(1, Object.keys(summary.week_map ?? {}).length);
+  const dailyAverage = total / activeWeeks / 7;
+
+  return [
+    { id: 'cmo_kpi_01', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total MO work orders across all hotels in the chain.', formula: 'COUNT(*) WHERE type = MO GROUP BY chain' },
+    { id: 'cmo_kpi_02', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders completed across the chain.', formula: 'completed / total * 100 WHERE type = MO' },
+    { id: 'cmo_kpi_03', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders still open across the chain.', formula: 'open / total * 100 WHERE type = MO' },
+    { id: 'cmo_kpi_04', label: 'Cancelled Order Rate', value: r1(cancelledRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO orders cancelled across the chain.', formula: 'cancelled / total * 100 WHERE type = MO' },
+    { id: 'cmo_kpi_05', label: 'Guest Related Share', value: r1(guestShare), unit: '%', fmt: 'pct1', available: true, note: 'Share of guest-related MO orders across the chain.', formula: 'guest_related_orders / total * 100 WHERE type = MO' },
+    { id: 'cmo_kpi_06', label: 'Severity Index', value: r2(severityIndex), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy across chain work orders.', formula: 'AVG(severity_weight) WHERE type = MO' },
+    { id: 'cmo_kpi_07', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share contributed by the largest maintenance category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
+    { id: 'cmo_kpi_08', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct maintenance categories active across the chain.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
+    { id: 'cmo_kpi_09', label: 'Touched Assets', value: touchedAssets, unit: 'items', fmt: 'integer', available: true, note: 'Distinct defect or asset combinations touched across the chain.', formula: 'COUNT(DISTINCT defect_or_asset) WHERE type = MO' },
+    { id: 'cmo_kpi_10', label: 'Daily Average Orders', value: r2(dailyAverage), unit: 'orders', fmt: 'decimal2', available: true, note: 'Average daily MO volume across the selected period.', formula: 'COUNT(*) / active_days WHERE type = MO' },
+  ];
+}
+
+function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, unknown> | null): ChartDef[] {
+  if (entries.length === 0) return [];
+  const hotelCodes = entries.map((e) => e.hotel_code);
+  const topCategories = topN(mergeRecords(entries.map((e) => e.summary.category_map ?? {})), 6).map(([k]) => k);
+  const topItems = topN(mergeRecords(entries.map((e) => e.summary.item_map ?? {})), 12);
+  const allLocations = topN(
+    mergeRecords(entries.map((e) => e.summary.location_map ?? {})),
+    8,
+  ).map(([k]) => k);
+  const statusKeys = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.status_map ?? {})))).sort();
+  const allDates = Array.from(new Set(entries.flatMap((e) => (e.raw_daily ?? []).map((d) => d.date)))).sort();
+
+  const make = (id: string, title: string, note: string, formula: string, options: Record<string, unknown>): ChartDef => ({
+    id,
+    title,
+    note,
+    formula,
+    filterable: false,
+    options,
+  });
+
+  return [
+    make('cmo_chart_01', 'Total Work Orders by Hotel -> Top Category', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its top maintenance categories.', 'COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO', {
+      chart: { type: 'pie' },
+      series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo-cat:${e.hotel_code}` })) }],
+      drilldown: { series: entries.map((e) => ({ id: `cmo-cat:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Top Categories`, data: topN(e.summary.category_map ?? {}, 10).map(([name, y]) => ({ name, y })) })) },
+    }),
+    make('cmo_chart_02', 'Total Work Orders by Hotel -> Job Status', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its status mix.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code WHERE type = MO', {
+      chart: { type: 'pie' },
+      series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo-status:${e.hotel_code}` })) }],
+      drilldown: { series: entries.map((e) => ({ id: `cmo-status:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Job Status`, data: Object.entries(e.summary.status_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).map(([name, y]) => ({ name, y: Number(y) })) })) },
+    }),
+    make('cmo_chart_03', 'Daily Work Order Trend by Hotel', 'Daily MO volume trend split by hotel for chain-level comparison.', 'COUNT(*) BY created_date, hotel_code WHERE type = MO', {
+      chart: { type: 'line' },
+      xAxis: { categories: allDates },
+      series: entries.map((e) => ({
+        type: 'line',
+        name: e.hotel_code,
+        data: allDates.map((date) => (e.raw_daily ?? []).find((d) => d.date === date)?.total ?? 0),
+      })),
+    }),
+    make('cmo_chart_04', 'Completion Rate by Hotel', 'Hotel-level completion comparison for maintenance execution health.', 'completed_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
+      chart: { type: 'column' },
+      xAxis: { categories: hotelCodes },
+      yAxis: { max: 100, title: { text: 'Completion %' } },
+      series: [{ type: 'column', name: 'Completion %', data: entries.map((e) => e.summary.total > 0 ? r1((e.summary.completed / e.summary.total) * 100) : 0) }],
+    }),
+    make('cmo_chart_05', 'Open Work Order Rate by Hotel', 'Compares open-order pressure by hotel.', 'open_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
+      chart: { type: 'column' },
+      xAxis: { categories: hotelCodes },
+      yAxis: { max: 100, title: { text: 'Open %' } },
+      series: [{ type: 'column', name: 'Open %', data: entries.map((e) => e.summary.total > 0 ? r1((Math.max(e.summary.total - e.summary.completed - e.summary.cancelled, 0) / e.summary.total) * 100) : 0) }],
+    }),
+    make('cmo_chart_06', 'Worldmap Maintenance by Hotel', 'Country-level map with hotel labels for chain-wide maintenance visibility.', 'Country Value = SUM(total_orders) GROUP BY country_code; Label = CONCAT(hotel_code, total_orders) list per country WHERE type = MO', {
+      chart: { type: 'map' },
+      mapNavigation: { enabled: true },
+      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
+      series: worldMapData ? [{
+        type: 'map',
+        name: 'Maintenance Orders',
+        mapData: worldMapData,
+        data: Array.from(
+          entries.reduce((acc, entry) => {
+            const code = String(entry.country_code ?? '').trim().toUpperCase();
+            if (!code) return acc;
+            const prev = acc.get(code) ?? { total: 0, hotels: [] as string[] };
+            prev.total += entry.summary.total ?? 0;
+            prev.hotels.push(`${entry.hotel_code} ${entry.summary.total ?? 0}`);
+            acc.set(code, prev);
+            return acc;
+          }, new Map<string, { total: number; hotels: string[] }>()),
+        ).map(([code, agg]) => ({
+          code,
+          value: agg.total,
+          custom: { hotels: agg.hotels.join(', '), countryCode: code },
+        })),
+        joinBy: ['iso-a2', 'code'],
+        borderColor: '#B9A88A',
+        nullColor: '#F4EEE4',
+        states: { hover: { color: '#C55A10' } },
+        dataLabels: {
+          enabled: true,
+          allowOverlap: false,
+          crop: false,
+          overflow: 'allow',
+          padding: 2,
+          useHTML: true,
+          formatter: function (this: { point?: { options?: { custom?: { hotels?: string } }; series?: { chart?: { fullscreen?: { isOpen?: boolean } } } } }) {
+            const hotels = this.point?.options?.custom?.hotels ?? '';
+            const isFullscreen = this.point?.series?.chart?.fullscreen?.isOpen === true;
+            const size = isFullscreen ? 16 : 8;
+            return `<span style="font-size:${size}px;line-height:1.2;font-weight:700">${hotels}</span>`;
+          },
+          style: {
+            fontSize: '8px',
+            fontWeight: '600',
+            textOutline: 'none',
+          },
+        },
+        tooltip: {
+          pointFormatter: function (this: Highcharts.Point) {
+            const custom = (this as unknown as { custom?: { countryCode?: string; hotels?: string } }).custom;
+            const value = (this as unknown as { value?: number }).value ?? 0;
+            return `<b>${custom?.countryCode ?? ''}</b><br/>Orders: ${value}<br/>${custom?.hotels ?? ''}`;
+          },
+        },
+      }] : [],
+    }),
+    make('cmo_chart_07', 'Guest Related Orders by Hotel', 'Compares guest-related and non-guest-related MO demand by hotel.', 'COUNT(*) guest_related vs non_guest_related BY hotel_code WHERE type = MO', {
+      chart: { type: 'bar' },
+      xAxis: { categories: hotelCodes },
+      plotOptions: { bar: { stacking: 'normal' } },
+      series: [
+        { type: 'bar', name: 'Guest Related', data: entries.map((e) => e.summary.vip_total ?? 0) },
+        { type: 'bar', name: 'Non Guest Related', data: entries.map((e) => Math.max((e.summary.total ?? 0) - (e.summary.vip_total ?? 0), 0)) },
+      ],
+    }),
+    make('cmo_chart_08', 'Severity Index by Hotel', 'Average severity comparison across hotels.', 'AVG(severity_weight) BY hotel_code WHERE type = MO', {
+      chart: { type: 'column' },
+      xAxis: { categories: hotelCodes },
+      series: [{ type: 'column', name: 'Severity Index', data: entries.map((e) => e.summary.total > 0 ? r2((e.summary.severity_sum ?? 0) / e.summary.total) : 0) }],
+    }),
+    make('cmo_chart_09', 'Top Categories by Hotel', 'Stacked category comparison across hotels for maintenance demand concentration.', 'COUNT(*) BY hotel_code, category WHERE type = MO', {
+      chart: { type: 'bar' },
+      xAxis: { categories: hotelCodes },
+      plotOptions: { bar: { stacking: 'normal' } },
+      series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
+    }),
+    make('cmo_chart_10', 'Category Concentration by Hotel', 'Shows how dominant the top category is at each hotel.', 'MAX(category_count) / total_orders * 100 BY hotel_code WHERE type = MO', {
+      chart: { type: 'bar' },
+      xAxis: { categories: hotelCodes },
+      yAxis: { max: 100, title: { text: 'Top Category Share %' } },
+      series: [{ type: 'bar', name: 'Top Category Share %', data: entries.map((e) => {
+        const top = topN(e.summary.category_map ?? {}, 1)[0]?.[1] ?? 0;
+        return e.summary.total > 0 ? r1((top / e.summary.total) * 100) : 0;
+      }) }],
+    }),
+    make('cmo_chart_11', 'Location Hotspots by Hotel', 'Heatmap of top maintenance hotspots by hotel using location or building.', 'COUNT(*) BY hotel_code, location WHERE type = MO', {
+      chart: { type: 'heatmap' },
+      xAxis: { categories: hotelCodes },
+      yAxis: { categories: allLocations, title: { text: null }, reversed: true },
+      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
+      series: [{ type: 'heatmap', name: 'Orders', data: hotelCodes.flatMap((hotel, xi) => allLocations.map((location, yi) => [xi, yi, entries.find((e) => e.hotel_code === hotel)?.summary.location_map?.[location] ?? 0])), dataLabels: { enabled: true } }],
+    }),
+    make('cmo_chart_12', 'Top Assets / Defects Across Chain', 'Treemap of the most frequent maintenance assets or defects across the chain.', 'COUNT(*) BY defect_or_asset WHERE type = MO', {
+      chart: { type: 'treemap' },
+      series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topItems.map(([name, value]) => ({ name, value })) }],
+    }),
+  ];
+}
+
+function CorpMoPerformanceTable({
+  entries,
+  dark,
+  index,
+  maintenanceType,
+}: {
+  entries: ChainEntry[];
+  dark: boolean;
+  index: number;
+  maintenanceType: MaintenanceType;
+}) {
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
+  const maxOrders = Math.max(1, ...entries.map((entry) => entry.summary.total ?? 0));
+  const rows = [...entries]
+    .map((entry) => {
+      const total = entry.summary.total ?? 0;
+      const completed = entry.summary.completed ?? 0;
+      const cancelled = entry.summary.cancelled ?? 0;
+      const open = Math.max(total - completed - cancelled, 0);
+      const topCategory = topN(entry.summary.category_map ?? {}, 1)[0] ?? ['-', 0];
+      const topItem = topN(entry.summary.item_map ?? {}, 1)[0] ?? ['-', 0];
+      const activeDays = Math.max(1, (entry.raw_daily ?? []).length);
+      const completion = total > 0 ? r1((completed / total) * 100) : 0;
+      const openRate = total > 0 ? r1((open / total) * 100) : 0;
+      const guestShare = total > 0 ? r1(((entry.summary.vip_total ?? 0) / total) * 100) : 0;
+      const severity = total > 0 ? r2((entry.summary.severity_sum ?? 0) / total) : 0;
+      const topCategoryShare = total > 0 ? r1((topCategory[1] / total) * 100) : 0;
+      const dailyAverage = r2(total / activeDays);
+      const volumeFactor = Math.min((total / maxOrders) * 20, 20);
+      const riskRank = (severity * 25) + (openRate * 0.8) + (guestShare * 0.5) + (topCategoryShare * 0.4) + volumeFactor;
+      return {
+        hotel: entry.hotel_code,
+        hotelLabel: entry.hotel_name ? `${entry.hotel_name} (${entry.hotel_code})` : entry.hotel_code,
+        orders: total,
+        completion,
+        openRate,
+        guestShare,
+        severity,
+        topCategoryShare,
+        topCategory: topCategory[0],
+        topItem: topItem[0],
+        dailyAverage,
+        riskRank: r2(riskRank),
+      };
+    })
+    .sort((a, b) => b.riskRank - a.riskRank || b.openRate - a.openRate || b.orders - a.orders);
+
+  const cardBg = tokens.chart.cardBg;
+  const cardBorder = tokens.chart.cardBorder;
+  const accent = tokens.chart.cardAccent;
+  const titleText = tokens.chart.titleText;
+  const codeBg = tokens.chart.codeBg;
+  const rule = tokens.chart.footerBorder;
+  const muted = tokens.chart.footerMuted;
+  const headBg = tokens.dashboard.toolbarBg;
+
+  return (
+    <div
+      className="chart-card flex flex-col overflow-hidden md:col-span-2"
+      style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: '12px' }}
+    >
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3 shrink-0">
+        <h3 className="font-serif font-semibold leading-snug flex items-center gap-2" style={{ fontSize: '0.9rem', color: titleText }}>
+          <span className="font-mono shrink-0" style={{ fontSize: '0.62rem', letterSpacing: '0.04em', fontWeight: 700, color: accent, background: codeBg, border: `1px solid ${accent}40`, padding: '1px 5px', lineHeight: 1.4 }}>
+            {String(index).padStart(2, '0')}
+          </span>
+          Hotel Performance
+        </h3>
+      </div>
+
+      <div className="px-4 pb-4 overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              {['Index', 'Hotel', maintenanceType === 'PM' ? 'Total PM Orders' : 'Total Orders', 'Completion %', 'Open %', 'Guest Related %', 'Severity Index', 'Top Category %', 'Top Category', 'Top Defect / Asset', 'Daily Avg', 'Risk Rank'].map((label) => (
+                <th
+                  key={label}
+                  className="text-left font-mono"
+                  style={{ fontSize: '0.62rem', letterSpacing: '0.06em', color: muted, background: headBg, borderBottom: `1px solid ${rule}`, padding: '8px 10px', whiteSpace: 'nowrap' }}
+                >
+                  {label.toUpperCase()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={row.hotel}>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: accent, fontSize: '0.75rem', fontWeight: 700 }}>{String(rowIndex + 1).padStart(2, '0')}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.78rem', fontWeight: 700 }}>{row.hotelLabel}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.orders.toLocaleString()}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.completion.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.openRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.guestShare.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.severity.toFixed(2)}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.topCategoryShare.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.topCategory}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.topItem}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.dailyAverage.toFixed(2)}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem', fontWeight: 700 }}>{row.riskRank.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-4 pt-2.5 pb-3.5 space-y-1 shrink-0" style={{ borderTop: `1px solid ${rule}` }}>
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Note</span>
+          {' '}Executive hotel-level {maintenanceType} performance table for cross-hotel {maintenanceType === 'PM' ? 'preventive maintenance' : 'maintenance'} benchmarking.
+        </p>
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Formula</span>
+          {' '}
+          <code className="font-mono" style={{ fontSize: '0.6rem', padding: '1px 5px', background: codeBg, color: accent, borderRadius: '2px' }}>
+            Risk Rank = (Severity Index x 25) + (Open % x 0.8) + (Guest Related % x 0.5) + (Top Category % x 0.4) + volume factor
+          </code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function maintenanceModeLabel(type: MaintenanceType): string {
   return type === 'PM' ? 'Preventive Maintenance' : 'Maintenance Order';
 }
 
-function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
+function orderChartDefs(defs: ChartDef[], orderedIds: string[]): ChartDef[] {
+  const rank = new Map(orderedIds.map((id, index) => [id, index]));
+  return [...defs].sort((a, b) => {
+    const aRank = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+    const bRank = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+    return aRank - bRank || a.id.localeCompare(b.id);
+  });
+}
+
+function buildMaintenanceKpis(summary: HotelSummary, type: MaintenanceType): KpiDef[] {
+  const total = summary.total ?? 0;
+  const completed = summary.completed ?? 0;
+  const cancelled = summary.cancelled ?? 0;
+  const open = Math.max(total - completed - cancelled, 0);
+  const completionRate = total > 0 ? (completed / total) * 100 : 0;
+  const cancellationRate = total > 0 ? (cancelled / total) * 100 : 0;
+  const openRate = total > 0 ? (open / total) * 100 : 0;
+  const severityAvg = total > 0 ? summary.severity_sum / total : 0;
+  const topCategoryShare = total > 0 ? ((topN(summary.category_map ?? {}, 1)[0]?.[1] ?? 0) / total) * 100 : 0;
+  const activeCategories = Object.keys(summary.category_map ?? {}).length;
+
+  if (type === 'PM') {
+    return [
+      { id: 'pm_total_orders', label: 'Total PM Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total preventive maintenance jobs.', formula: 'COUNT(*) WHERE type = PM' },
+      { id: 'pm_completion_rate', label: 'PM Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs completed.', formula: 'completed / total * 100 WHERE type = PM' },
+      { id: 'pm_open_rate', label: 'Open PM Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs still open.', formula: 'open / total * 100 WHERE type = PM' },
+      { id: 'pm_cancellation_rate', label: 'Cancelled PM Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of PM jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = PM' },
+      { id: 'pm_severity_index', label: 'PM Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = PM' },
+    ];
+  }
+
+  return [
+    { id: 'mo_total_orders', label: 'Total Work Orders', value: total, unit: 'orders', fmt: 'integer', available: true, note: 'Total maintenance orders.', formula: 'COUNT(*) WHERE type = MO' },
+    { id: 'mo_completion_rate', label: 'Completion Rate', value: r1(completionRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs completed.', formula: 'completed / total * 100 WHERE type = MO' },
+    { id: 'mo_open_rate', label: 'Open Work Order Rate', value: r1(openRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs still open.', formula: 'open / total * 100 WHERE type = MO' },
+    { id: 'mo_cancelled_rate', label: 'Cancelled Order Rate', value: r1(cancellationRate), unit: '%', fmt: 'pct1', available: true, note: 'Share of MO jobs cancelled.', formula: 'cancelled / total * 100 WHERE type = MO' },
+    { id: 'mo_severity_index', label: 'Severity Index', value: r2(severityAvg), unit: 'pts', fmt: 'decimal2', available: true, note: 'Average severity proxy from escalation/state.', formula: 'AVG(severity_weight) WHERE type = MO' },
+    { id: 'mo_guest_related', label: 'Guest Related Orders', value: summary.vip_total ?? 0, unit: 'orders', fmt: 'integer', available: true, note: 'Orders marked guest-related.', formula: 'COUNT(*) guest_related = true WHERE type = MO' },
+    { id: 'mo_peak_category', label: 'Top Category Share', value: r1(topCategoryShare), unit: '%', fmt: 'pct1', available: true, note: 'Share owned by the top MO category.', formula: 'MAX(category_count) / total * 100 WHERE type = MO' },
+    { id: 'mo_unique_categories', label: 'Active Categories', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct MO categories observed.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
+    { id: 'mo_pending_cases', label: 'Open Orders', value: open, unit: 'orders', fmt: 'integer', available: true, note: 'Open work orders awaiting completion.', formula: 'open = total - completed - cancelled WHERE type = MO' },
+    { id: 'mo_category_span', label: 'Category Coverage', value: activeCategories, unit: 'cats', fmt: 'integer', available: true, note: 'Distinct categories active in the selected period.', formula: 'COUNT(DISTINCT category) WHERE type = MO' },
+  ];
+}
+
+function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboardJson; chainEntries?: ChainEntry[] }) {
   const { t } = useI18n();
   const { theme: selectedTheme } = useTheme();
   const [dark, setDark] = useState(false);
+  const [worldMapData, setWorldMapData] = useState<Record<string, unknown> | null>(null);
   const [maintenanceType, setMaintenanceType] = useState<MaintenanceType>('MO');
+  const [dateFrom, setDateFrom] = useState(data.meta.date_range.min ?? '');
+  const [dateTo, setDateTo] = useState(data.meta.date_range.max ?? '');
+  const [filtered, setFiltered] = useState(false);
+  const [hotelFilter, setHotelFilter] = useState('ALL');
   const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
 
-  const scopedKpis = useMemo(
-    () => data.kpis_by_type?.[maintenanceType] ?? data.kpis,
+  useEffect(() => {
+    setDateFrom(data.meta.date_range.min ?? '');
+    setDateTo(data.meta.date_range.max ?? '');
+    setFiltered(false);
+    setHotelFilter('ALL');
+  }, [data.meta.date_range.max, data.meta.date_range.min, data.meta.generated_at, data.meta.hotel_code, maintenanceType]);
+
+  const scopedRawDaily = useMemo(
+    () => data.raw_daily_by_type?.[maintenanceType] ?? data.raw_daily,
     [data, maintenanceType],
   );
   const scopedCharts = useMemo(
-    () => data.charts_by_type?.[maintenanceType] ?? data.charts,
+    () => orderChartDefs(data.charts_by_type?.[maintenanceType] ?? data.charts, HOTEL_MO_CHART_DISPLAY_ORDER),
     [data, maintenanceType],
   );
-  const scopedSummary = useMemo(
+  const baseScopedSummary = useMemo(
     () => data.summary_by_type?.[maintenanceType] ?? data.summary,
     [data, maintenanceType],
   );
-
+  const fd = useMemo<FilteredData | null>(() => {
+    if (!filtered || !dateFrom || !dateTo) return null;
+    return reAggregate(scopedRawDaily, dateFrom, dateTo);
+  }, [filtered, dateFrom, dateTo, scopedRawDaily]);
+  const scopedSummary = useMemo(
+    () => (fd ? summaryFromFilteredData(fd, baseScopedSummary) : baseScopedSummary),
+    [fd, baseScopedSummary],
+  );
+  const scopedKpis = useMemo(
+    () => (fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis)),
+    [fd, scopedSummary, maintenanceType, data],
+  );
   const bg = themeTokens.dashboard.bg;
   const toolbarBg = themeTokens.dashboard.toolbarBg;
   const toolbarBd = themeTokens.dashboard.toolbarBorder;
@@ -1550,6 +1976,156 @@ function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
   const accentAlt = themeTokens.accentAlt;
   const footerText = themeTokens.dashboard.footerText;
   const footerBd = themeTokens.dashboard.footerBorder;
+  const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
+  const isMo = maintenanceType === 'MO';
+  const corpMaintenanceLabel = maintenanceModeLabel(maintenanceType);
+  const contextTitle = isCorp
+    ? `${(data.meta.chain_code ?? 'CORP').toUpperCase()} · ${maintenanceType}`
+    : data.meta.hotel_name
+    ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${maintenanceType}${data.meta.country_code ? ` (${data.meta.country_code})` : ''}`
+    : data.meta.source_name;
+
+  useEffect(() => {
+    if (!isCorp) return;
+    let cancelled = false;
+    fetch('https://code.highcharts.com/mapdata/custom/world.geo.json')
+      .then((r) => r.json())
+      .then((json) => { if (!cancelled) setWorldMapData(json as Record<string, unknown>); })
+      .catch(() => { if (!cancelled) setWorldMapData(null); });
+    return () => { cancelled = true; };
+  }, [isCorp, isMo]);
+
+  const applyFilter = useCallback(() => {
+    if (dateFrom && dateTo && dateFrom <= dateTo) setFiltered(true);
+  }, [dateFrom, dateTo]);
+
+  const quickRangeOptions = useMemo(() => ([
+    { key: 'ALL', label: 'ALL' },
+    { key: '1D', label: '1D' },
+    { key: '1W', label: '1W' },
+    { key: '2W', label: '2W' },
+    { key: '1M', label: '1M' },
+    { key: '2M', label: '2M' },
+    { key: '3M', label: '3M' },
+    { key: '6M', label: '6M' },
+    { key: '1Y', label: '1Y' },
+  ]), []);
+
+  const applyQuickRange = useCallback((preset: string) => {
+    const min = data.meta.date_range.min ?? '';
+    const max = data.meta.date_range.max ?? '';
+    if (!min || !max) return;
+    if (preset === 'ALL') {
+      setDateFrom(min);
+      setDateTo(max);
+      setFiltered(false);
+      return;
+    }
+    const end = new Date(max);
+    if (Number.isNaN(end.getTime())) return;
+    const start = new Date(end);
+    const minusDays = (d: Date, days: number) => {
+      const x = new Date(d);
+      x.setDate(x.getDate() - days);
+      return x;
+    };
+    const minusMonths = (d: Date, months: number) => {
+      const x = new Date(d);
+      x.setMonth(x.getMonth() - months);
+      return x;
+    };
+    if (preset === '1D') start.setTime(minusDays(end, 0).getTime());
+    if (preset === '1W') start.setTime(minusDays(end, 6).getTime());
+    if (preset === '2W') start.setTime(minusDays(end, 13).getTime());
+    if (preset === '1M') start.setTime(minusMonths(end, 1).getTime());
+    if (preset === '2M') start.setTime(minusMonths(end, 2).getTime());
+    if (preset === '3M') start.setTime(minusMonths(end, 3).getTime());
+    if (preset === '6M') start.setTime(minusMonths(end, 6).getTime());
+    if (preset === '1Y') start.setTime(minusMonths(end, 12).getTime());
+    const minDate = new Date(min);
+    if (!Number.isNaN(minDate.getTime()) && start < minDate) start.setTime(minDate.getTime());
+    const toIsoDate = (d: Date) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+    setDateFrom(toIsoDate(start));
+    setDateTo(max);
+    setFiltered(true);
+  }, [data.meta.date_range.max, data.meta.date_range.min]);
+
+  const chartOpts = useCallback((def: ChartDef): { override?: Highcharts.Options; fullPeriod: boolean } => {
+    if (isCorp) return { fullPeriod: false };
+    if (!fd) return { fullPeriod: filtered };
+    const storedOptions = (def.options ?? {}) as Record<string, unknown>;
+    if (def.id === 'chart_03' && storedOptions.drilldown) return { fullPeriod: true };
+    const override = buildFilteredOptions(def, fd);
+    return override ? { override, fullPeriod: false } : { fullPeriod: true };
+  }, [fd, filtered, isCorp]);
+
+  const activeCorpEntries = useMemo(() => {
+    if (!isCorp) return [];
+    const scopedEntries = hotelFilter === 'ALL'
+      ? chainEntries
+      : chainEntries.filter((entry) => entry.hotel_code === hotelFilter);
+    return scopedEntries.map((entry) => {
+      const baseSummary = entry.summary_by_type?.[maintenanceType] ?? entry.summary;
+      const rawDaily = entry.raw_daily_by_type?.[maintenanceType] ?? entry.raw_daily ?? [];
+      if (!filtered || !dateFrom || !dateTo) {
+        return { ...entry, summary: baseSummary, raw_daily: rawDaily };
+      }
+      const scopedFd = reAggregate(rawDaily, dateFrom, dateTo);
+      const scopedSummary = summaryFromFilteredData(scopedFd, baseSummary);
+      if (baseSummary.location_map) scopedSummary.location_map = baseSummary.location_map;
+      return { ...entry, summary: scopedSummary, raw_daily: scopedFd.days };
+    });
+  }, [isCorp, chainEntries, filtered, dateFrom, dateTo, maintenanceType, hotelFilter]);
+
+  const corpActiveSummary = useMemo(() => {
+    if (!isCorp) return scopedSummary;
+    return mergeChainSummaries(activeCorpEntries);
+  }, [isCorp, scopedSummary, activeCorpEntries]);
+
+  const corpHotelOptions = useMemo(() => {
+    if (!isCorp) return [] as Array<{ value: string; label: string }>;
+    return chainEntries
+      .map((entry) => ({
+        value: entry.hotel_code,
+        label: entry.hotel_name ? `${entry.hotel_code} · ${entry.hotel_name}` : entry.hotel_code,
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [isCorp, chainEntries]);
+
+  const corpMoCharts = useMemo<ChartDef[]>(() => {
+    if (!isCorp) return [];
+    return orderChartDefs(buildCorpMoCharts(activeCorpEntries, worldMapData), CORP_MO_CHART_DISPLAY_ORDER).map((def) => ({
+      ...def,
+      title: def.title.replace(/\bWork Orders\b/g, corpMaintenanceLabel).replace(/\bMaintenance\b/g, corpMaintenanceLabel),
+      note: def.note.replace(/\bmaintenance\b/g, corpMaintenanceLabel.toLowerCase()),
+      formula: def.formula.replace(/type = MO/g, `type = ${maintenanceType}`),
+    }));
+  }, [isCorp, activeCorpEntries, worldMapData, corpMaintenanceLabel, maintenanceType]);
+
+  const corpKpis = useMemo(() => {
+    if (!isCorp) return null;
+    return buildCorpMoKpis(corpActiveSummary).map((kpi) => ({
+      ...kpi,
+      label: maintenanceType === 'PM'
+        ? kpi.label
+            .replace('Work Orders', 'PM Orders')
+            .replace('Open Work Order Rate', 'Open PM Order Rate')
+            .replace('Guest Related Orders', 'Guest Related PM Orders')
+        : kpi.label,
+      note: maintenanceType === 'PM'
+        ? kpi.note
+            .replace(/\bmaintenance orders\b/gi, 'preventive maintenance orders')
+            .replace(/\bmaintenance\b/gi, 'preventive maintenance')
+            .replace(/\bwork orders\b/gi, 'PM orders')
+        : kpi.note,
+      formula: kpi.formula.replace(/type = MO/g, `type = ${maintenanceType}`),
+    }));
+  }, [isCorp, corpActiveSummary, maintenanceType]);
 
   let chartSequence = 0;
   const nextChartIndex = () => {
@@ -1560,23 +2136,73 @@ function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
   return (
     <div className="grain transition-colors print:bg-white" style={{ background: bg, minHeight: '100vh' }} data-print-root>
       <div
-        className="sticky top-0 z-20 px-6 py-3 flex flex-wrap items-center gap-3 print-hidden"
+        className="sticky top-0 z-20 px-6 py-3 flex flex-col gap-3 print-hidden"
         style={{ background: toolbarBg, borderBottom: `1px solid ${toolbarBd}` }}
       >
-        <div className="flex-1 min-w-0">
-          <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>
-            {data.meta.hotel_name
-              ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${maintenanceType}`
-              : `${data.meta.source_name} · ${maintenanceType}`}
-          </h3>
+        <div className="min-w-0">
+          <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>{contextTitle}</h3>
           <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
-            {scopedSummary.total.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
-            {' · '}{maintenanceModeLabel(maintenanceType)}
-            {' · '}{data.meta.date_range.min ?? 'N/A'} → {data.meta.date_range.max ?? 'N/A'}
+            {((isCorp ? corpActiveSummary.total : scopedSummary.total) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
+            {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
+            {!isCorp && <>{' · '}{maintenanceModeLabel(maintenanceType)}</>}
+            {isCorp && <> {' · '}Corp {maintenanceModeLabel(maintenanceType).toLowerCase()} view</>}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full">
+          <CalendarDays size={13} style={{ color: accent }} />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => { setDateFrom(e.target.value); setFiltered(false); }}
+            className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1"
+            style={{ background: inputBg, border: `1px solid ${inputBd}`, color: inputText, '--tw-ring-color': accent } as React.CSSProperties}
+          />
+          <span className="font-mono text-[0.7rem]" style={{ color: metaSub }}>→</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => { setDateTo(e.target.value); setFiltered(false); }}
+            className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1"
+            style={{ background: inputBg, border: `1px solid ${inputBd}`, color: inputText, '--tw-ring-color': accent } as React.CSSProperties}
+          />
+          <button
+            type="button"
+            onClick={applyFilter}
+            className="px-3 py-1.5 font-mono uppercase"
+            style={{ fontSize: '0.68rem', letterSpacing: '0.08em', background: accent, color: '#f8f7f2' }}
+          >
+            {t('dashboard_ui.apply', 'APPLY')}
+          </button>
+          {quickRangeOptions.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => applyQuickRange(r.key)}
+              className="px-2.5 py-1.5 font-mono uppercase"
+              style={{ fontSize: '0.66rem', border: `1px solid ${inputBd}`, color: inputText, background: inputBg }}
+            >
+              {r.label}
+            </button>
+          ))}
+          {isCorp && (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="font-mono text-[0.68rem]" style={{ color: metaSub, letterSpacing: '0.05em' }}>
+                {t('dashboard_ui.hotel_filter', 'HOTEL')}
+              </span>
+              <select
+                value={hotelFilter}
+                onChange={(e) => setHotelFilter(e.target.value)}
+                className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1 w-[240px] min-w-[240px] max-w-[240px]"
+                style={{ background: inputBg, border: `1px solid ${inputBd}`, color: inputText, '--tw-ring-color': accent } as React.CSSProperties}
+              >
+                <option value="ALL">ALL</option>
+                {corpHotelOptions.map((hotel) => (
+                  <option key={hotel.value} value={hotel.value}>{hotel.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div
             className="inline-flex items-center rounded-md overflow-hidden"
             style={{ border: `1px solid ${inputBd}`, background: inputBg }}
@@ -1604,11 +2230,11 @@ function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="h-8 w-8 grid place-items-center transition-opacity hover:opacity-80"
-            style={{ border: `1px solid ${inputBd}`, background: inputBg, color: inputText }}
-            aria-label="Print dashboard"
+            className="flex items-center gap-1.5 px-3 py-1.5 font-mono uppercase transition-opacity hover:opacity-80"
+            style={{ fontSize: '0.68rem', letterSpacing: '0.08em', border: `1px solid ${themeTokens.accentAlt}55`, background: inputBg, color: themeTokens.accentAlt }}
+            aria-label="Export PDF"
           >
-            <Printer size={14} />
+            <Printer size={12} /> {t('dashboard_ui.export_pdf', 'Export PDF').toUpperCase()}
           </button>
           <button
             type="button"
@@ -1624,18 +2250,21 @@ function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
 
       <div className="px-6 py-5 space-y-8">
         <section>
-          <SectionHead label={`${maintenanceType} KPI`} dark={dark} />
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-            {scopedKpis.map((kpi) => (
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+            {(corpKpis ?? scopedKpis).map((kpi) => (
               <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
             ))}
           </div>
         </section>
 
         <section>
-          <SectionHead label={`${maintenanceType} Charts`} dark={dark} />
-          <div className="chart-grid mt-5 grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {scopedCharts.map((def) => (
+          {!isCorp && <SectionHead label={`${maintenanceType} Charts`} dark={dark} />}
+          {isCorp && <SectionHead label={`Corp ${maintenanceType} Benchmark Charts`} dark={dark} />}
+          <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(isCorp ? corpMoCharts : scopedCharts).map((def) => (
+              (() => {
+                const { override, fullPeriod } = chartOpts(def);
+                return (
               <HcChart
                 key={`${maintenanceType}-${def.id}`}
                 def={{
@@ -1645,10 +2274,21 @@ function MaintenanceDashboardView({ data }: { data: MoDashboardJson }) {
                   formula: def.formula || `Source rows filtered by type = ${maintenanceType}`,
                 }}
                 dark={dark}
-                fullPeriod={false}
+                overrideOptions={override}
+                fullPeriod={fullPeriod}
                 index={nextChartIndex()}
               />
+                );
+              })()
             ))}
+            {isCorp && (
+              <CorpMoPerformanceTable
+                entries={activeCorpEntries}
+                dark={dark}
+                index={nextChartIndex()}
+                maintenanceType={maintenanceType}
+              />
+            )}
           </div>
         </section>
 
@@ -1686,6 +2326,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   const [dateFrom, setDateFrom] = useState(data.meta.date_range.min ?? '');
   const [dateTo,   setDateTo]   = useState(data.meta.date_range.max ?? '');
   const [filtered, setFiltered] = useState(false);
+  const [hotelFilter, setHotelFilter] = useState('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [deptScopedSummary, setDeptScopedSummary] = useState<DeptScopedSummary | null>(null);
   const dashboardIdentity = useMemo(
@@ -1710,19 +2351,20 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     setDateFrom(data.meta.date_range.min ?? '');
     setDateTo(data.meta.date_range.max ?? '');
     setFiltered(false);
+    setHotelFilter('ALL');
     setDepartmentFilter('ALL');
     setDeptScopedSummary(null);
   }, [dashboardIdentity, data.meta.date_range.min, data.meta.date_range.max]);
 
   useEffect(() => {
-    if (!isCorp || isJo) return;
+    if (!isCorp) return;
     let cancelled = false;
     fetch('https://code.highcharts.com/mapdata/custom/world.geo.json')
       .then((r) => r.json())
       .then((json) => { if (!cancelled) setWorldMapData(json as Record<string, unknown>); })
       .catch(() => { if (!cancelled) setWorldMapData(null); });
     return () => { cancelled = true; };
-  }, [isCorp, isJo]);
+  }, [isCorp]);
 
   // Reflow Highcharts before print so SVGs resize to the mm-based CSS dimensions
   useEffect(() => {
@@ -1805,6 +2447,16 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     return Object.keys(data.summary.dept_map ?? {}).sort((a, b) => a.localeCompare(b));
   }, [isCorp, isJo, data.summary.dept_map]);
 
+  const corpHotelOptions = useMemo(() => {
+    if (!isCorp) return [] as Array<{ value: string; label: string }>;
+    return chainEntries
+      .map((entry) => ({
+        value: entry.hotel_code,
+        label: entry.hotel_name ? `${entry.hotel_code} · ${entry.hotel_name}` : entry.hotel_code,
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [isCorp, chainEntries]);
+
   const fd = useMemo<FilteredData | null>(() => {
     if (!filtered || !dateFrom || !dateTo) return null;
     return reAggregate(data.raw_daily, dateFrom, dateTo);
@@ -1845,8 +2497,12 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   }, [isBuilder, isCorp, isJo, departmentFilter, data.meta, data.meta.chain_code, data.meta.hotel_code, dateFrom, dateTo]);
 
   const activeChainEntries = useMemo<ChainEntry[]>(() => {
-    if (!(isCorp && filtered && dateFrom && dateTo)) return chainEntries;
-    return chainEntries.map((entry) => {
+    if (!isCorp) return chainEntries;
+    const scopedEntries = hotelFilter === 'ALL'
+      ? chainEntries
+      : chainEntries.filter((entry) => entry.hotel_code === hotelFilter);
+    if (!(filtered && dateFrom && dateTo)) return scopedEntries;
+    return scopedEntries.map((entry) => {
       const daily = entry.raw_daily ?? [];
       const efd = reAggregate(daily, dateFrom, dateTo);
       return {
@@ -1854,7 +2510,12 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         summary: summaryFromFilteredData(efd, entry.summary),
       };
     });
-  }, [isCorp, isJo, filtered, dateFrom, dateTo, chainEntries]);
+  }, [isCorp, filtered, dateFrom, dateTo, chainEntries, hotelFilter]);
+
+  const corpActiveSummary = useMemo(() => {
+    if (!isCorp) return data.summary;
+    return mergeChainSummaries(activeChainEntries);
+  }, [isCorp, data.summary, activeChainEntries]);
 
   const kpis = useMemo(() => {
     if (!fd) return data.kpis;
@@ -1864,7 +2525,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   const corpImKpis = useMemo<KpiDef[] | null>(() => {
     if (!isCorp || isJo) return null;
 
-    const activeSummary = filtered ? mergeChainSummaries(activeChainEntries) : data.summary;
+    const activeSummary = corpActiveSummary;
     const total = activeSummary.total ?? 0;
     const completed = activeSummary.completed ?? 0;
     const pending = activeSummary.pending ?? 0;
@@ -1955,7 +2616,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       make('kpi_08', 'Repeat Guest Complaint Rate', r1(repeatRate), 'pct1', 'Recurrence pressure indicator tied to loyalty/retention risk. Benchmark: Good <= 15%, Watch 15-25%, Bad > 25%.', 'Repeat Complaint Cases / Total Cases * 100'),
       make('kpi_10', 'Root Cause Concentration', r1(rootCauseConcentration), 'pct1', 'Concentration of incident volume in top 5 categories; higher can indicate systemic concentration risk. Benchmark: Good <= 45%, Watch 45-60%, Bad > 60%.', 'Top 5 Incident Categories Cases / Total Cases * 100'),
     ];
-  }, [isCorp, isJo, data.summary, data.raw_daily, activeChainEntries, filtered, fd?.weekMap]);
+  }, [isCorp, isJo, corpActiveSummary, data.raw_daily, activeChainEntries, fd?.weekMap]);
 
   const hotelImKpis = useMemo<KpiDef[] | null>(() => {
     if (isCorp || isJo) return null;
@@ -2289,8 +2950,8 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
   const corpJoCharts = useMemo<ChartDef[]>(() => {
     if (!isCorp || !isJo) return [];
-    return buildCorpJoCharts(activeChainEntries);
-  }, [isCorp, isJo, activeChainEntries]);
+    return buildCorpJoCharts(activeChainEntries, worldMapData);
+  }, [isCorp, isJo, activeChainEntries, worldMapData]);
 
   const imHotelOverTimeCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
@@ -2793,24 +3454,24 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div
-        className="sticky top-0 z-20 px-6 py-3 flex flex-wrap items-center gap-3 print-hidden"
+        className="sticky top-0 z-20 px-6 py-3 flex flex-col gap-3 print-hidden"
         style={{ background: toolbarBg, borderBottom: `1px solid ${toolbarBd}` }}
       >
         {/* Meta */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>
-              {contextTitle}
-            </h3>
-            <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
-            {data.meta.total_records.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
+        <div className="min-w-0">
+          <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>
+            {contextTitle}
+          </h3>
+          <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
+            {((isCorp ? corpActiveSummary.total : data.meta.total_records) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
             {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
-            {hasChain && ` · ${chainEntries.length} hotels in chain`}
+            {hasChain && ` · ${activeChainEntries.length} hotels in chain`}
             {isCorp && ` · Corp comparison view`}
           </p>
         </div>
 
-        {/* Date range filter */}
-        <div className="flex items-center gap-2">
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-2 w-full">
           <CalendarDays size={13} style={{ color: teal }} />
           <input
             type="date" value={dateFrom}
@@ -2847,8 +3508,6 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
               <X size={11} /> {t('dashboard_ui.filter_clear', 'Clear').toUpperCase()}
             </button>
           )}
-        </div>
-        <div className="flex items-center gap-1.5">
           {quickRangeOptions.map((r) => (
             <button
               key={r.key}
@@ -2866,32 +3525,51 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
               {r.label}
             </button>
           ))}
-        </div>
 
-        {!isCorp && !isJo && (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono text-[0.68rem]" style={{ color: metaSub, letterSpacing: '0.05em' }}>
-              {t('dashboard_ui.department_filter', 'DEPARTMENT')}
-            </span>
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1 w-[220px] min-w-[220px] max-w-[220px]"
-              style={{
-                background: inputBg, border: `1px solid ${inputBd}`,
-                color: inputText, '--tw-ring-color': teal,
-              } as React.CSSProperties}
-            >
-              <option value="ALL">ALL</option>
-              {hotelDeptOptions.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
-        )}
+          {isCorp && (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="font-mono text-[0.68rem]" style={{ color: metaSub, letterSpacing: '0.05em' }}>
+                {t('dashboard_ui.hotel_filter', 'HOTEL')}
+              </span>
+              <select
+                value={hotelFilter}
+                onChange={(e) => setHotelFilter(e.target.value)}
+                className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1 w-[240px] min-w-[240px] max-w-[240px]"
+                style={{
+                  background: inputBg, border: `1px solid ${inputBd}`,
+                  color: inputText, '--tw-ring-color': teal,
+                } as React.CSSProperties}
+              >
+                <option value="ALL">ALL</option>
+                {corpHotelOptions.map((hotel) => (
+                  <option key={hotel.value} value={hotel.value}>{hotel.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
+          {!isCorp && !isJo && (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="font-mono text-[0.68rem]" style={{ color: metaSub, letterSpacing: '0.05em' }}>
+                {t('dashboard_ui.department_filter', 'DEPARTMENT')}
+              </span>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="font-mono text-[0.68rem] px-2 py-1.5 outline-none focus:ring-1 w-[220px] min-w-[220px] max-w-[220px]"
+                style={{
+                  background: inputBg, border: `1px solid ${inputBd}`,
+                  color: inputText, '--tw-ring-color': teal,
+                } as React.CSSProperties}
+              >
+                <option value="ALL">ALL</option>
+                {hotelDeptOptions.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="button" onClick={() => window.print()}
             className="flex items-center gap-1.5 font-mono px-3 py-1.5 transition-opacity hover:opacity-75"
@@ -3155,7 +3833,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 export function DashboardClient({ data, chainEntries = [] }: { data: DashboardJson; chainEntries?: ChainEntry[] }) {
   const isMo = data.meta.schema === 'mo-v1';
   if (isMo) {
-    return <MaintenanceDashboardView data={data as MoDashboardJson} />;
+    return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} />;
   }
   return <StandardDashboardClient data={data as ImDashboardJson} chainEntries={chainEntries} />;
 }

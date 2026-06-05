@@ -62,6 +62,8 @@ export interface HotelSummary {
   week_map:      Record<string, number>;
   week_source_map: Record<string, Record<string, number>>;
   dept_source_map: Record<string, Record<string, number>>;
+  status_dept_map?: Record<string, Record<string, number>>;
+  status_created_dept_map?: Record<string, Record<string, number>>;
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;

@@ -83,13 +83,13 @@ export async function GET() {
           .filter(([, { mods }]) => mods.has(moduleCode))
           .sort(([a], [b]) => a.localeCompare(b));
 
-        if (moduleCode !== 'mo' && hotelsForModule.length >= 2) {
+        if (hotelsForModule.length >= 2) {
           items.push({
             module: moduleCode,
             hotel_code: 'CORP',
             hotel_name: 'Corp',
             country_code: '',
-            label: moduleCode === 'im' ? 'Corp · IM' : 'Corp · JO',
+            label: moduleCode === 'im' ? 'Corp · IM' : moduleCode === 'jo' ? 'Corp · JO' : 'Corp · MO',
             href: `/dashboard?hotel=corp&chain=${encodeURIComponent(chain)}&module=${moduleCode}`,
             scope: 'corp',
           });
@@ -101,7 +101,7 @@ export async function GET() {
             hotel_code,
             hotel_name,
             country_code,
-            label: moduleCode === 'im' ? 'IM Dashboard' : moduleCode === 'jo' ? 'JO Dashboard' : 'MO Dashboard',
+            label: `${hotel_code} · ${moduleCode.toUpperCase()}`,
             href: moduleCode === 'im'
               ? `/dashboard?hotel=${hotel_code}`
               : `/dashboard?module=${moduleCode}&hotel=${hotel_code}`,

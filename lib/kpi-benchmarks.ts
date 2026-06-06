@@ -44,10 +44,10 @@ export function benchmarkStatus(benchmark: KpiBenchmark | undefined, value: numb
 
 export function benchmarkEmoji(benchmark: KpiBenchmark | undefined, value: number | null, available: boolean): string {
   const status = benchmarkStatus(benchmark, value, available);
-  if (status === 'good') return '🟢';
-  if (status === 'watch') return '🟡';
-  if (status === 'bad') return '🔴';
-  return '⚪';
+  if (status === 'good') return 'GOOD';
+  if (status === 'watch') return 'NEEDS IMPROVEMENT';
+  if (status === 'bad') return 'BAD';
+  return 'INFO';
 }
 
 export function benchmarkLines(benchmark: KpiBenchmark | undefined): string[] {

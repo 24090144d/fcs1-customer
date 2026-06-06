@@ -17,7 +17,7 @@ function initHighchartsModule(mod: unknown) {
 
 type Generated = {
   organization_id: string;
-  module_code: 'im' | 'jo';
+  module_code: 'im' | 'jo' | 'co';
   title: string;
   chart_type: string;
   query_spec_json: Record<string, unknown>;
@@ -51,7 +51,7 @@ type ActivityItem = { id: string; ts: number; message: string; type: 'success' |
 
 type QuickPattern = {
   label: string;
-  moduleCode: 'im' | 'jo';
+  moduleCode: 'im' | 'jo' | 'co';
   prompt: string;
 };
 
@@ -85,7 +85,7 @@ const IM_FIELD_LEGEND: Array<{ field: string; aliases: string[] }> = [
   { field: 'visits', aliases: ['visits', 'visit count'] },
   { field: 'created_by', aliases: ['created by', 'creator', 'owner'] },
   { field: 'chain_code', aliases: ['chain code', 'brand code', 'chain'] },
-  { field: 'module_code', aliases: ['module code', 'module', 'im', 'jo'] },
+  { field: 'module_code', aliases: ['module code', 'module', 'im', 'jo', 'co'] },
   { field: 'created_date', aliases: ['created date', 'created datetime', 'creation date'] },
   { field: 'incident_datetime', aliases: ['incident datetime', 'incident date', 'incident time', 'incident timestamp'] },
   { field: 'investigation_1', aliases: ['investigation 1', 'investigation first'] },
@@ -307,7 +307,7 @@ export default function PlaygroundClient() {
   const [selectedKpiTemplate, setSelectedKpiTemplate] = useState('');
   const [selectedChartTemplate, setSelectedChartTemplate] = useState('');
   const [prompt, setPrompt] = useState('Show monthly incidents by severity');
-  const [moduleCode, setModuleCode] = useState<'im' | 'jo'>('im');
+  const [moduleCode, setModuleCode] = useState<'im' | 'jo' | 'co'>('im');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -905,7 +905,7 @@ export default function PlaygroundClient() {
           <select
             className="border px-2 py-1 rounded"
             value={moduleCode}
-            onChange={(e) => setModuleCode(e.target.value as 'im' | 'jo')}
+            onChange={(e) => setModuleCode(e.target.value as 'im' | 'jo' | 'co')}
           >
             <option value="im">IM</option>
             <option value="jo">JO</option>

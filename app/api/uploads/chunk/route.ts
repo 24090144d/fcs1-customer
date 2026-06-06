@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   // ── Resolve upload job ─────────────────────────────────────────────────────
 
-  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo' };
+  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo' | 'co' };
   const { data: job, error: jobError } = await supabase
     .from('upload_jobs')
     .select('organization_id, module_code')
@@ -72,7 +72,9 @@ export async function POST(req: NextRequest) {
     ? 'im_staging_rows'
     : job.module_code === 'jo'
       ? 'jo_staging_rows'
-      : 'mo_staging_rows';
+      : job.module_code === 'mo'
+        ? 'mo_staging_rows'
+        : 'co_staging_rows';
 
   // ── Empty-row fast path (still finalizes job if last chunk) ───────────────
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings } from 'lucide-react';
+import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
 import { APP_VERSION } from '@/lib/version';
@@ -31,6 +31,10 @@ function SectionLabel({ label, T: t }: { label: string; T: { dim: string; rule: 
       <span aria-hidden className="flex-1" style={{ borderTop: `1px dashed ${t.rule}`, opacity: 0.8 }} />
     </div>
   );
+}
+
+function moduleLabel(moduleCode: string): string {
+  return moduleCode === 'co' ? 'CO ACSR' : moduleCode.toUpperCase();
 }
 
 // ── Nav item — 4px left border accent (mirrors KPI / chart card spec) ─────────
@@ -351,7 +355,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                         (item.hotel_code !== 'CORP' && item.hotel_code === currentHotel)
                       )
             );
-            const moduleGroups = (['im', 'jo', 'mo'] as const).map((m) => ({
+            const moduleGroups = (['im', 'jo', 'mo', 'co'] as const).map((m) => ({
               module: m,
               entries: items.filter((it) => it.module === m),
             })).filter((g) => g.entries.length > 0);
@@ -402,7 +406,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                               className="font-mono uppercase"
                               style={{ fontSize: '0.54rem', letterSpacing: '0.16em', color: t.dim }}
                             >
-                              {group.module.toUpperCase()}
+                              {moduleLabel(group.module)}
                             </span>
                           </div>
                         )}
@@ -431,21 +435,23 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                                 <BarChart2 size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : item.module === 'mo' ? (
                                 <Wrench size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                              ) : item.module === 'co' ? (
+                                <Sparkles size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : (
                                 <LineChart size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               )}
                               {!collapsed && (
                                 <span className="truncate">
                                   {isCorp ? (
-                                    <span style={{ fontWeight: 700, color: active ? '#F4C27A' : '#DDA15E' }}>
-                                      Corp · {item.module.toUpperCase()}
+                                      <span style={{ fontWeight: 700, color: active ? '#F4C27A' : '#DDA15E' }}>
+                                      Corp · {moduleLabel(item.module)}
                                     </span>
                                   ) : (
                                     <>
                                       <span style={{ fontWeight: 600 }}>{item.hotel_code}</span>
                                       <span style={{ opacity: 0.55 }}>
                                         {' · '}
-                                        {item.module.toUpperCase()}
+                                        {moduleLabel(item.module)}
                                       </span>
                                     </>
                                   )}

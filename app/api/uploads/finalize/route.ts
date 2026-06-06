@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
+import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, CoDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
+import type { CoRow } from '@/types/csv';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { deriveMoType } from './mo-helpers.mjs';
+import { buildCoRow } from '@/lib/csv/coMapping';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,8 +30,8 @@ function parseFilename(fileName: string): { chainCode: string; hotelCode: string
   const base = fileName.replace(/\.csv$/i, '');
   const parts = base.split('-');
   let moduleIdx = -1;
-  for (let i = parts.length - 3; i >= 2; i--) {
-    if (/^(im|jo|mo)$/i.test(parts[i])) { moduleIdx = i; break; }
+  for (let i = 2; i < parts.length - 1; i++) {
+    if (/^(im|jo|mo|co)$/i.test(parts[i])) { moduleIdx = i; break; }
   }
   return {
     chainCode:   parts[0]?.toUpperCase() ?? '',
@@ -156,6 +158,82 @@ function isTruthyLike(val: unknown): boolean {
   return ['true', 'yes', 'y', '1', 'pass', 'passed'].includes(normalized);
 }
 
+function mapCoSeverity(row: CoRow): string {
+  if (row.priority_normalized === 'High' || row.reclean_flag) return 'Critical';
+  if (row.priority_normalized === 'Medium') return 'High';
+  if (row.priority_normalized === 'Low') return 'Medium';
+  return row.is_completed ? 'Low' : 'Medium';
+}
+
+function normaliseCoForIm(row: CoRow): Record<string, unknown> {
+  const location = [row.building, row.floor].filter(Boolean).join(' / ') || row.room_type || row.room_no || null;
+  return {
+    incident_case: row.cleaning_order_no,
+    incident_status: row.status_normalized,
+    incident_category: row.task_type ?? row.cleaning_type ?? row.room_type ?? 'Uncategorized',
+    incident_item_name: row.room_no ?? row.cleaning_order_no,
+    incident_description: row.remarks,
+    incident_location: location,
+    severity: mapCoSeverity(row),
+    subject: row.room_type ?? row.task_type,
+    source_of_complaint: row.stay_status,
+    created_date: row.created_date,
+    incident_datetime: row.start_time ?? row.completed_time ?? row.created_date,
+    guest_name: row.attendant,
+    room_no: row.room_no,
+    profile_type: row.stay_status,
+    vip_code: row.reclean_flag ? 'Y' : null,
+    company_name: row.department,
+    booking_source: row.cleaning_type,
+    created_by: row.created_by,
+    department: row.department ?? row.supervisor,
+  };
+}
+
+function extractCoOrderNumber(orderNo: string | null | undefined): number | null {
+  const text = String(orderNo ?? '').trim();
+  if (!text) return null;
+  const match = text.match(/(\d+)/);
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isFinite(number) ? number : null;
+}
+
+function rebuildCoRowKey(row: CoRow, createdDate: string): string {
+  return `${row.cleaning_order_no}::${row.room_no ?? ''}::${createdDate ?? row.start_time ?? row.completed_time ?? row.row_number}`;
+}
+
+function backfillCoCreatedDates(rows: Array<{ id: number; co: CoRow }>): Array<{ id: number; co: CoRow }> {
+  const known = rows
+    .map((entry) => ({ ...entry, orderNo: extractCoOrderNumber(entry.co.cleaning_order_no) }))
+    .filter((entry): entry is { id: number; co: CoRow; orderNo: number } => entry.orderNo !== null && !!entry.co.created_date);
+
+  return rows.map((entry) => {
+    if (entry.co.created_date || known.length === 0) return entry;
+    const orderNo = extractCoOrderNumber(entry.co.cleaning_order_no);
+    if (orderNo === null) return entry;
+    let nearest: { co: CoRow; orderNo: number } | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of known) {
+      const distance = Math.abs(candidate.orderNo - orderNo);
+      if (distance < nearestDistance) {
+        nearest = { co: candidate.co, orderNo: candidate.orderNo };
+        nearestDistance = distance;
+      } else if (distance === nearestDistance && nearest && candidate.orderNo < nearest.orderNo) {
+        nearest = { co: candidate.co, orderNo: candidate.orderNo };
+      }
+    }
+    if (!nearest?.co.created_date) return entry;
+    const createdDate = nearest.co.created_date;
+    const co = {
+      ...entry.co,
+      created_date: createdDate,
+      row_key: rebuildCoRowKey(entry.co, createdDate),
+    };
+    return { ...entry, co };
+  });
+}
+
 function mapMoStatusToIncidentStatus(status: string | null): string {
   const s = (status ?? '').trim().toLowerCase();
   if (!s) return 'Pending';
@@ -257,6 +335,20 @@ function buildMoJson(
       MO: base.summary,
       PM: pmBase.summary,
     },
+  };
+}
+
+function buildCoJson(
+  overall: ImAcc,
+  byType: Record<MaintenanceType, ImAcc>,
+  upload_job_id: string,
+  source_name: string,
+  hotel: HotelInfo,
+): CoDashboardJson {
+  const base = buildImJson(overall, upload_job_id, source_name, hotel);
+  return {
+    ...base,
+    meta: { ...base.meta, schema: 'co-v1' },
   };
 }
 
@@ -1479,7 +1571,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo'; source_name: string | null };
+  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo' | 'co'; source_name: string | null };
   const { data: job, error: jobError } = await supabase
     .from('upload_jobs').select('organization_id, module_code, source_name')
     .eq('id', upload_job_id).single() as unknown as SbResult<JobRow>;
@@ -1491,17 +1583,23 @@ export async function POST(req: NextRequest) {
     ? 'im_staging_rows'
     : module_code === 'jo'
       ? 'jo_staging_rows'
-      : 'mo_staging_rows';
+      : module_code === 'mo'
+        ? 'mo_staging_rows'
+        : 'co_staging_rows';
   const recordTable = module_code === 'im'
     ? 'im_records'
     : module_code === 'jo'
       ? 'jo_records'
-      : 'mo_records';
+      : module_code === 'mo'
+        ? 'mo_records'
+        : 'co_records';
   const dashboardTable = module_code === 'im'
     ? 'im_dashboard_json'
     : module_code === 'jo'
       ? 'jo_dashboard_json'
-      : 'mo_dashboard_json';
+      : module_code === 'mo'
+        ? 'mo_dashboard_json'
+        : 'co_dashboard_json';
 
   type FileRow = { id: string; file_name: string };
   let { data: fileRow } = await supabase
@@ -1539,6 +1637,28 @@ export async function POST(req: NextRequest) {
     MO: newImAcc(),
     PM: newImAcc(),
   };
+  const coRowsById = module_code === 'co'
+    ? await (async () => {
+        const gathered: StagingRow[] = [];
+        let lastRowId = 0;
+        for (;;) {
+          const pageResult = await supabase
+            .from(stagingTable).select('id, uploaded_file_id, row_number, raw_row')
+            .eq('upload_job_id', upload_job_id).eq('is_valid', true)
+            .gt('id', lastRowId).order('id', { ascending: true }).limit(PAGE_SIZE);
+          const pageRows = (pageResult.data ?? null) as StagingRow[] | null;
+          if (!pageRows || pageRows.length === 0) break;
+          gathered.push(...pageRows);
+          lastRowId = pageRows[pageRows.length - 1].id;
+          if (pageRows.length < PAGE_SIZE) break;
+        }
+        const prepared = backfillCoCreatedDates(gathered.map((row) => ({
+          id: row.id,
+          co: buildCoRow(row.raw_row, row.row_number),
+        })));
+        return new Map(prepared.map((entry) => [entry.id, entry.co] as const));
+      })()
+    : null;
   let totalInserted = 0;
   let lastId = 0;
 
@@ -1648,6 +1768,69 @@ export async function POST(req: NextRequest) {
           // Keep full JO source row in normalized_row for compatibility
           // with DBs that haven't applied 002_jo_schema_alignment.sql yet.
           normalized_row:        rr,
+        };
+      });
+    } else if (module_code === 'co') {
+      payload = rows.map(r => {
+        const rr = r.raw_row;
+        const co = coRowsById?.get(r.id) ?? buildCoRow(rr, r.row_number);
+        const imLike = normaliseCoForIm(co);
+        accumulate(acc, imLike);
+        accumulate(moTypeAcc.MO, imLike);
+        return {
+          organization_id,
+          upload_job_id,
+          uploaded_file_id: uploaded_file_id ?? r.uploaded_file_id,
+          source_row_id: r.id,
+          chain_code: hotel.chainCode || null,
+          hotel_code: hotel.hotelCode || null,
+          module_code,
+          country_code: hotel.countryCode || null,
+          row_key: co.row_key,
+          row_number: co.row_number,
+          report_variant: co.report_variant,
+          created_date: co.created_date,
+          cleaning_order_no: co.cleaning_order_no,
+          room_no: co.room_no,
+          room_type: co.room_type,
+          floor: co.floor,
+          building: co.building,
+          status: co.status,
+          status_normalized: co.status_normalized,
+          priority: co.priority,
+          priority_normalized: co.priority_normalized,
+          stay_status: co.stay_status,
+          attendant: co.attendant,
+          supervisor: co.supervisor,
+          department: co.department,
+          task_type: co.task_type,
+          cleaning_type: co.cleaning_type,
+          service_round: co.task_type,
+          start_time: co.start_time,
+          end_time: co.end_time,
+          completed_time: co.completed_time,
+          duration_minutes: co.duration_minutes,
+          planned_duration_minutes: co.planned_duration_minutes,
+          actual_duration_minutes: co.actual_duration_minutes,
+          duration_variance_minutes: co.duration_variance_minutes,
+          ahead_behind_minutes: co.ahead_behind_minutes,
+          inspection_status: co.inspection_status,
+          pass_fail: co.pass_fail,
+          reclean_flag: co.reclean_flag,
+          remarks: co.remarks,
+          created_by: co.created_by,
+          updated_by: co.updated_by,
+          updated_on: co.updated_on,
+          cleaning_credit: co.cleaning_credit,
+          productivity_per_hour: co.productivity_per_hour,
+          is_completed: co.is_completed,
+          is_on_time: co.is_on_time,
+          additional_task_status: co.additional_task_status,
+          normalized_row: {
+            ...rr,
+            ...co,
+          },
+          type: 'MO',
         };
       });
     } else if (module_code === 'mo') {
@@ -1796,7 +1979,7 @@ export async function POST(req: NextRequest) {
 
   // ── Build + upsert dashboard JSON ────────────────────────────────────────
 
-  let generatedJson: ImDashboardJson | MoDashboardJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
+  let generatedJson: ImDashboardJson | MoDashboardJson | CoDashboardJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
   if (module_code === 'jo') {
     generatedJson.meta.schema = 'jo-v1';
     generatedJson.kpis = buildJoKpis(joKpiAcc);
@@ -1805,6 +1988,9 @@ export async function POST(req: NextRequest) {
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';
+  } else if (module_code === 'co') {
+    generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
+    generatedJson.meta.schema = 'co-v1';
   }
 
   const now = new Date().toISOString();

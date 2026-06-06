@@ -48,7 +48,7 @@ export interface ChartDef {
   height?:     number;    // override default 280px container height
 }
 
-export type DashboardSchema = 'im-v1' | 'jo-v1' | 'mo-v1';
+export type DashboardSchema = 'im-v1' | 'jo-v1' | 'mo-v1' | 'co-v1';
 export type MaintenanceType = 'MO' | 'PM';
 export type MaintenanceScoped<T> = Partial<Record<MaintenanceType, T>>;
 export type StandardDashboardSchema = 'im-v1' | 'jo-v1';
@@ -144,4 +144,8 @@ export interface MoDashboardJson {
   summary_by_type?: MaintenanceScoped<HotelSummary>;
 }
 
-export type DashboardJson = ImDashboardJson | MoDashboardJson;
+export interface CoDashboardJson extends Omit<MoDashboardJson, 'meta'> {
+  meta: DashboardMeta<'co-v1'>;
+}
+
+export type DashboardJson = ImDashboardJson | MoDashboardJson | CoDashboardJson;

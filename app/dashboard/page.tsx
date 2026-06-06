@@ -3,17 +3,20 @@ import { Upload } from 'lucide-react';
 import { unstable_noStore as noStore } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { DashboardHeaderActions } from '@/components/layout/DashboardHeaderActions';
 import { DashboardClient } from './DashboardClient';
-import type { DashboardJson, ImDashboardJson, MoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
+import type { CoRow } from '@/types/csv';
 
 export const dynamic = 'force-dynamic';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
-function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' {
+function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' | 'co_dashboard_json' {
   const mod = String(moduleCode ?? '').toLowerCase();
   if (mod === 'jo') return 'jo_dashboard_json';
   if (mod === 'mo') return 'mo_dashboard_json';
+  if (mod === 'co') return 'co_dashboard_json';
   return 'im_dashboard_json';
 }
 
@@ -24,7 +27,15 @@ async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<
     type DashRow = { generated_json: DashboardJson };
     const table = resolveDashboardTable(moduleCode);
     const isJo = String(moduleCode ?? '').toLowerCase() === 'jo';
-    const expectedSchema = String(moduleCode ?? '').toLowerCase() === 'jo' ? 'jo-v1' : String(moduleCode ?? '').toLowerCase() === 'mo' ? 'mo-v1' : 'im-v1';
+    const normalizedModule = String(moduleCode ?? '').toLowerCase();
+    const expectedSchema = normalizedModule === 'jo'
+      ? 'jo-v1'
+      : normalizedModule === 'mo'
+        ? 'mo-v1'
+        : normalizedModule === 'co'
+          ? 'co-v1'
+          : 'im-v1';
+    const isCo = normalizedModule === 'co';
     const base = supabase
       .from(table)
       .select('generated_json')
@@ -87,11 +98,125 @@ async function fetchDashboard(hotelCode?: string, moduleCode?: string): Promise<
       }
     }
 
+    if (isCo && hotelCode) {
+      return data as CoDashboardJson;
+    }
     return data;
   } catch (error) {
     console.error('[dashboard/fetchDashboard] unexpected failure', { hotelCode, moduleCode, error });
     return null;
   }
+}
+
+async function fetchCoRows(hotelCode?: string, chainCode?: string): Promise<CoRow[]> {
+  noStore();
+  try {
+    const scopeHotel = String(hotelCode ?? '').trim().toUpperCase();
+    const scopeChain = String(chainCode ?? '').trim().toUpperCase();
+    if (!scopeHotel && !scopeChain) return [];
+    const supabase = createAdminClient();
+    const selectColumns = [
+      'row_key',
+      'row_number',
+      'report_variant',
+      'chain_code',
+      'hotel_code',
+      'created_date',
+      'cleaning_order_no',
+      'room_no',
+      'room_type',
+      'floor',
+      'building',
+      'status',
+      'status_normalized',
+      'priority',
+      'priority_normalized',
+      'stay_status',
+      'attendant',
+      'supervisor',
+      'department',
+      'task_type',
+      'cleaning_type',
+      'start_time',
+      'end_time',
+      'completed_time',
+      'duration_minutes',
+      'planned_duration_minutes',
+      'actual_duration_minutes',
+      'duration_variance_minutes',
+      'ahead_behind_minutes',
+      'inspection_status',
+      'pass_fail',
+      'reclean_flag',
+      'remarks',
+      'created_by',
+      'updated_by',
+      'updated_on',
+      'cleaning_credit',
+      'productivity_per_hour',
+      'is_completed',
+      'is_on_time',
+      'additional_task_status',
+    ].join(',');
+    const normalizeRow = (row: Record<string, unknown>): CoRow => ({
+      ...(row as Omit<CoRow, 'is_passed'>),
+      report_variant: 'ACSR',
+      chain_code: toStringOrNull(row.chain_code),
+      hotel_code: toStringOrNull(row.hotel_code),
+      is_passed: String(row.pass_fail ?? row.inspection_status ?? '').trim().toLowerCase() === 'pass',
+      duration_minutes: toNumberOrNull(row.duration_minutes),
+      planned_duration_minutes: toNumberOrNull(row.planned_duration_minutes),
+      actual_duration_minutes: toNumberOrNull(row.actual_duration_minutes),
+      duration_variance_minutes: toNumberOrNull(row.duration_variance_minutes),
+      ahead_behind_minutes: toNumberOrNull(row.ahead_behind_minutes),
+      cleaning_credit: toNumberOrNull(row.cleaning_credit),
+      productivity_per_hour: toNumberOrNull(row.productivity_per_hour),
+    });
+    const runQuery = async (builder: ReturnType<typeof supabase.from>) => {
+      const result = await builder.select(selectColumns).order('created_date', { ascending: true });
+      return result as { data: Record<string, unknown>[] | null; error: { message: string } | null };
+    };
+    const scopedQuery = scopeHotel && scopeHotel !== 'CORP'
+      ? supabase.from('co_records').eq('report_variant', 'ACSR').eq('hotel_code', scopeHotel)
+      : scopeChain
+        ? supabase.from('co_records').eq('report_variant', 'ACSR').eq('chain_code', scopeChain)
+        : null;
+    if (!scopedQuery) return [];
+    const { data, error } = await runQuery(scopedQuery);
+    if (error) {
+      console.error('[dashboard/fetchCoRows] query failed', { hotelCode: scopeHotel, chainCode: scopeChain, error });
+    }
+    const primaryRows = (data ?? []).map(normalizeRow);
+    if (primaryRows.length > 0) return primaryRows;
+    const fallbackQuery = scopeHotel && scopeHotel !== 'CORP'
+      ? supabase.from('co_records').eq('hotel_code', scopeHotel)
+      : scopeChain
+        ? supabase.from('co_records').eq('chain_code', scopeChain)
+        : null;
+    if (!fallbackQuery) return [];
+    const { data: fallbackData, error: fallbackError } = await runQuery(fallbackQuery);
+    if (fallbackError) {
+      console.error('[dashboard/fetchCoRows] fallback query failed', { hotelCode: scopeHotel, chainCode: scopeChain, error: fallbackError });
+      return [];
+    }
+    return (fallbackData ?? []).map(normalizeRow);
+  } catch (error) {
+    console.error('[dashboard/fetchCoRows] unexpected failure', { hotelCode, chainCode, error });
+    return [];
+  }
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  const text = String(value).trim();
+  return text ? text : null;
 }
 
 async function fetchChainEntries(chainCode: string, currentHotelCode: string, moduleCode?: string): Promise<ChainEntry[]> {
@@ -100,6 +225,7 @@ async function fetchChainEntries(chainCode: string, currentHotelCode: string, mo
     const supabase = createAdminClient();
     type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
+    const isCo = String(moduleCode ?? '').toLowerCase() === 'co';
     const { data: rows } = await supabase
       .from(table)
       .select('generated_json, created_at')
@@ -276,6 +402,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
   try {
     const supabase = createAdminClient();
     const isMo = String(moduleCode ?? '').toLowerCase() === 'mo';
+    const isCo = String(moduleCode ?? '').toLowerCase() === 'co';
     type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
     const rowsResult = await supabase
@@ -309,7 +436,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
 
     const template = dashboards[0];
     const chainEntries: ChainEntry[] = dashboards.map((d) => {
-      const maintenance = d.meta.schema === 'mo-v1' ? d as MoDashboardJson : null;
+      const maintenance = (d.meta.schema === 'mo-v1' || d.meta.schema === 'co-v1') ? d as MoDashboardJson | CoDashboardJson : null;
       return {
         hotel_code: d.meta.hotel_code,
         hotel_name: d.meta.hotel_name,
@@ -325,7 +452,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
 
     // Build accurate department->source_of_complaint and department->item maps
     // from live IM records so corp charts remain correct even for legacy summaries.
-    if (!isMo && String(moduleCode ?? '').toLowerCase() !== 'jo') {
+    if (!isMo && !isCo && String(moduleCode ?? '').toLowerCase() !== 'jo') {
       type SrcRow = {
         hotel_code: string | null;
         department: string | null;
@@ -398,7 +525,49 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
           entry.kpis = kpis;
         }
       }
-    } else if (!isMo) {
+
+      type JoLiveRow = {
+        hotel_code: string | null;
+        assigned_to_department: string | null;
+        created_by_department: string | null;
+        completed_by_department: string | null;
+        location: string | null;
+      };
+      if (hotelCodes.length > 0) {
+        const assignedByHotel: Record<string, Record<string, number>> = {};
+        const createdByHotel: Record<string, Record<string, number>> = {};
+        const completedByHotel: Record<string, Record<string, number>> = {};
+        const locationByHotel: Record<string, Record<string, number>> = {};
+        const batch = await supabase
+          .from('jo_records')
+          .select('hotel_code, assigned_to_department, created_by_department, completed_by_department, location')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<JoLiveRow[]>;
+        const rows = batch.data ?? [];
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const assigned = r.assigned_to_department === null || String(r.assigned_to_department).trim() === '' ? 'Unknown Assigned Dept' : String(r.assigned_to_department);
+          const createdBy = r.created_by_department === null || String(r.created_by_department).trim() === '' ? 'Unknown Source Dept' : String(r.created_by_department);
+          const completedBy = r.completed_by_department === null || String(r.completed_by_department).trim() === '' ? 'Unknown Completed Dept' : String(r.completed_by_department);
+          const location = r.location === null || String(r.location).trim() === '' ? 'Unknown Location' : String(r.location);
+          if (!assignedByHotel[hotel]) assignedByHotel[hotel] = {};
+          if (!createdByHotel[hotel]) createdByHotel[hotel] = {};
+          if (!completedByHotel[hotel]) completedByHotel[hotel] = {};
+          if (!locationByHotel[hotel]) locationByHotel[hotel] = {};
+          assignedByHotel[hotel][assigned] = (assignedByHotel[hotel][assigned] ?? 0) + 1;
+          createdByHotel[hotel][createdBy] = (createdByHotel[hotel][createdBy] ?? 0) + 1;
+          completedByHotel[hotel][completedBy] = (completedByHotel[hotel][completedBy] ?? 0) + 1;
+          locationByHotel[hotel][location] = (locationByHotel[hotel][location] ?? 0) + 1;
+        }
+
+        for (const entry of chainEntries) {
+          entry.summary.assigned_dept_map = assignedByHotel[entry.hotel_code] ?? entry.summary.assigned_dept_map ?? {};
+          entry.summary.created_by_dept_map = createdByHotel[entry.hotel_code] ?? entry.summary.created_by_dept_map ?? {};
+          entry.summary.completed_by_dept_map = completedByHotel[entry.hotel_code] ?? entry.summary.completed_by_dept_map ?? {};
+          entry.summary.location_map = locationByHotel[entry.hotel_code] ?? entry.summary.location_map ?? {};
+        }
+      }
+    } else if (String(moduleCode ?? '').toLowerCase() === 'im') {
       type JoLiveRow = {
         hotel_code: string | null;
         assigned_to_department: string | null;
@@ -443,7 +612,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
       }
     }
 
-    if (isMo) {
+    if (isMo || isCo) {
       type MoLiveRow = {
         hotel_code: string | null;
         type: string | null;
@@ -453,11 +622,12 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
       const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
       if (hotelCodes.length > 0) {
         const locationByHotel: Record<string, Record<string, number>> = {};
+        const maintenanceTable = isCo ? 'co_records' : 'mo_records';
         const batch = await supabase
-          .from('mo_records')
+          .from(maintenanceTable)
           .select('hotel_code, type, location, building')
           .in('hotel_code', hotelCodes)
-          .eq('type', 'MO') as unknown as SbResult<MoLiveRow[]>;
+          .in('type', isCo ? ['MO', 'CO'] : ['MO']) as unknown as SbResult<MoLiveRow[]>;
         const rows = batch.data ?? [];
         for (const r of rows) {
           const hotel = (r.hotel_code ?? '').toUpperCase();
@@ -502,6 +672,51 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
       const scopedDateMin = scopedDates.length > 0 ? scopedDates[0] : null;
       const scopedDateMax = scopedDates.length > 0 ? scopedDates[scopedDates.length - 1] : null;
       const scopedTotalRecords = scopedEntriesByType.MO.reduce((sum, entry) => sum + (entry.summary.total ?? 0), 0);
+
+      if (isCo) {
+        const coTemplate = template as CoDashboardJson;
+        const corpCoData: CoDashboardJson = {
+          ...coTemplate,
+          meta: {
+            ...coTemplate.meta,
+            source_name: `${chainCode.toUpperCase()} Corp`,
+            chain_code: chainCode.toUpperCase(),
+            hotel_code: 'CORP',
+            hotel_name: 'Corp',
+            total_records: scopedTotalRecords,
+            date_range: { min: scopedDateMin, max: scopedDateMax },
+            generated_at: new Date().toISOString(),
+            schema: 'co-v1',
+          },
+          kpis: coTemplate.kpis ?? [],
+          eac: coTemplate.eac ?? [],
+          charts: coTemplate.charts ?? [],
+          raw_daily: scopedRawDailyByType.MO,
+          summary: scopedSummaryByType.MO,
+          kpis_by_type: {
+            ...coTemplate.kpis_by_type,
+            MO: coTemplate.kpis_by_type?.MO ?? [],
+            PM: coTemplate.kpis_by_type?.PM ?? [],
+          },
+          charts_by_type: {
+            ...coTemplate.charts_by_type,
+            MO: coTemplate.charts_by_type?.MO ?? [],
+            PM: coTemplate.charts_by_type?.PM ?? [],
+          },
+          raw_daily_by_type: {
+            ...coTemplate.raw_daily_by_type,
+            MO: scopedRawDailyByType.MO,
+            PM: scopedRawDailyByType.PM,
+          },
+          summary_by_type: {
+            ...coTemplate.summary_by_type,
+            MO: scopedSummaryByType.MO,
+            PM: scopedSummaryByType.PM,
+          },
+        };
+
+        return { data: corpCoData, chainEntries };
+      }
 
       const moTemplate = template as MoDashboardJson;
       const corpMoData: MoDashboardJson = {
@@ -596,7 +811,15 @@ export default async function DashboardPage({
   searchParams: { hotel?: string; module?: string; chain?: string };
 }) {
   const hotelCode = searchParams.hotel;
+  const moduleCode = String(searchParams.module ?? '').toLowerCase();
   const isCorp = String(hotelCode ?? '').toLowerCase() === 'corp';
+  const moduleBreadcrumb = moduleCode === 'co'
+    ? 'CO ACSR Dashboard'
+    : moduleCode === 'mo'
+      ? 'MO Dashboard'
+      : moduleCode === 'jo'
+        ? 'JO Dashboard'
+        : 'IM Dashboard';
 
   const corpPayload = isCorp
     ? await fetchCorpDashboard(searchParams.chain, searchParams.module)
@@ -605,7 +828,7 @@ export default async function DashboardPage({
 
   if (!data) {
     return (
-      <AppLayout breadcrumbs={[{ label: 'Dashboard' }]}>
+      <AppLayout breadcrumbs={[{ label: 'Dashboard' }, { label: moduleBreadcrumb }]} headerRight={<DashboardHeaderActions />}>
         <div className="flex-1 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
           <div className="text-center space-y-4 px-6">
             <div className="w-16 h-16 rounded-2xl bg-slate-200 flex items-center justify-center mx-auto">
@@ -613,7 +836,7 @@ export default async function DashboardPage({
             </div>
             <h1 className="font-serif text-2xl font-bold text-slate-800">No Dashboard Data</h1>
             <p className="font-sans text-sm text-slate-500 max-w-sm">
-              Upload an IM, JO, or MO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
+              Upload an IM, JO, MO, or CO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
             </p>
             <Link
               href="/onboarding"
@@ -633,6 +856,9 @@ export default async function DashboardPage({
     : data.meta.chain_code
     ? await fetchChainEntries(data.meta.chain_code, data.meta.hotel_code, searchParams.module)
     : [];
+  const coRows = moduleCode === 'co'
+    ? await fetchCoRows(data.meta.hotel_code, data.meta.chain_code)
+    : [];
 
   const { chain_code, hotel_code, hotel_name, country_code } = data.meta;
   const hotelLabel = hotel_code
@@ -641,8 +867,8 @@ export default async function DashboardPage({
     : data.meta.source_name;
 
   return (
-    <AppLayout breadcrumbs={[{ label: 'Dashboard' }, { label: hotelLabel }]}>
-      <DashboardClient data={data} chainEntries={chainEntries} />
+    <AppLayout breadcrumbs={[{ label: 'Dashboard' }, { label: moduleBreadcrumb }, { label: hotelLabel }]} headerRight={<DashboardHeaderActions />}>
+      <DashboardClient data={data} chainEntries={chainEntries} coRows={coRows} />
     </AppLayout>
   );
 }

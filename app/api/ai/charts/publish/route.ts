@@ -4,7 +4,7 @@ import { createAiAdminClient } from '@/lib/supabase/server';
 type PublishReq = {
   organization_id?: string;
   chart_id?: string;
-  module_code?: 'im' | 'jo';
+  module_code?: 'im' | 'jo' | 'co';
   publish?: boolean;
   publish_all?: boolean;
 };
@@ -60,4 +60,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, is_published: row?.is_published ?? publish });
 }
-

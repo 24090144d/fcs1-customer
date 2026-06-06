@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAiAdminClient } from '@/lib/supabase/server';
 
-type GenerateReq = { prompt?: string; module_code?: 'im' | 'jo' };
+type GenerateReq = { prompt?: string; module_code?: 'im' | 'jo' | 'co' };
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 type KpiDef = {
   id: string;

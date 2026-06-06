@@ -7,7 +7,7 @@ export const PROGRESS_THROTTLE_MS  = 100;                 // min ms between prog
 
 // ── Module ────────────────────────────────────────────────────────────────────
 
-export type ModuleCode = 'IM' | 'JO' | 'MO';
+export type ModuleCode = 'IM' | 'JO' | 'MO' | 'CO';
 
 // ── Progress ──────────────────────────────────────────────────────────────────
 
@@ -203,7 +203,53 @@ export interface MoRow {
   stop_reason: string | null;
 }
 
-export type ParsedRow = ImRow | JoRow | MoRow;
+/** Cleaning Order ACSR row — normalized across sparse CO CSV templates */
+export interface CoRow {
+  row_key: string;
+  row_number: number;
+  report_variant: 'ACSR';
+  chain_code?: string | null;
+  hotel_code?: string | null;
+  created_date: string | null;
+  cleaning_order_no: string;
+  room_no: string | null;
+  room_type: string | null;
+  floor: string | null;
+  building: string | null;
+  status: string | null;
+  status_normalized: string;
+  priority: string | null;
+  priority_normalized: string | null;
+  stay_status: string | null;
+  attendant: string | null;
+  supervisor: string | null;
+  department: string | null;
+  task_type: string | null;
+  cleaning_type: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  completed_time: string | null;
+  duration_minutes: number | null;
+  planned_duration_minutes: number | null;
+  actual_duration_minutes: number | null;
+  duration_variance_minutes: number | null;
+  ahead_behind_minutes: number | null;
+  inspection_status: string | null;
+  pass_fail: string | null;
+  is_passed: boolean;
+  reclean_flag: boolean;
+  remarks: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  updated_on: string | null;
+  cleaning_credit: number | null;
+  productivity_per_hour: number | null;
+  is_completed: boolean;
+  is_on_time: boolean;
+  additional_task_status: string | null;
+}
+
+export type ParsedRow = ImRow | JoRow | MoRow | CoRow;
 
 // ── Parse result ──────────────────────────────────────────────────────────────
 

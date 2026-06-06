@@ -5,11 +5,13 @@ import dynamic from 'next/dynamic';
 import { Sun, Moon, Printer, CalendarDays, X } from 'lucide-react';
 import Highcharts from 'highcharts';
 import { KpiCard }  from '@/components/dashboard/KpiCard';
-import type { DashboardJson, ImDashboardJson, MoDashboardJson, MaintenanceType, DailyBucket, KpiDef, ChartDef, ChainEntry, HotelSummary } from '@/types/dashboard';
+import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, MaintenanceType, DailyBucket, KpiDef, KpiBenchmark, ChartDef, ChainEntry, HotelSummary } from '@/types/dashboard';
+import type { CoRow } from '@/types/csv';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
-import { benchmarkEmoji, joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
+import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
+import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -58,14 +60,7 @@ function topN(map: Record<string, number>, n: number): [string, number][] {
 }
 
 function decorateBenchmarkLabels(kpis: KpiDef[]): KpiDef[] {
-  return kpis.map((kpi) => (
-    kpi.benchmark
-      ? {
-          ...kpi,
-          label: `${kpi.label} ${benchmarkEmoji(kpi.benchmark, kpi.value, kpi.available)}`.trim(),
-        }
-      : kpi
-  ));
+  return kpis;
 }
 
 function getChainKpiValue(entry: ChainEntry, id: string): number | null {
@@ -90,25 +85,25 @@ function hotelImKpiEmoji(id: string, value: number | null, available: boolean): 
   if (!Number.isFinite(v)) return '';
 
   // Lower is better
-  if (id === 'hkpi_07') return v <= 1 ? '🟢' : (v <= 2 ? '🟡' : '🔴'); // Critical Incident Rate
-  if (id === 'hkpi_10') return v <= 6 ? '🟢' : (v <= 10 ? '🟡' : '🔴'); // VIP Guest Incident Rate
-  if (id === 'hkpi_12') return v <= 30 ? '🟢' : (v <= 45 ? '🟡' : '🔴'); // Department Incident Distribution
-  if (id === 'hkpi_14') return v <= 15 ? '🟢' : (v <= 25 ? '🟡' : '🔴'); // Repeat Incident Rate
-  if (id === 'hkpi_15') return v <= 35 ? '🟢' : (v <= 50 ? '🟡' : '🔴'); // Complaint Source Analysis
-  if (id === 'hkpi_16') return v <= 5 ? '🟢' : (v <= 10 ? '🟡' : '🔴'); // Open Backlog Rate
-  if (id === 'hkpi_19') return v <= 30 ? '🟢' : (v <= 60 ? '🟡' : '🔴'); // Avg First Response (min)
+  if (id === 'hkpi_07') return v <= 1 ? 'GOOD' : (v <= 2 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Critical Incident Rate
+  if (id === 'hkpi_10') return v <= 6 ? 'GOOD' : (v <= 10 ? 'NEEDS IMPROVEMENT' : 'BAD'); // VIP Guest Incident Rate
+  if (id === 'hkpi_12') return v <= 30 ? 'GOOD' : (v <= 45 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Department Incident Distribution
+  if (id === 'hkpi_14') return v <= 15 ? 'GOOD' : (v <= 25 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Repeat Incident Rate
+  if (id === 'hkpi_15') return v <= 35 ? 'GOOD' : (v <= 50 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Complaint Source Analysis
+  if (id === 'hkpi_16') return v <= 5 ? 'GOOD' : (v <= 10 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Open Backlog Rate
+  if (id === 'hkpi_19') return v <= 30 ? 'GOOD' : (v <= 60 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Avg First Response (min)
 
   // Higher is better
-  if (id === 'hkpi_03') return v >= 95 ? '🟢' : (v >= 90 ? '🟡' : '🔴'); // SLA Compliance
-  if (id === 'hkpi_06') return v >= 95 ? '🟢' : (v >= 90 ? '🟡' : '🔴'); // Closure Rate
-  if (id === 'hkpi_09') return v >= 95 ? '🟢' : (v >= 90 ? '🟡' : '🔴'); // VIP Closure Rate
+  if (id === 'hkpi_03') return v >= 95 ? 'GOOD' : (v >= 90 ? 'NEEDS IMPROVEMENT' : 'BAD'); // SLA Compliance
+  if (id === 'hkpi_06') return v >= 95 ? 'GOOD' : (v >= 90 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Closure Rate
+  if (id === 'hkpi_09') return v >= 95 ? 'GOOD' : (v >= 90 ? 'NEEDS IMPROVEMENT' : 'BAD'); // VIP Closure Rate
 
   // Mid/other metrics with broad practical defaults
-  if (id === 'hkpi_08') return v <= 1.8 ? '🟢' : (v <= 2.4 ? '🟡' : '🔴'); // Severity Index
-  if (id === 'hkpi_20') return v <= 10 ? '🟢' : (v <= 25 ? '🟡' : '🔴'); // Cancelled cases absolute (fallback)
+  if (id === 'hkpi_08') return v <= 1.8 ? 'GOOD' : (v <= 2.4 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Severity Index
+  if (id === 'hkpi_20') return v <= 10 ? 'GOOD' : (v <= 25 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Cancelled cases absolute (fallback)
 
   // Context KPIs (volume, pending, peak hour) are neutral
-  return '⚪';
+  return 'INFO';
 }
 
 function corpImKpiEmoji(id: string, value: number | null, available: boolean): string {
@@ -117,22 +112,22 @@ function corpImKpiEmoji(id: string, value: number | null, available: boolean): s
   if (!Number.isFinite(v)) return '';
 
   // Higher is better
-  if (id === 'kpi_01') return v >= 85 ? '🟢' : (v >= 70 ? '🟡' : '🔴'); // Corporate Risk Score
-  if (id === 'kpi_03') return v >= 85 ? '🟢' : (v >= 75 ? '🟡' : '🔴'); // Hotel Benchmark Index
-  if (id === 'kpi_06') return v >= 95 ? '🟢' : (v >= 90 ? '🟡' : '🔴'); // Closure Rate
-  if (id === 'kpi_07') return v >= 95 ? '🟢' : (v >= 90 ? '🟡' : '🔴'); // VIP Closure Rate
+  if (id === 'kpi_01') return v >= 85 ? 'GOOD' : (v >= 70 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Corporate Risk Score
+  if (id === 'kpi_03') return v >= 85 ? 'GOOD' : (v >= 75 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Hotel Benchmark Index
+  if (id === 'kpi_06') return v >= 95 ? 'GOOD' : (v >= 90 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Closure Rate
+  if (id === 'kpi_07') return v >= 95 ? 'GOOD' : (v >= 90 ? 'NEEDS IMPROVEMENT' : 'BAD'); // VIP Closure Rate
 
   // Lower is better
-  if (id === 'kpi_02') return v <= 1 ? '🟢' : (v <= 2 ? '🟡' : '🔴'); // Critical Incident Rate
-  if (id === 'kpi_04') return v <= 6 ? '🟢' : (v <= 10 ? '🟡' : '🔴'); // VIP Incident Exposure
-  if (id === 'kpi_05') return v <= 3 ? '🟢' : (v <= 5 ? '🟡' : '🔴'); // SLA Breach Rate
-  if (id === 'kpi_08') return v <= 15 ? '🟢' : (v <= 25 ? '🟡' : '🔴'); // Repeat Guest Complaint Rate
-  if (id === 'kpi_10') return v <= 45 ? '🟢' : (v <= 60 ? '🟡' : '🔴'); // Root Cause Concentration
+  if (id === 'kpi_02') return v <= 1 ? 'GOOD' : (v <= 2 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Critical Incident Rate
+  if (id === 'kpi_04') return v <= 6 ? 'GOOD' : (v <= 10 ? 'NEEDS IMPROVEMENT' : 'BAD'); // VIP Incident Exposure
+  if (id === 'kpi_05') return v <= 3 ? 'GOOD' : (v <= 5 ? 'NEEDS IMPROVEMENT' : 'BAD'); // SLA Breach Rate
+  if (id === 'kpi_08') return v <= 15 ? 'GOOD' : (v <= 25 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Repeat Guest Complaint Rate
+  if (id === 'kpi_10') return v <= 45 ? 'GOOD' : (v <= 60 ? 'NEEDS IMPROVEMENT' : 'BAD'); // Root Cause Concentration
 
   // Total Incident Volume depends heavily on property scale
-  if (id === 'kpi_09') return v <= 800 ? '🟢' : (v <= 1200 ? '🟡' : '🔴');
+  if (id === 'kpi_09') return v <= 800 ? 'GOOD' : (v <= 1200 ? 'NEEDS IMPROVEMENT' : 'BAD');
 
-  return '⚪';
+  return 'INFO';
 }
 
 const SEV_WEIGHTS: Record<string, number> = { Low: 1, Medium: 2, High: 3, Critical: 4 };
@@ -1880,12 +1875,257 @@ function CorpMoPerformanceTable({
   );
 }
 
+function CorpImPerformanceTable({
+  entries,
+  dark,
+  index,
+}: {
+  entries: ChainEntry[];
+  dark: boolean;
+  index: number;
+}) {
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
+  const maxIncidents = Math.max(1, ...entries.map((entry) => entry.summary.total ?? 0));
+  const rows = [...entries]
+    .map((entry) => {
+      const total = entry.summary.total ?? 0;
+      const completed = entry.summary.completed ?? 0;
+      const cancelled = entry.summary.cancelled ?? 0;
+      const pending = Math.max(entry.summary.pending ?? (total - completed - cancelled), 0);
+      const critical = entry.summary.severity_map?.Critical ?? entry.summary.severity_map?.critical ?? 0;
+      const vip = entry.summary.vip_total ?? 0;
+      const repeat = entry.summary.repeat_count ?? 0;
+      const slaBreach = Object.entries(entry.summary.status_map ?? {}).reduce((acc, [status, count]) => {
+        const key = status.toLowerCase();
+        return key.includes('sla') || key.includes('breach') || key.includes('overdue') || key.includes('timeout') || key.includes('late')
+          ? acc + Number(count)
+          : acc;
+      }, 0);
+      const topCategory = topN(entry.summary.category_map ?? {}, 1)[0] ?? ['-', 0];
+      const activeDays = Math.max(1, (entry.raw_daily ?? []).length);
+      const closureRate = total > 0 ? r1((completed / total) * 100) : 0;
+      const pendingRate = total > 0 ? r1((pending / total) * 100) : 0;
+      const criticalRate = total > 0 ? r1((critical / total) * 100) : 0;
+      const vipRate = total > 0 ? r1((vip / total) * 100) : 0;
+      const slaBreachRate = total > 0 ? r1((slaBreach / total) * 100) : 0;
+      const repeatRate = total > 0 ? r1((repeat / total) * 100) : 0;
+      const severity = total > 0 ? r2((entry.summary.severity_sum ?? 0) / total) : 0;
+      const dailyAverage = r2(total / activeDays);
+      const volumeFactor = Math.min((total / maxIncidents) * 20, 20);
+      const riskRank = (criticalRate * 1.2) + (vipRate * 0.7) + (pendingRate * 0.8) + (slaBreachRate * 1.0) + (repeatRate * 0.6) + (severity * 15) + volumeFactor;
+      return {
+        hotel: entry.hotel_code,
+        hotelLabel: entry.hotel_name ? `${entry.hotel_name} (${entry.hotel_code})` : entry.hotel_code,
+        total,
+        closureRate,
+        pendingRate,
+        criticalRate,
+        vipRate,
+        slaBreachRate,
+        repeatRate,
+        severity,
+        topCategory: topCategory[0],
+        dailyAverage,
+        riskRank: r2(riskRank),
+      };
+    })
+    .sort((a, b) => b.riskRank - a.riskRank || b.pendingRate - a.pendingRate || b.total - a.total);
+
+  const cardBg = tokens.chart.cardBg;
+  const cardBorder = tokens.chart.cardBorder;
+  const accent = tokens.chart.cardAccent;
+  const titleText = tokens.chart.titleText;
+  const codeBg = tokens.chart.codeBg;
+  const rule = tokens.chart.footerBorder;
+  const muted = tokens.chart.footerMuted;
+  const headBg = tokens.dashboard.toolbarBg;
+
+  return (
+    <div
+      className="chart-card flex flex-col overflow-hidden md:col-span-2"
+      style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: '12px' }}
+    >
+      <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3 shrink-0">
+        <h3 className="font-serif font-semibold leading-snug flex items-center gap-2" style={{ fontSize: '0.9rem', color: titleText }}>
+          <span className="font-mono shrink-0" style={{ fontSize: '0.62rem', letterSpacing: '0.04em', fontWeight: 700, color: accent, background: codeBg, border: `1px solid ${accent}40`, padding: '1px 5px', lineHeight: 1.4 }}>
+            {String(index).padStart(2, '0')}
+          </span>
+          Hotel Performance Benchmark
+        </h3>
+      </div>
+
+      <div className="px-4 pb-4 overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              {['Index', 'Hotel', 'Total Incidents', 'Closure %', 'Pending %', 'Critical %', 'VIP %', 'SLA Breach %', 'Repeat %', 'Avg Severity', 'Top Category', 'Daily Avg', 'Risk Rank'].map((label) => (
+                <th
+                  key={label}
+                  className="text-left font-mono"
+                  style={{ fontSize: '0.62rem', letterSpacing: '0.06em', color: muted, background: headBg, borderBottom: `1px solid ${rule}`, padding: '8px 10px', whiteSpace: 'nowrap' }}
+                >
+                  {label.toUpperCase()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length > 0 ? rows.map((row, rowIndex) => (
+              <tr key={row.hotel}>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: accent, fontSize: '0.75rem', fontWeight: 700 }}>{String(rowIndex + 1).padStart(2, '0')}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.78rem', fontWeight: 700 }}>{row.hotelLabel}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.total.toLocaleString()}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.closureRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.pendingRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.criticalRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.vipRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.slaBreachRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.repeatRate.toFixed(1)}%</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.severity.toFixed(2)}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.topCategory}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem' }}>{row.dailyAverage.toFixed(2)}</td>
+                <td style={{ padding: '9px 10px', borderBottom: `1px solid ${rule}`, color: titleText, fontSize: '0.75rem', fontWeight: 700 }}>{row.riskRank.toFixed(2)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={13} style={{ padding: '14px 10px', color: muted, fontSize: '0.75rem', textAlign: 'center' }}>
+                  No hotel entries match the current Corp IM filter selection.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-4 pt-2.5 pb-3.5 space-y-1 shrink-0" style={{ borderTop: `1px solid ${rule}` }}>
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Note</span>
+          {' '}Executive hotel-level IM benchmark table for incident risk, closure discipline, VIP exposure, SLA pressure, and repeat-guest risk.
+        </p>
+        <p className="font-sans leading-relaxed" style={{ fontSize: '0.67rem', color: muted }}>
+          <span className="font-semibold" style={{ color: tokens.chart.noteLabel }}>Formula</span>
+          {' '}
+          <code className="font-mono" style={{ fontSize: '0.6rem', padding: '1px 5px', background: codeBg, color: accent, borderRadius: '2px' }}>
+            Risk Rank = critical % x 1.2 + VIP % x 0.7 + pending % x 0.8 + SLA breach % + repeat % x 0.6 + severity factor + volume factor
+          </code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function maintenanceModeLabel(type: MaintenanceType): string {
   return type === 'PM' ? 'Preventive Maintenance' : 'Maintenance Order';
 }
 
 function moLocalizationScope(isCorp: boolean): 'cmo' | 'hmo' {
   return isCorp ? 'cmo' : 'hmo';
+}
+
+function coLocalizeText(text: string): string {
+  return text
+    .replace(/\bMO Dashboard\b/g, 'CO ACSR Dashboard')
+    .replace(/\bMO\b/g, 'CO')
+    .replace(/\bMaintenance Order\b/g, 'Cleaning Order')
+    .replace(/\bmaintenance order\b/gi, 'cleaning order')
+    .replace(/\bmaintenance orders\b/gi, 'cleaning orders')
+    .replace(/\bmaintenance\b/gi, 'cleaning');
+}
+
+function buildImBenchmark(
+  direction: KpiBenchmark['direction'],
+  good: number | null,
+  watch: number | null,
+  goodLabel: string,
+  watchLabel: string,
+  badLabel: string,
+  neutralLabel?: string,
+): KpiBenchmark {
+  return {
+    direction,
+    good: good ?? undefined,
+    watch: watch ?? undefined,
+    goodLabel,
+    watchLabel,
+    badLabel,
+    neutralLabel,
+  };
+}
+
+function imBenchmarkFor(id: string): KpiBenchmark {
+  switch (id) {
+    case 'kpi_01':
+      return buildImBenchmark('higher', 85, 70, 'Good >= 85', 'Watch 70-84.9', 'Bad < 70');
+    case 'kpi_02':
+      return buildImBenchmark('lower', 1, 2, 'Good <= 1%', 'Watch 1-2%', 'Bad > 2%');
+    case 'kpi_03':
+      return buildImBenchmark('higher', 85, 75, 'Good >= 85', 'Watch 75-84.9', 'Bad < 75');
+    case 'kpi_04':
+      return buildImBenchmark('lower', 6, 10, 'Good <= 6%', 'Watch 6-10%', 'Bad > 10%');
+    case 'kpi_05':
+      return buildImBenchmark('lower', 3, 5, 'Good <= 3%', 'Watch 3-5%', 'Bad > 5%');
+    case 'kpi_06':
+      return buildImBenchmark('higher', 95, 90, 'Good >= 95%', 'Watch 90-94.9%', 'Bad < 90%');
+    case 'kpi_07':
+      return buildImBenchmark('higher', 95, 90, 'Good >= 95%', 'Watch 90-94.9%', 'Bad < 90%');
+    case 'kpi_08':
+      return buildImBenchmark('lower', 15, 25, 'Good <= 15%', 'Watch 15-25%', 'Bad > 25%');
+    case 'kpi_09':
+      return buildImBenchmark('neutral', null, null, '', '', '', 'Scale-dependent volume; compare against the same hotel or prior periods.');
+    case 'kpi_10':
+      return buildImBenchmark('lower', 45, 60, 'Good <= 45%', 'Watch 45-60%', 'Bad > 60%');
+    default:
+      return buildImBenchmark('neutral', null, null, '', '', '', 'No fixed benchmark.');
+  }
+}
+
+function corpCoKpiLabel(label: string, id: string): string {
+  const base = coLocalizeText(label);
+  switch (id) {
+    case 'cmo_kpi_01':
+      return base;
+    case 'cmo_kpi_02':
+    case 'cmo_kpi_03':
+    case 'cmo_kpi_04':
+    case 'cmo_kpi_05':
+    case 'cmo_kpi_06':
+    case 'cmo_kpi_07':
+    case 'cmo_kpi_08':
+    case 'cmo_kpi_09':
+    case 'cmo_kpi_10':
+      return `${base} (Chain)`;
+    default:
+      return base;
+  }
+}
+
+function corpCoKpiNote(note: string, id: string): string {
+  const base = coLocalizeText(note);
+  switch (id) {
+    case 'cmo_kpi_01':
+      return 'Chain-wide cleaning order volume across all hotels in scope. Compare with hotel-level volume to see which property is carrying more work.';
+    case 'cmo_kpi_02':
+      return 'Chain-wide completion rate for cleaning orders. Use the hotel dashboard to compare how each property performs against the chain aggregate.';
+    case 'cmo_kpi_03':
+      return 'Chain-wide open-rate pressure across all hotels in scope. Compare hotel views to identify where backlog is accumulating.';
+    case 'cmo_kpi_04':
+      return 'Chain-wide cancellation pressure for cleaning orders. Compare hotel-level rates to isolate avoidable cancellations.';
+    case 'cmo_kpi_05':
+      return 'Chain-wide guest-related share of cleaning orders. Use hotel views to see which properties carry the highest guest-facing workload.';
+    case 'cmo_kpi_06':
+      return 'Chain-wide severity proxy for cleaning work. Compare hotel views to spot higher-complexity properties.';
+    case 'cmo_kpi_07':
+      return 'Chain-wide concentration of the top cleaning category. Use hotel views to see whether one category dominates at a specific property.';
+    case 'cmo_kpi_08':
+      return 'Chain-wide count of active cleaning categories. Compare hotels to understand breadth of service mix.';
+    case 'cmo_kpi_09':
+      return 'Chain-wide count of touched assets or room combinations. Compare hotel views to identify where cleaning effort is spread widest.';
+    case 'cmo_kpi_10':
+      return 'Chain-wide daily average cleaning orders. Compare hotel views to assess which property is driving the workload pattern.';
+    default:
+      return base;
+  }
 }
 
 function orderChartDefs(defs: ChartDef[], orderedIds: string[]): ChartDef[] {
@@ -1933,7 +2173,7 @@ function buildMaintenanceKpis(summary: HotelSummary, type: MaintenanceType): Kpi
   ]);
 }
 
-function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboardJson; chainEntries?: ChainEntry[] }) {
+function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboardJson | CoDashboardJson; chainEntries?: ChainEntry[] }) {
   const { t } = useI18n();
   const { theme: selectedTheme } = useTheme();
   const [dark, setDark] = useState(false);
@@ -1946,8 +2186,13 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark);
-  }, [dark]);
+    const html = document.documentElement;
+    const syncDark = () => setDark(html.classList.contains('dark'));
+    syncDark();
+    const observer = new MutationObserver(syncDark);
+    observer.observe(html, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     setDateFrom(data.meta.date_range.min ?? '');
@@ -1961,19 +2206,28 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     [data, maintenanceType],
   );
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
+  const isCo = data.meta.schema === 'co-v1';
   const isMo = maintenanceType === 'MO';
   const scopedCharts = useMemo(
     () => orderChartDefs(data.charts_by_type?.[maintenanceType] ?? data.charts, HOTEL_MO_CHART_DISPLAY_ORDER).map((def) => {
-      if (!isMo) return def;
+      if (!isMo && !isCo) return def;
       const scope = moLocalizationScope(isCorp);
-      return {
+      const localized = {
         ...def,
         title: t(`${scope}_chart_titles.${def.id}`, def.title),
         note: t(`${scope}_chart_notes.${def.id}`, def.note),
         formula: t(`${scope}_chart_formulas.${def.id}`, def.formula),
       };
+      return isCo
+        ? {
+            ...localized,
+            title: coLocalizeText(localized.title),
+            note: coLocalizeText(localized.note),
+            formula: coLocalizeText(localized.formula),
+          }
+        : localized;
     }),
-    [data, maintenanceType, isCorp, isMo, t],
+    [data, maintenanceType, isCorp, isMo, isCo, t],
   );
   const baseScopedSummary = useMemo(
     () => data.summary_by_type?.[maintenanceType] ?? data.summary,
@@ -1990,15 +2244,25 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const scopedKpis = useMemo(
     () => {
       const base = decorateBenchmarkLabels(fd ? buildMaintenanceKpis(scopedSummary, maintenanceType) : (data.kpis_by_type?.[maintenanceType] ?? data.kpis));
-      if (!isMo) return base;
+      if (!isMo && !isCo) return base;
       const scope = moLocalizationScope(isCorp);
-      return base.map((k) => ({
-        ...k,
-        label: `${t(`${scope}_kpi_labels.${k.id}`, k.label)} ${benchmarkEmoji(k.benchmark, k.value, k.available)}`.trim(),
-        note: t(`${scope}_kpi_notes.${k.id}`, k.note),
-        formula: t(`${scope}_kpi_formulas.${k.id}`, k.formula),
-        benchmark: k.benchmark,
-      }));
+      return base.map((k) => {
+        const localized = {
+          ...k,
+          label: t(`${scope}_kpi_labels.${k.id}`, k.label),
+          note: t(`${scope}_kpi_notes.${k.id}`, k.note),
+          formula: t(`${scope}_kpi_formulas.${k.id}`, k.formula),
+          benchmark: k.benchmark,
+        };
+        return isCo
+          ? {
+              ...localized,
+              label: coLocalizeText(localized.label),
+              note: coLocalizeText(localized.note),
+              formula: coLocalizeText(localized.formula),
+            }
+          : localized;
+      });
     },
     [fd, scopedSummary, maintenanceType, data, isMo, isCorp, t],
   );
@@ -2014,10 +2278,11 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const accentAlt = themeTokens.accentAlt;
   const footerText = themeTokens.dashboard.footerText;
   const footerBd = themeTokens.dashboard.footerBorder;
+  const moduleDisplay = isCo ? 'CO ACSR' : maintenanceType;
   const contextTitle = isCorp
-    ? `${(data.meta.chain_code ?? 'CORP').toUpperCase()} · ${maintenanceType}`
+    ? `${(data.meta.chain_code ?? 'CORP').toUpperCase()} · ${moduleDisplay}`
     : data.meta.hotel_name
-    ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${maintenanceType}${data.meta.country_code ? ` (${data.meta.country_code})` : ''}`
+    ? `${data.meta.hotel_name} · ${data.meta.hotel_code ?? ''} · ${moduleDisplay}${data.meta.country_code ? ` (${data.meta.country_code})` : ''}`
     : data.meta.source_name;
 
   useEffect(() => {
@@ -2134,37 +2399,49 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
 
   const corpMoCharts = useMemo<ChartDef[]>(() => {
     if (!isCorp) return [];
-    return orderChartDefs(buildCorpMoCharts(activeCorpEntries, worldMapData), CORP_MO_CHART_DISPLAY_ORDER).map((def) => ({
-      ...def,
-      title: t(`cmo_chart_titles.${def.id}`, def.title),
-      note: t(`cmo_chart_notes.${def.id}`, def.note),
-      formula: t(`cmo_chart_formulas.${def.id}`, def.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
-    }));
-  }, [isCorp, activeCorpEntries, worldMapData, maintenanceType, t]);
+    return orderChartDefs(buildCorpMoCharts(activeCorpEntries, worldMapData), CORP_MO_CHART_DISPLAY_ORDER).map((def) => {
+      const localized = {
+        ...def,
+        title: t(`cmo_chart_titles.${def.id}`, def.title),
+        note: t(`cmo_chart_notes.${def.id}`, def.note),
+        formula: t(`cmo_chart_formulas.${def.id}`, def.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
+      };
+      return isCo
+        ? {
+            ...localized,
+            title: coLocalizeText(localized.title),
+            note: coLocalizeText(localized.note),
+            formula: coLocalizeText(localized.formula),
+          }
+        : localized;
+    });
+  }, [isCorp, activeCorpEntries, worldMapData, maintenanceType, isCo, t]);
 
-  const corpBenchmarkChartsLabel = maintenanceType === 'MO'
-    ? t('dashboard_ui.corp_mo_benchmark_charts', 'Corp MO Benchmark Charts')
-    : t('dashboard_ui.corp_pm_benchmark_charts', 'Corp PM Benchmark Charts');
+  const corpBenchmarkChartsLabel = isCo
+    ? t('dashboard_ui.corp_co_benchmark_charts', 'Corp CO ACSR Benchmark Charts')
+    : maintenanceType === 'MO'
+      ? t('dashboard_ui.corp_mo_benchmark_charts', 'Corp MO Benchmark Charts')
+      : t('dashboard_ui.corp_pm_benchmark_charts', 'Corp PM Benchmark Charts');
 
   const corpKpis = useMemo(() => {
     if (!isCorp) return null;
     return buildCorpMoKpis(corpActiveSummary).map((kpi) => ({
       ...kpi,
-      label: maintenanceType === 'PM'
+      label: isCo ? corpCoKpiLabel(kpi.label, kpi.id) : maintenanceType === 'PM'
         ? kpi.label
             .replace('Work Orders', 'PM Orders')
             .replace('Open Work Order Rate', 'Open PM Order Rate')
             .replace('Guest Related Orders', 'Guest Related PM Orders')
         : t(`cmo_kpi_labels.${kpi.id}`, kpi.label),
-      note: maintenanceType === 'PM'
+      note: isCo ? corpCoKpiNote(kpi.note, kpi.id) : maintenanceType === 'PM'
         ? kpi.note
             .replace(/\bmaintenance orders\b/gi, 'preventive maintenance orders')
             .replace(/\bmaintenance\b/gi, 'preventive maintenance')
             .replace(/\bwork orders\b/gi, 'PM orders')
         : t(`cmo_kpi_notes.${kpi.id}`, kpi.note),
-      formula: t(`cmo_kpi_formulas.${kpi.id}`, kpi.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
+      formula: isCo ? coLocalizeText(t(`cmo_kpi_formulas.${kpi.id}`, kpi.formula).replace(/type = MO/g, 'type = CO')) : t(`cmo_kpi_formulas.${kpi.id}`, kpi.formula).replace(/type = MO/g, `type = ${maintenanceType}`),
     }));
-  }, [isCorp, corpActiveSummary, maintenanceType, t]);
+  }, [isCorp, corpActiveSummary, maintenanceType, isCo, t]);
 
   let chartSequence = 0;
   const nextChartIndex = () => {
@@ -2183,6 +2460,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
             {((isCorp ? corpActiveSummary.total : scopedSummary.total) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
             {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
+            {isCo && <> {' · '}CO ACSR Dashboard</>}
             {!isCorp && isMo && <>{' · '}{t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')}</>}
             {isCorp && isMo && <> {' · '}Corp {t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')} view</>}
           </p>
@@ -2242,29 +2520,31 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
               </select>
             </div>
           )}
-          <div
-            className="inline-flex items-center rounded-md overflow-hidden"
-            style={{ border: `1px solid ${inputBd}`, background: inputBg }}
-          >
-            <button
-              type="button"
-              onClick={() => setMaintenanceType('MO')}
-              className="px-3 py-1.5 font-mono text-[0.68rem]"
-              style={{
-                background: maintenanceType === 'MO' ? accent : 'transparent',
-                color: maintenanceType === 'MO' ? '#f8f7f2' : inputText,
-              }}
-            >MO</button>
-            <button
-              type="button"
-              onClick={() => setMaintenanceType('PM')}
-              className="px-3 py-1.5 font-mono text-[0.68rem]"
-              style={{
-                background: maintenanceType === 'PM' ? accentAlt : 'transparent',
-                color: maintenanceType === 'PM' ? '#f8f7f2' : inputText,
-              }}
-            >PM</button>
-          </div>
+          {!isCo && (
+            <div
+              className="inline-flex items-center rounded-md overflow-hidden"
+              style={{ border: `1px solid ${inputBd}`, background: inputBg }}
+            >
+              <button
+                type="button"
+                onClick={() => setMaintenanceType('MO')}
+                className="px-3 py-1.5 font-mono text-[0.68rem]"
+                style={{
+                  background: maintenanceType === 'MO' ? accent : 'transparent',
+                  color: maintenanceType === 'MO' ? '#f8f7f2' : inputText,
+                }}
+              >MO</button>
+              <button
+                type="button"
+                onClick={() => setMaintenanceType('PM')}
+                className="px-3 py-1.5 font-mono text-[0.68rem]"
+                style={{
+                  background: maintenanceType === 'PM' ? accentAlt : 'transparent',
+                  color: maintenanceType === 'PM' ? '#f8f7f2' : inputText,
+                }}
+              >PM</button>
+            </div>
+          )}
 
           <button
             type="button"
@@ -2277,7 +2557,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           </button>
           <button
             type="button"
-            onClick={() => setDark((v) => !v)}
+            onClick={() => document.documentElement.classList.toggle('dark')}
             className="h-8 w-8 grid place-items-center transition-opacity hover:opacity-80"
             style={{ border: `1px solid ${inputBd}`, background: inputBg, color: inputText }}
             aria-label="Toggle dark mode"
@@ -2297,7 +2577,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
         </section>
 
         <section>
-          {!isCorp && <SectionHead label={`${maintenanceType} Charts`} dark={dark} />}
+          {!isCorp && <SectionHead label={`${moduleDisplay} Charts`} dark={dark} />}
           {isCorp && <SectionHead label={corpBenchmarkChartsLabel} dark={dark} />}
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
             {(isCorp ? corpMoCharts : scopedCharts).map((def) => (
@@ -2336,7 +2616,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           style={{ borderTop: `1px solid ${footerBd}`, fontSize: '0.6rem', letterSpacing: '0.08em', color: footerText }}
         >
           <span>
-            fcs1-dash · {maintenanceType} · {isMo ? t('dashboard_ui.dashboard_label_mo', 'MO Dashboard') : maintenanceModeLabel(maintenanceType)}
+            fcs1-dash · {moduleDisplay} · {isCo ? t('dashboard_ui.dashboard_label_co', 'CO ACSR Dashboard') : isMo ? t('dashboard_ui.dashboard_label_mo', 'MO Dashboard') : maintenanceModeLabel(maintenanceType)}
             {' · '}{scopedSummary.total.toLocaleString()} work orders
           </span>
           <span>Highcharts · PostgreSQL · Next.js</span>
@@ -2381,8 +2661,13 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
   // Sync dark class to <html> so Tailwind dark: variants work globally
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark);
-  }, [dark]);
+    const html = document.documentElement;
+    const syncDark = () => setDark(html.classList.contains('dark'));
+    syncDark();
+    const observer = new MutationObserver(syncDark);
+    observer.observe(html, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
 
@@ -2632,6 +2917,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       formula: string,
       available = true,
       unit?: string,
+      benchmark?: KpiBenchmark,
     ): KpiDef => ({
       id,
       label,
@@ -2641,19 +2927,20 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       note,
       formula,
       available,
+      benchmark,
     });
 
     return [
       make('kpi_09', 'Total Incident Volume', total, 'integer', 'Total number of incidents in the selected period. Benchmark: Good <= 800, Watch 801-1200, Bad > 1200 (thresholds should be tuned by property scale).', 'COUNT(All Incidents)', true, 'cases'),
-      make('kpi_01', 'Corporate Risk Score', r1(corpRiskScore), 'pct1', 'Composite corporate health index balancing severity, VIP exposure, and SLA breach risk. Benchmark: Good >= 85, Watch 70-84.9, Bad < 70.', '100 - [ (Avg Severity/4 * 45) + (VIP Exposure * 30) + (SLA Breach Rate * 25) ]'),
-      make('kpi_02', 'Critical Incident Rate', r1(criticalRate), 'pct1', 'Share of incidents classified as Critical. Benchmark: Good <= 1%, Watch 1-2%, Bad > 2%.', 'Critical Cases / Total Cases * 100'),
-      make('kpi_03', 'Hotel Benchmark Index', r1(hotelBenchmark), 'pct1', 'Average cross-hotel benchmark index for fair chain-level comparison. Benchmark: Good >= 85, Watch 75-84.9, Bad < 75.', 'AVG per-hotel [100 - (Severity*40 + VIP*30 + SLA*30)]'),
-      make('kpi_04', 'VIP Incident Exposure', r1(vipExposure), 'pct1', 'Portion of incidents involving VIP guests; tracks premium-service risk. Benchmark: Good <= 6%, Watch 6-10%, Bad > 10%.', 'VIP Cases / Total Cases * 100'),
-      make('kpi_05', 'SLA Breach Rate', r1(slaBreachRate), 'pct1', 'Operational discipline KPI based on breach/late/overdue-like statuses. Benchmark: Good <= 3%, Watch 3-5%, Bad > 5%.', 'SLA Breach Cases / Total Cases * 100'),
-      make('kpi_06', 'Closure Rate', r1(closureRate), 'pct1', 'Percentage of incidents that reached completed/closed state. Benchmark: Good >= 95%, Watch 90-94.9%, Bad < 90%.', 'Completed Cases / Total Cases * 100'),
-      make('kpi_07', 'VIP Closure Rate', vipTotal > 0 ? r1((activeSummary.vip_completed / vipTotal) * 100) : null, 'pct1', 'Resolution efficiency for VIP incidents. Benchmark: Good >= 95%, Watch 90-94.9%, Bad < 90%.', 'VIP Completed Cases / VIP Cases * 100', vipTotal > 0),
-      make('kpi_08', 'Repeat Guest Complaint Rate', r1(repeatRate), 'pct1', 'Recurrence pressure indicator tied to loyalty/retention risk. Benchmark: Good <= 15%, Watch 15-25%, Bad > 25%.', 'Repeat Complaint Cases / Total Cases * 100'),
-      make('kpi_10', 'Root Cause Concentration', r1(rootCauseConcentration), 'pct1', 'Concentration of incident volume in top 5 categories; higher can indicate systemic concentration risk. Benchmark: Good <= 45%, Watch 45-60%, Bad > 60%.', 'Top 5 Incident Categories Cases / Total Cases * 100'),
+      make('kpi_01', 'Corporate Risk Score', r1(corpRiskScore), 'pct1', 'Composite corporate health index balancing severity, VIP exposure, and SLA breach risk. Benchmark: Good >= 85, Watch 70-84.9, Bad < 70.', '100 - [ (Avg Severity/4 * 45) + (VIP Exposure * 30) + (SLA Breach Rate * 25) ]', true, '', imBenchmarkFor('kpi_01')),
+      make('kpi_02', 'Critical Incident Rate', r1(criticalRate), 'pct1', 'Share of incidents classified as Critical. Benchmark: Good <= 1%, Watch 1-2%, Bad > 2%.', 'Critical Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_02')),
+      make('kpi_03', 'Hotel Benchmark Index', r1(hotelBenchmark), 'pct1', 'Average cross-hotel benchmark index for fair chain-level comparison. Benchmark: Good >= 85, Watch 75-84.9, Bad < 75.', 'AVG per-hotel [100 - (Severity*40 + VIP*30 + SLA*30)]', true, '', imBenchmarkFor('kpi_03')),
+      make('kpi_04', 'VIP Incident Exposure', r1(vipExposure), 'pct1', 'Portion of incidents involving VIP guests; tracks premium-service risk. Benchmark: Good <= 6%, Watch 6-10%, Bad > 10%.', 'VIP Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_04')),
+      make('kpi_05', 'SLA Breach Rate', r1(slaBreachRate), 'pct1', 'Operational discipline KPI based on breach/late/overdue-like statuses. Benchmark: Good <= 3%, Watch 3-5%, Bad > 5%.', 'SLA Breach Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_05')),
+      make('kpi_06', 'Closure Rate', r1(closureRate), 'pct1', 'Percentage of incidents that reached completed/closed state. Benchmark: Good >= 95%, Watch 90-94.9%, Bad < 90%.', 'Completed Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_06')),
+      make('kpi_07', 'VIP Closure Rate', vipTotal > 0 ? r1((activeSummary.vip_completed / vipTotal) * 100) : null, 'pct1', 'Resolution efficiency for VIP incidents. Benchmark: Good >= 95%, Watch 90-94.9%, Bad < 90%.', 'VIP Completed Cases / VIP Cases * 100', vipTotal > 0, '', imBenchmarkFor('kpi_07')),
+      make('kpi_08', 'Repeat Guest Complaint Rate', r1(repeatRate), 'pct1', 'Recurrence pressure indicator tied to loyalty/retention risk. Benchmark: Good <= 15%, Watch 15-25%, Bad > 25%.', 'Repeat Complaint Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_08')),
+      make('kpi_10', 'Root Cause Concentration', r1(rootCauseConcentration), 'pct1', 'Concentration of incident volume in top 5 categories; higher can indicate systemic concentration risk. Benchmark: Good <= 45%, Watch 45-60%, Bad > 60%.', 'Top 5 Incident Categories Cases / Total Cases * 100', true, '', imBenchmarkFor('kpi_10')),
     ];
   }, [isCorp, isJo, corpActiveSummary, data.raw_daily, activeChainEntries, fd?.weekMap]);
 
@@ -2744,6 +3031,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       formula: string,
       available = true,
       unit = '',
+      benchmark?: KpiBenchmark,
     ): KpiDef => ({
       id,
       label,
@@ -2753,24 +3041,25 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       note,
       formula,
       available,
+      benchmark,
     });
 
     return [
-      make('hkpi_02', 'Incident Volume', total, 'integer', 'Operational workload baseline for staffing and queue planning. Good: predictable volume with steady closure quality; Bad: volatility spikes that exceed planned capacity.', 'COUNT(All Incidents)', true, 'cases'),
-      make('hkpi_03', 'Incident Resolution SLA Compliance', r1(slaCompliance), 'pct1', 'Portion of incidents resolved within SLA discipline rules. Good >= 95%; Watch 90-94.9%; Bad < 90%.', '(Total Cases - SLA Breach Cases) / Total Cases * 100'),
-      make('hkpi_06', 'Closure Rate', r1(closureRate), 'pct1', 'Standard closure throughput KPI for execution health. Good >= 95%; Watch 90-94.9%; Bad < 90%.', 'Completed Cases / Total Cases * 100'),
-      make('hkpi_07', 'Critical Incident Rate', r1(criticalRate), 'pct1', 'Share of critical-severity incidents indicating severe failure exposure. Good <= 1%; Watch 1-2%; Bad > 2%.', 'Critical Cases / Total Cases * 100'),
-      make('hkpi_08', 'Guest Complaint Severity Index', r2(avgSeverity), 'decimal2', 'Average severity intensity of all incident cases. Good <= 1.8; Watch 1.81-2.4; Bad > 2.4.', 'Severity Score Sum / Total Cases (Low=1, Medium=2, High=3, Critical=4)', true, 'pts'),
-      make('hkpi_09', 'VIP Closure Rate', vipTotal > 0 ? r1(vipClosureRate) : null, 'pct1', 'Resolution quality for VIP-impact incidents. Good >= 95%; Watch 90-94.9%; Bad < 90%.', 'VIP Completed Cases / VIP Cases * 100', vipTotal > 0),
-      make('hkpi_10', 'VIP Guest Incident Rate', r1(vipRate), 'pct1', 'Premium guest incident exposure for brand-protection monitoring. Good <= 6%; Watch 6-10%; Bad > 10%.', 'VIP Cases / Total Cases * 100'),
-      make('hkpi_12', 'Department Incident Distribution', r1(topDeptShare), 'pct1', 'Concentration in top department; high concentration implies bottleneck risk. Good <= 30%; Watch 30-45%; Bad > 45%.', 'Top Department Cases / Total Cases * 100'),
-      make('hkpi_14', 'Repeat Incident Rate', r1(repeatRate), 'pct1', 'Repeat load share for longitudinal comparison with historical reporting baselines. Good <= 15%; Watch 15-25%; Bad > 25%.', 'Repeat Incident Cases / Total Cases * 100'),
-      make('hkpi_15', 'Complaint Source Analysis', r1(topSourceShare), 'pct1', 'Top complaint-source concentration to prioritize channel-level fixes. Good <= 35%; Watch 35-50%; Bad > 50%.', 'Top Complaint Source Cases / Total Cases * 100'),
-      make('hkpi_16', 'Open Backlog Rate', r1(backlogRate), 'pct1', 'Open workload pressure currently unresolved. Good <= 5%; Watch 5-10%; Bad > 10%.', 'Pending Cases / Total Cases * 100'),
-      make('hkpi_17', 'Pending Cases', pending, 'integer', 'Current unresolved queue size requiring active follow-up. Good: stable near 0; Bad: sustained growth over multiple days/weeks.', 'COUNT(Status = Pending)', true, 'cases'),
-      make('hkpi_18', 'Peak Incident Time Analysis', peakHour, 'integer', 'Peak hourly load marker for shift planning and staffing. Good: balanced hourly pattern; Bad: sharp single-hour spikes without staffing alignment.', 'Peak Hour = ARGMAX(hourly_incident_count)', true, 'h'),
-      make('hkpi_19', 'Avg First Response', avgFirstResponse === null ? null : r2(avgFirstResponse), 'decimal2', 'Average response latency from case creation to first investigation update. Good <= 30 min; Watch 31-60 min; Bad > 60 min.', 'AVG(first_investigation_timestamp - created_timestamp) in minutes', avgFirstResponse !== null, 'min'),
-      make('hkpi_20', 'Cancelled Cases', cancelled, 'integer', 'Volume of cancelled cases to monitor process leakage. Good <= 2%; Watch 2-5%; Bad > 5% of total incidents.', 'COUNT(Status = Cancelled)', true, 'cases'),
+      make('hkpi_02', 'Incident Volume', total, 'integer', 'Operational workload baseline for staffing and queue planning. Good: predictable volume with steady closure quality; Bad: volatility spikes that exceed planned capacity.', 'COUNT(All Incidents)', true, 'cases', buildImBenchmark('neutral', null, null, '', '', '', 'Scale-dependent volume; compare against same-hotel history or chain average.')),
+      make('hkpi_03', 'Incident Resolution SLA Compliance', r1(slaCompliance), 'pct1', 'Portion of incidents resolved within SLA discipline rules. Good >= 95%; Watch 90-94.9%; Bad < 90%.', '(Total Cases - SLA Breach Cases) / Total Cases * 100', true, '', buildImBenchmark('higher', 95, 90, 'Good >= 95%', 'Watch 90-94.9%', 'Bad < 90%')),
+      make('hkpi_06', 'Closure Rate', r1(closureRate), 'pct1', 'Standard closure throughput KPI for execution health. Good >= 95%; Watch 90-94.9%; Bad < 90%.', 'Completed Cases / Total Cases * 100', true, '', buildImBenchmark('higher', 95, 90, 'Good >= 95%', 'Watch 90-94.9%', 'Bad < 90%')),
+      make('hkpi_07', 'Critical Incident Rate', r1(criticalRate), 'pct1', 'Share of critical-severity incidents indicating severe failure exposure. Good <= 1%; Watch 1-2%; Bad > 2%.', 'Critical Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 1, 2, 'Good <= 1%', 'Watch 1-2%', 'Bad > 2%')),
+      make('hkpi_08', 'Guest Complaint Severity Index', r2(avgSeverity), 'decimal2', 'Average severity intensity of all incident cases. Good <= 1.8; Watch 1.81-2.4; Bad > 2.4.', 'Severity Score Sum / Total Cases (Low=1, Medium=2, High=3, Critical=4)', true, 'pts', buildImBenchmark('lower', 1.8, 2.4, 'Good <= 1.80 pts', 'Watch 1.81-2.40 pts', 'Bad > 2.40 pts')),
+      make('hkpi_09', 'VIP Closure Rate', vipTotal > 0 ? r1(vipClosureRate) : null, 'pct1', 'Resolution quality for VIP-impact incidents. Good >= 95%; Watch 90-94.9%; Bad < 90%.', 'VIP Completed Cases / VIP Cases * 100', vipTotal > 0, '', buildImBenchmark('higher', 95, 90, 'Good >= 95%', 'Watch 90-94.9%', 'Bad < 90%')),
+      make('hkpi_10', 'VIP Guest Incident Rate', r1(vipRate), 'pct1', 'Premium guest incident exposure for brand-protection monitoring. Good <= 6%; Watch 6-10%; Bad > 10%.', 'VIP Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 6, 10, 'Good <= 6%', 'Watch 6-10%', 'Bad > 10%')),
+      make('hkpi_12', 'Department Incident Distribution', r1(topDeptShare), 'pct1', 'Concentration in top department; high concentration implies bottleneck risk. Good <= 30%; Watch 30-45%; Bad > 45%.', 'Top Department Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 30, 45, 'Good <= 30%', 'Watch 30-45%', 'Bad > 45%')),
+      make('hkpi_14', 'Repeat Incident Rate', r1(repeatRate), 'pct1', 'Repeat load share for longitudinal comparison with historical reporting baselines. Good <= 15%; Watch 15-25%; Bad > 25%.', 'Repeat Incident Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 15, 25, 'Good <= 15%', 'Watch 15-25%', 'Bad > 25%')),
+      make('hkpi_15', 'Complaint Source Analysis', r1(topSourceShare), 'pct1', 'Top complaint-source concentration to prioritize channel-level fixes. Good <= 35%; Watch 35-50%; Bad > 50%.', 'Top Complaint Source Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 35, 50, 'Good <= 35%', 'Watch 35-50%', 'Bad > 50%')),
+      make('hkpi_16', 'Open Backlog Rate', r1(backlogRate), 'pct1', 'Open workload pressure currently unresolved. Good <= 5%; Watch 5-10%; Bad > 10%.', 'Pending Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 5, 10, 'Good <= 5%', 'Watch 5-10%', 'Bad > 10%')),
+      make('hkpi_17', 'Pending Cases', pending, 'integer', 'Current unresolved queue size requiring active follow-up. Good: stable near 0; Bad: sustained growth over multiple days/weeks.', 'COUNT(Status = Pending)', true, 'cases', buildImBenchmark('neutral', null, null, '', '', '', 'Scale-dependent queue size; compare against the same hotel or prior periods.')),
+      make('hkpi_18', 'Peak Incident Time Analysis', peakHour, 'integer', 'Peak hourly load marker for shift planning and staffing. Good: balanced hourly pattern; Bad: sharp single-hour spikes without staffing alignment.', 'Peak Hour = ARGMAX(hourly_incident_count)', true, 'h', buildImBenchmark('neutral', null, null, '', '', '', 'Time-of-day concentration should be compared against prior periods and staffing plan.')),
+      make('hkpi_19', 'Avg First Response', avgFirstResponse === null ? null : r2(avgFirstResponse), 'decimal2', 'Average response latency from case creation to first investigation update. Good <= 30 min; Watch 31-60 min; Bad > 60 min.', 'AVG(first_investigation_timestamp - created_timestamp) in minutes', avgFirstResponse !== null, 'min', buildImBenchmark('lower', 30, 60, 'Good <= 30 min', 'Watch 31-60 min', 'Bad > 60 min')),
+      make('hkpi_20', 'Cancelled Cases', cancelled, 'integer', 'Volume of cancelled cases to monitor process leakage. Good <= 2%; Watch 2-5%; Bad > 5% of total incidents.', 'COUNT(Status = Cancelled)', true, 'cases', buildImBenchmark('lower', 2, 5, 'Good <= 2%', 'Watch 2-5%', 'Bad > 5%')),
     ];
   }, [isCorp, isJo, data.summary, data.charts, kpis, fd, deptScopedSummary]);
 
@@ -2796,7 +3085,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     if (corpImKpis) {
       return corpImKpis.map((k) => ({
         ...k,
-        label: `${t(`corp_kpi_labels.${k.id}`, k.label)} ${corpImKpiEmoji(k.id, k.value, k.available)}`.trim(),
+        label: t(`corp_kpi_labels.${k.id}`, k.label),
         note: t(`corp_kpi_notes.${k.id}`, k.note),
         formula: t(`corp_kpi_formulas.${k.id}`, k.formula),
         benchmark: k.benchmark,
@@ -2805,7 +3094,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     if (hotelImKpis) {
       return hotelImKpis.map((k) => ({
         ...k,
-        label: `${t(`hotel_im_kpi_labels.${k.id}`, k.label)} ${hotelImKpiEmoji(k.id, k.value, k.available)}`.trim(),
+        label: t(`hotel_im_kpi_labels.${k.id}`, k.label),
         note: t(`hotel_im_kpi_notes.${k.id}`, k.note),
         formula: t(`hotel_im_kpi_formulas.${k.id}`, k.formula),
         benchmark: k.benchmark,
@@ -2814,7 +3103,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     return kpis.map((k) => ({
       ...k,
       label: isJo
-        ? `${t(`kpi_labels_jo.${k.id}`, k.label)} ${benchmarkEmoji(k.benchmark, k.value, k.available)}`.trim()
+        ? t(`kpi_labels_jo.${k.id}`, k.label)
         : t(`kpi_labels_im.${k.id}`, k.label),
       note: t(`${isJo ? 'kpi_notes_jo' : 'kpi_notes_im'}.${k.id}`, k.note),
       benchmark: isJo
@@ -3644,7 +3933,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
             <Printer size={12} /> {t('dashboard_ui.export_pdf', 'Export PDF').toUpperCase()}
           </button>
           <button
-            type="button" onClick={() => setDark(d => !d)}
+            type="button" onClick={() => document.documentElement.classList.toggle('dark')}
             className="p-1.5 transition-opacity hover:opacity-75"
             style={{ color: metaSub, border: `1px solid ${toolbarBd}` }}
             aria-label={t('dashboard_ui.toggle_dark_mode', 'Toggle dark mode')}
@@ -3690,6 +3979,11 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 const uiIndex = idx + 1;
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
               })}
+              <CorpImPerformanceTable
+                entries={activeChainEntries}
+                dark={dark}
+                index={corpImTopCharts.length + 1}
+              />
             </div>
           </section>
         )}
@@ -3896,8 +4190,12 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   );
 }
 
-export function DashboardClient({ data, chainEntries = [] }: { data: DashboardJson; chainEntries?: ChainEntry[] }) {
+export function DashboardClient({ data, chainEntries = [], coRows = [] }: { data: DashboardJson; chainEntries?: ChainEntry[]; coRows?: CoRow[] }) {
+  const isCo = data.meta.schema === 'co-v1';
   const isMo = data.meta.schema === 'mo-v1';
+  if (isCo) {
+    return <CoDashboardView data={data as CoDashboardJson} rows={coRows} chainEntries={chainEntries} />;
+  }
   if (isMo) {
     return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} />;
   }

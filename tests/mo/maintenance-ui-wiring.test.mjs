@@ -118,3 +118,14 @@ test('hotel mo kpi labels are present in zh-tw and ja', () => {
     }
   }
 });
+
+test('hotel mo charts are present in zh-tw and ja using chart keys', () => {
+  for (const lang of [zhTwLang, jaLang]) {
+    for (let i = 1; i <= 12; i++) {
+      const key = `chart_${String(i).padStart(2, '0')}`;
+      assert.ok(lang.hmo_chart_titles[key], `missing hmo_chart_titles.${key}`);
+      assert.ok(lang.hmo_chart_notes[key], `missing hmo_chart_notes.${key}`);
+      assert.ok(lang.hmo_chart_formulas[key], `missing hmo_chart_formulas.${key}`);
+    }
+  }
+});

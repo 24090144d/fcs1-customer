@@ -7,13 +7,13 @@ type Body = {
   ordered_ids?: string[];
   new_title?: string;
   organization_id?: string;
-  module_code?: 'im' | 'jo';
+  module_code?: 'im' | 'jo' | 'co';
 };
 
 type Row = {
   id: string;
   organization_id: string;
-  module_code: 'im' | 'jo';
+  module_code: 'im' | 'jo' | 'co';
   display_order: number | null;
   is_active: boolean;
 };
@@ -21,7 +21,7 @@ type Row = {
 async function normalizeDisplayOrder(
   sb: ReturnType<typeof createAiAdminClient>,
   organizationId: string,
-  moduleCode: 'im' | 'jo',
+  moduleCode: 'im' | 'jo' | 'co',
 ) {
   const { data: items } = await sb
     .from('ai_chart_definitions')

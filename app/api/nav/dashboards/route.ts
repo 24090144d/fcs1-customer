@@ -21,7 +21,7 @@ type DashRow = {
 };
 
 export interface NavDashItem {
-  module:       'im' | 'jo' | 'mo';
+  module:       'im' | 'jo' | 'mo' | 'co';
   hotel_code:   string;
   hotel_name:   string;
   country_code: string;
@@ -39,16 +39,17 @@ export async function GET() {
   noStore();
   try {
     const sb = createAdminClient();
-    const [{ data: imRows }, { data: joRows }, { data: moRows }] = await Promise.all([
+    const [{ data: imRows }, { data: joRows }, { data: moRows }, { data: coRows }] = await Promise.all([
       sb.from('im_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
       sb.from('jo_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
       sb.from('mo_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
+      sb.from('co_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
     ]);
 
-    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<'im' | 'jo' | 'mo'> }>>();
+    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<'im' | 'jo' | 'mo' | 'co'> }>>();
     const seen = new Set<string>(); // module|chain|hotel
 
-    const addRow = (module: 'im' | 'jo' | 'mo', row: DashRow) => {
+    const addRow = (module: 'im' | 'jo' | 'mo' | 'co', row: DashRow) => {
       const m = row.generated_json?.meta;
       if (!m) return;
       const chain = (m.chain_code ?? '').trim().toUpperCase();
@@ -72,13 +73,14 @@ export async function GET() {
     for (const r of (imRows ?? [])) addRow('im', r);
     for (const r of (joRows ?? [])) addRow('jo', r);
     for (const r of (moRows ?? [])) addRow('mo', r);
+    for (const r of (coRows ?? [])) addRow('co', r);
 
     if (chainMap.size === 0) return NextResponse.json({ chains: [] });
 
     const chains: NavChain[] = Array.from(chainMap.entries()).map(([chain, hotelMap]) => {
       const items: NavDashItem[] = [];
 
-      for (const moduleCode of ['im', 'jo', 'mo'] as const) {
+      for (const moduleCode of ['im', 'jo', 'mo', 'co'] as const) {
         const hotelsForModule = Array.from(hotelMap.entries())
           .filter(([, { mods }]) => mods.has(moduleCode))
           .sort(([a], [b]) => a.localeCompare(b));
@@ -89,7 +91,7 @@ export async function GET() {
             hotel_code: 'CORP',
             hotel_name: 'Corp',
             country_code: '',
-            label: moduleCode === 'im' ? 'Corp · IM' : moduleCode === 'jo' ? 'Corp · JO' : 'Corp · MO',
+            label: moduleCode === 'im' ? 'Corp · IM' : moduleCode === 'jo' ? 'Corp · JO' : moduleCode === 'mo' ? 'Corp · MO' : 'Corp · CO ACSR',
             href: `/dashboard?hotel=corp&chain=${encodeURIComponent(chain)}&module=${moduleCode}`,
             scope: 'corp',
           });
@@ -101,10 +103,10 @@ export async function GET() {
             hotel_code,
             hotel_name,
             country_code,
-            label: `${hotel_code} · ${moduleCode.toUpperCase()}`,
+            label: `${hotel_code} · ${moduleCode === 'co' ? 'CO ACSR' : moduleCode.toUpperCase()}`,
             href: moduleCode === 'im'
-              ? `/dashboard?hotel=${hotel_code}`
-              : `/dashboard?module=${moduleCode}&hotel=${hotel_code}`,
+              ? `/dashboard?hotel=${hotel_code}&chain=${encodeURIComponent(chain)}`
+              : `/dashboard?module=${moduleCode}&hotel=${hotel_code}&chain=${encodeURIComponent(chain)}`,
             scope: 'hotel',
           });
         }

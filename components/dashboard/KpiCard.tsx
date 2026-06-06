@@ -4,21 +4,7 @@ import { useState } from 'react';
 import type { KpiDef } from '@/types/dashboard';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
-import { benchmarkLines } from '@/lib/kpi-benchmarks';
-
-// ── Accent assignment ─────────────────────────────────────────────────────────
-// Orange border: raw volume / count KPIs
-// Teal border:  performance / quality / VIP KPIs
-const TEAL_KPIS = new Set(['kpi_02', 'kpi_06', 'kpi_07', 'kpi_08', 'kpi_09', 'kpi_10']);
-
-function accentFor(id: string, accent: string, accentAlt: string, accentTint: string, accentAltTint: string) {
-  const isTeal = TEAL_KPIS.has(id);
-  return {
-    color:       isTeal ? accent : accentAlt,
-    colorAlt:    isTeal ? accentAlt : accent,
-    subtleBg:    isTeal ? accentTint : accentAltTint,
-  };
-}
+import { benchmarkLines, benchmarkStatus } from '@/lib/kpi-benchmarks';
 
 // ── Value formatter ───────────────────────────────────────────────────────────
 function fmtValue(kpi: KpiDef): string {
@@ -38,6 +24,20 @@ function fmtUnit(kpi: KpiDef): string {
   return kpi.unit ?? '';
 }
 
+function badgeLabel(status: ReturnType<typeof benchmarkStatus>): string {
+  if (status === 'good') return 'GOOD';
+  if (status === 'watch') return 'NEEDS IMPROVEMENT';
+  if (status === 'bad') return 'BAD';
+  return 'INFO';
+}
+
+function badgeColors(tokens: ReturnType<typeof getAppThemeTokens>, status: ReturnType<typeof benchmarkStatus>) {
+  if (status === 'good') return { border: '#16a34a', bg: 'rgba(22,163,74,0.12)', text: '#16a34a' };
+  if (status === 'watch') return { border: '#d97706', bg: 'rgba(217,119,6,0.12)', text: '#d97706' };
+  if (status === 'bad') return { border: '#dc2626', bg: 'rgba(220,38,38,0.12)', text: '#dc2626' };
+  return { border: tokens.accent, bg: tokens.accentTint, text: tokens.accent };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 interface KpiCardProps { kpi: KpiDef; dark: boolean }
 
@@ -46,9 +46,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
   const [hovered, setHovered]   = useState(false);
   const { theme } = useTheme();
   const tokens = getAppThemeTokens(theme, dark);
-
-  const { color, colorAlt, subtleBg } = accentFor(kpi.id, tokens.accent, tokens.accentAlt, tokens.accentTint, tokens.accentAltTint);
-  const borderColor = hovered ? colorAlt : color;
+  const status = benchmarkStatus(kpi.benchmark, kpi.value, kpi.available);
 
   const na      = !kpi.available;
   const surface = tokens.card.bg;
@@ -60,6 +58,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
   const tooltipSurface = tokens.card.tooltipBg;
   const tooltipBorder  = tokens.card.tooltipBorder;
   const tooltipText    = tokens.card.tooltipText;
+  const badge = badgeColors(tokens, status);
 
   return (
     <div
@@ -67,7 +66,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
       style={{
         background:   surface,
         border:       `1px solid ${border}`,
-        borderLeft:   `4px solid ${borderColor}`,
+        borderLeft:   `4px solid ${badge.border}`,
         borderRadius: '10px',
         transition:   'border-left-color 180ms ease',
       }}
@@ -78,7 +77,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
       {hovered && (
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: subtleBg, borderRadius: '10px', transition: 'opacity 180ms' }}
+          style={{ background: badge.bg, borderRadius: '10px', transition: 'opacity 180ms' }}
           aria-hidden
         />
       )}
@@ -86,12 +85,26 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
       <div className="relative px-4 pt-3.5 pb-3">
         {/* Label row */}
         <div className="flex items-start justify-between gap-1 mb-2">
-          <span
-            className="font-mono uppercase leading-tight"
-            style={{ fontSize: '0.6rem', letterSpacing: '0.14em', color: label }}
-          >
-            {kpi.label}
-          </span>
+          <div className="space-y-1">
+            <span
+              className="block font-mono uppercase leading-tight"
+              style={{ fontSize: '0.6rem', letterSpacing: '0.14em', color: label }}
+            >
+              {kpi.label}
+            </span>
+            <span
+              className="inline-flex items-center rounded-full px-2 py-0.5 font-mono"
+              style={{
+                background: badge.bg,
+                color: badge.text,
+                fontSize: '0.56rem',
+                letterSpacing: '0.12em',
+                border: `1px solid ${badge.border}33`,
+              }}
+            >
+              {badgeLabel(status)}
+            </span>
+          </div>
           <button
             type="button"
             onClick={() => setShowInfo(v => !v)}
@@ -134,7 +147,7 @@ export function KpiCard({ kpi, dark }: KpiCardProps) {
           style={{
             background:   tooltipSurface,
             border:       `1px solid ${tooltipBorder}`,
-            borderLeft:   `3px solid ${color}`,
+            borderLeft:   `3px solid ${badge.border}`,
             borderRadius: '8px',
           }}
         >

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { RotateCcw, ArrowRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
@@ -57,18 +58,26 @@ function parseFileName(filename: string): ParsedFileName | null {
   const nameWithoutExt = filename.replace(/\.csv$/i, '');
   const parts = nameWithoutExt.split('-');
   if (parts.length < 6) return null;
+  let moduleIndex = -1;
+  for (let i = 2; i < parts.length - 1; i++) {
+    if (/^(IM|JO|MO|CO)$/i.test(parts[i])) {
+      moduleIndex = i;
+      break;
+    }
+  }
+  if (moduleIndex < 0) return null;
   return {
     chainCode:   parts[0],
     hotelCode:   parts[1],
-    hotelName:   parts[2],
-    module:      parts[3],
-    countryCode: parts[4],
-    dataRange:   parts.slice(5).join('-'),
+    hotelName:   parts.slice(2, moduleIndex).join('-'),
+    module:      parts[moduleIndex],
+    countryCode: parts[moduleIndex + 1],
+    dataRange:   parts.slice(moduleIndex + 2).join('-'),
     isValid:     true,
   };
 }
 
-const KNOWN_MODULES: ModuleCode[] = ['IM', 'JO', 'MO'];
+const KNOWN_MODULES: ModuleCode[] = ['IM', 'JO', 'MO', 'CO'];
 
 function buildValidationMessages(file: File, parsed: ParsedFileName | null): ValidationMessage[] {
   const msgs: ValidationMessage[] = [];
@@ -130,6 +139,7 @@ function fmt(n: number) { return n.toLocaleString(); }
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const { t } = useI18n();
   const [file,              setFile]              = useState<File | null>(null);
   const [parsed,            setParsed]            = useState<ParsedFileName | null>(null);
@@ -340,6 +350,10 @@ export default function OnboardingPage() {
         severity: 'success',
         message:  `Finalized — ${fmt(records_inserted)} records written to database. Dashboard JSON updated.`,
       });
+      const dashboardHref = parsed?.module?.toLowerCase() === 'co'
+        ? `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=co${parsed.chainCode ? `&chain=${encodeURIComponent(parsed.chainCode)}` : ''}`
+        : `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=${encodeURIComponent(parsed.module.toLowerCase())}`;
+      router.replace(dashboardHref);
     } catch (err) {
       setStatus('error');
       addMsg({
@@ -348,7 +362,7 @@ export default function OnboardingPage() {
         message:  `Finalization failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
       });
     }
-  }, [file, parsed, addMsg]);
+  }, [file, parsed, addMsg, router]);
 
   // ── Create job then run pipeline ─────────────────────────────────────────
 
@@ -407,7 +421,7 @@ export default function OnboardingPage() {
 
     const moduleCode = parsed.module.toUpperCase() as ModuleCode;
     if (!KNOWN_MODULES.includes(moduleCode)) {
-      addMsg({ id: 'module-invalid', severity: 'error', message: `Cannot parse: module "${parsed.module}" is not IM, JO, or MO.` });
+      addMsg({ id: 'module-invalid', severity: 'error', message: `Cannot parse: module "${parsed.module}" is not IM, JO, MO, or CO.` });
       return;
     }
 
@@ -471,13 +485,14 @@ export default function OnboardingPage() {
           <div className="min-w-0">
             <h1 className="font-serif text-2xl font-bold text-slate-800 leading-tight">{t('onboarding.page_title', 'Upload CSV')}</h1>
             <p className="font-sans text-sm text-slate-500 mt-1 max-w-2xl">
-              {t('onboarding.page_subtitle', 'Upload IM, JO, or MO CSV data. IM supports incident dashboards, JO supports job-order dashboards, and MO supports maintenance dashboards with MO/PM order analysis.')}
+              {t('onboarding.page_subtitle', 'Upload IM, JO, MO, or CO CSV data. IM supports incident dashboards, JO supports job-order dashboards, MO supports maintenance dashboards with MO/PM order analysis, and CO supports cleaning-order dashboards.')}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {[
                 ['IM', 'Incident Management'],
                 ['JO', 'Job Order'],
                 ['MO', 'Maintenance Order / PM'],
+                ['CO', 'Cleaning Order ACSR'],
               ].map(([code, label]) => (
                 <span
                   key={code}
@@ -630,7 +645,9 @@ export default function OnboardingPage() {
                   </div>
                 </div>
                 <Link
-                  href={`/dashboard?hotel=${parsed.hotelCode}&module=${parsed.module.toLowerCase()}`}
+                  href={parsed.module.toLowerCase() === 'co'
+                    ? `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=co${parsed.chainCode ? `&chain=${encodeURIComponent(parsed.chainCode)}` : ''}`
+                    : `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=${encodeURIComponent(parsed.module.toLowerCase())}`}
                   className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg font-sans font-semibold text-xs transition-all duration-150 active:scale-[0.98]"
                   style={{
                     background: '#0E7470',
@@ -652,14 +669,14 @@ export default function OnboardingPage() {
               <p className="font-sans text-[11px] text-slate-500 leading-relaxed">
                 Supported modules: <span className="font-semibold text-slate-700">IM</span> for incident data,{' '}
                 <span className="font-semibold text-slate-700">JO</span> for job-order data, and{' '}
-                <span className="font-semibold text-slate-700">MO</span> for maintenance CSVs containing MO and PM order numbers.
+                <span className="font-semibold text-slate-700">MO</span> for maintenance CSVs containing MO and PM order numbers, and <span className="font-semibold text-slate-700">CO</span> for cleaning-order CSVs.
               </p>
               <div className="space-y-1">
                 {[
                   ['ChainCode',   'e.g. Hyatt'],
                   ['HotelCode',   'e.g. TYOTY'],
                   ['HotelName',   'e.g. Hyatt Regency Tokyo'],
-                  ['Module',      'IM, JO, or MO'],
+                  ['Module',      'IM, JO, MO, or CO'],
                   ['CountryCode', 'e.g. JP'],
                   ['DataRange',   'e.g. 4m or 2024Q1'],
                 ].map(([seg, hint]) => (

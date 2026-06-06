@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { ModuleCode, ImRow, JoRow, MoRow, ValidationError } from '@/types/csv';
+import type { ModuleCode, ImRow, JoRow, MoRow, CoRow, ValidationError } from '@/types/csv';
+import { buildCoRow } from '@/lib/csv/coMapping';
 
 // ── Required column lists ─────────────────────────────────────────────────────
 
@@ -20,6 +21,8 @@ export const MO_REQUIRED_COLUMNS = [
   'job_status',
   'created_datetime',
 ] as const;
+
+export const CO_REQUIRED_COLUMNS = [] as const;
 
 // ── Zod primitives ────────────────────────────────────────────────────────────
 
@@ -445,6 +448,16 @@ export function validateMoRow(
   };
 }
 
+export function validateCoRow(
+  raw: Record<string, string>,
+  rowNumber: number,
+): { row: CoRow | null; errors: ValidationError[] } {
+  return {
+    row: buildCoRow(raw, rowNumber),
+    errors: [],
+  };
+}
+
 // ── Header validation ─────────────────────────────────────────────────────────
 
 /**
@@ -457,7 +470,10 @@ export function validateHeaders(
 ): { ok: boolean; missing: string[] } {
   const normalised = headers.map(canonicalKey);
   const required =
-    module === 'IM' ? IM_REQUIRED_COLUMNS : module === 'JO' ? JO_REQUIRED_COLUMNS : MO_REQUIRED_COLUMNS;
+    module === 'IM' ? IM_REQUIRED_COLUMNS
+      : module === 'JO' ? JO_REQUIRED_COLUMNS
+      : module === 'MO' ? MO_REQUIRED_COLUMNS
+      : CO_REQUIRED_COLUMNS;
   const missing = required.filter((col) => !normalised.includes(col));
   return { ok: missing.length === 0, missing };
 }

@@ -5,7 +5,7 @@ type SaveReq = {
   organization_id?: string;
   title?: string;
   chart_type?: string;
-  module_code?: 'im' | 'jo';
+  module_code?: 'im' | 'jo' | 'co';
   prompt?: string;
   query_spec_json?: Record<string, unknown>;
   chart_config_json?: Record<string, unknown>;

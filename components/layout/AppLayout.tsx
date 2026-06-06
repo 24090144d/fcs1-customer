@@ -108,13 +108,12 @@ function AppLayoutInner({ children, breadcrumbs, headerRight }: AppLayoutProps) 
                           : bc.label}
                   </span>
                 </span>
-              ))}
-            </nav>
+          ))}
+          </nav>
           )}
 
           <div className="flex-1" />
-          <LanguageSwitcher />
-          {headerRight}
+          {headerRight ?? <LanguageSwitcher />}
         </header>
 
         {/* Scrollable content */}

@@ -3,10 +3,10 @@
 
 alter type public.module_code add value if not exists 'co';
 
-alter table public.ai_chart_definitions
+alter table if exists public.ai_chart_definitions
   drop constraint if exists ai_chart_definitions_module_code_check;
 
-alter table public.ai_chart_definitions
+alter table if exists public.ai_chart_definitions
   add constraint ai_chart_definitions_module_code_check
   check ((module_code = any (array['im'::text, 'jo'::text, 'mo'::text, 'co'::text])));
 

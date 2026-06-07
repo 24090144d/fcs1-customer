@@ -26,6 +26,11 @@ on:
         required: false
         default: ""
         type: string
+      database_url_secret_name:
+        description: "Optional secret name override (defaults to DATABASE_URL_<CUSTOMER_CODE>)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -45,18 +50,51 @@ jobs:
         id: resolve_db_url
         env:
           INPUT_DATABASE_URL: ${{ inputs.database_url }}
-          DEFAULT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL_CN }}
-          ALT_SECRET_DATABASE_URL: ${{ secrets.DATABASE_URL_CHINA }}
+          INPUT_DATABASE_URL_SECRET_NAME: ${{ inputs.database_url_secret_name }}
+          CUSTOMER_CODE: ${{ inputs.customer_code }}
+          DATABASE_URL_CN: ${{ secrets.DATABASE_URL_CN }}
+          DATABASE_URL_CHINA: ${{ secrets.DATABASE_URL_CHINA }}
+          DATABASE_URL_HK: ${{ secrets.DATABASE_URL_HK }}
+          DATABASE_URL_MY: ${{ secrets.DATABASE_URL_MY }}
+          DATABASE_URL_MO: ${{ secrets.DATABASE_URL_MO }}
+          DATABASE_URL_NEON: ${{ secrets.DATABASE_URL_NEON }}
         run: |
+          resolve_secret() {
+            local secret_name="$1"
+            case "$secret_name" in
+              DATABASE_URL_CN) echo "$DATABASE_URL_CN" ;;
+              DATABASE_URL_CHINA) echo "$DATABASE_URL_CHINA" ;;
+              DATABASE_URL_HK) echo "$DATABASE_URL_HK" ;;
+              DATABASE_URL_MY) echo "$DATABASE_URL_MY" ;;
+              DATABASE_URL_MO) echo "$DATABASE_URL_MO" ;;
+              DATABASE_URL_NEON) echo "$DATABASE_URL_NEON" ;;
+              *)
+                echo ""
+                ;;
+            esac
+          }
+
           if [ -n "$INPUT_DATABASE_URL" ]; then
             echo "database_url=$INPUT_DATABASE_URL" >> "$GITHUB_OUTPUT"
-          elif [ -n "$DEFAULT_SECRET_DATABASE_URL" ]; then
-            echo "database_url=$DEFAULT_SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
-          elif [ -n "$ALT_SECRET_DATABASE_URL" ]; then
-            echo "database_url=$ALT_SECRET_DATABASE_URL" >> "$GITHUB_OUTPUT"
           else
-            echo "No database URL provided. Set workflow input database_url or repo secret DATABASE_URL_CN."
-            exit 1
+            secret_name="$INPUT_DATABASE_URL_SECRET_NAME"
+            if [ -z "$secret_name" ]; then
+              upper_code="$(printf '%s' "$CUSTOMER_CODE" | tr '[:lower:]' '[:upper:]')"
+              secret_name="DATABASE_URL_${upper_code}"
+            fi
+
+            runtime_url="$(resolve_secret "$secret_name")"
+            if [ -z "$runtime_url" ] && [ "$secret_name" = "DATABASE_URL_CN" ]; then
+              runtime_url="$(resolve_secret 'DATABASE_URL_CHINA')"
+            fi
+            if [ -z "$runtime_url" ] && [ "$secret_name" = "DATABASE_URL_CHINA" ]; then
+              runtime_url="$(resolve_secret 'DATABASE_URL_CN')"
+            fi
+            if [ -z "$runtime_url" ]; then
+              echo "No database URL found. Set workflow input database_url or repo secret $secret_name."
+              exit 1
+            fi
+            echo "database_url=$runtime_url" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Node

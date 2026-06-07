@@ -13,6 +13,10 @@ Run in order:
 4. `sql/migrations/003_record_scope_columns.sql`
 5. `sql/migrations/004_bigint_id_defaults.sql`
 6. `sql/migrations/005_ai_chart_playground.sql`
+7. `sql/migrations/006_ai_chart_publish.sql`
+8. `sql/migrations/007_ai_chart_display_order.sql`
+9. `sql/migrations/008_mo_schema.sql`
+10. `sql/migrations/009_co_schema.sql`
 
 ## 3) Create Vercel project (per customer)
 - Project name: `fcs1-<customer-code>`

@@ -16,7 +16,9 @@ Complete these before running `.github/workflows/onboard-customer.yml`.
   - `DATABASE_URL_UNPOOLED_CN`
   - `DATABASE_URL_HK`
   - `DATABASE_URL_UNPOOLED_HK`
-- The onboarding workflow auto-selects `DATABASE_URL_<CUSTOMER_CODE>` unless you override `database_url`.
+  - `DATABASE_URL_NEON`
+  - `DATABASE_URL_UNPOOLED_NEON`
+  - The onboarding workflow auto-selects `DATABASE_URL_<CUSTOMER_CODE>` unless you override `database_url`.
 
 ## 3) Vercel access
 - Ensure `VERCEL_TOKEN` can create projects and manage env vars.

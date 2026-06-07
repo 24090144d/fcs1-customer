@@ -485,6 +485,139 @@ ALTER SEQUENCE public.mo_staging_rows_id_seq OWNED BY public.mo_staging_rows.id;
 
 
 --
+-- Name: co_dashboard_json; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.co_dashboard_json (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    schema_version text NOT NULL,
+    generated_json jsonb NOT NULL,
+    generated_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: co_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.co_records (
+    id bigint NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    uploaded_file_id uuid,
+    source_row_id bigint,
+    row_key text,
+    row_number integer,
+    chain_code text,
+    hotel_code text,
+    module_code text,
+    country_code text,
+    report_variant text DEFAULT 'ACSR'::text NOT NULL,
+    created_date timestamp with time zone,
+    cleaning_order_no text,
+    room_no text,
+    room_type text,
+    floor text,
+    building text,
+    status text,
+    status_normalized text,
+    priority text,
+    priority_normalized text,
+    stay_status text,
+    attendant text,
+    supervisor text,
+    department text,
+    task_type text,
+    cleaning_type text,
+    service_round text,
+    start_time timestamp with time zone,
+    end_time timestamp with time zone,
+    completed_time timestamp with time zone,
+    duration_minutes numeric,
+    planned_duration_minutes numeric,
+    actual_duration_minutes numeric,
+    duration_variance_minutes numeric,
+    ahead_behind_minutes numeric,
+    inspection_status text,
+    pass_fail text,
+    reclean_flag boolean DEFAULT false NOT NULL,
+    remarks text,
+    created_by text,
+    updated_by text,
+    updated_on timestamp with time zone,
+    cleaning_credit numeric,
+    productivity_per_hour numeric,
+    is_completed boolean DEFAULT false NOT NULL,
+    is_on_time boolean DEFAULT false NOT NULL,
+    additional_task_status text,
+    type text NOT NULL,
+    normalized_row jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT co_records_type_check CHECK ((type = ANY (ARRAY['MO'::text, 'PM'::text])))
+);
+
+
+--
+-- Name: co_records_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.co_records_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: co_records_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.co_records_id_seq OWNED BY public.co_records.id;
+
+
+--
+-- Name: co_staging_rows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.co_staging_rows (
+    id bigint NOT NULL,
+    organization_id uuid NOT NULL,
+    upload_job_id uuid NOT NULL,
+    uploaded_file_id uuid NOT NULL,
+    row_number integer NOT NULL,
+    raw_row jsonb NOT NULL,
+    parse_error text,
+    is_valid boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: co_staging_rows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.co_staging_rows_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: co_staging_rows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.co_staging_rows_id_seq OWNED BY public.co_staging_rows.id;
+
+
+--
 -- Name: organizations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -600,6 +733,27 @@ ALTER TABLE ONLY public.mo_staging_rows ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: co_dashboard_json id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_dashboard_json ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
+
+--
+-- Name: co_records id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_records ALTER COLUMN id SET DEFAULT nextval('public.co_records_id_seq'::regclass);
+
+
+--
+-- Name: co_staging_rows id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_staging_rows ALTER COLUMN id SET DEFAULT nextval('public.co_staging_rows_id_seq'::regclass);
+
+
+--
 -- Name: ai_chart_definitions ai_chart_definitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -701,6 +855,38 @@ ALTER TABLE ONLY public.mo_records
 
 ALTER TABLE ONLY public.mo_staging_rows
     ADD CONSTRAINT mo_staging_rows_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: co_dashboard_json co_dashboard_json_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_dashboard_json
+    ADD CONSTRAINT co_dashboard_json_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: co_dashboard_json co_dashboard_json_upload_job_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_dashboard_json
+    ADD CONSTRAINT co_dashboard_json_upload_job_id_key UNIQUE (upload_job_id);
+
+
+--
+-- Name: co_records co_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_records
+    ADD CONSTRAINT co_records_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: co_staging_rows co_staging_rows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_staging_rows
+    ADD CONSTRAINT co_staging_rows_pkey PRIMARY KEY (id);
 
 
 --
@@ -945,6 +1131,118 @@ CREATE INDEX jo_staging_rows_job_idx ON public.jo_staging_rows USING btree (uplo
 --
 
 CREATE INDEX jo_staging_rows_job_row_idx ON public.jo_staging_rows USING btree (upload_job_id, row_number);
+
+
+--
+-- Name: co_dashboard_json_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_dashboard_json_created_idx ON public.co_dashboard_json USING btree (created_at);
+
+
+--
+-- Name: co_dashboard_json_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_dashboard_json_job_idx ON public.co_dashboard_json USING btree (upload_job_id);
+
+
+--
+-- Name: co_records_attendant_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_attendant_idx ON public.co_records USING btree (attendant);
+
+
+--
+-- Name: co_records_building_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_building_idx ON public.co_records USING btree (building);
+
+
+--
+-- Name: co_records_created_date_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_created_date_idx ON public.co_records USING btree (created_date);
+
+
+--
+-- Name: co_records_floor_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_floor_idx ON public.co_records USING btree (floor);
+
+
+--
+-- Name: co_records_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_job_idx ON public.co_records USING btree (upload_job_id);
+
+
+--
+-- Name: co_records_room_no_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_room_no_idx ON public.co_records USING btree (room_no);
+
+
+--
+-- Name: co_records_row_key_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_row_key_idx ON public.co_records USING btree (row_key);
+
+
+--
+-- Name: co_records_row_number_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_row_number_idx ON public.co_records USING btree (row_number);
+
+
+--
+-- Name: co_records_scope_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_scope_idx ON public.co_records USING btree (chain_code, hotel_code, module_code, country_code, report_variant);
+
+
+--
+-- Name: co_records_status_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_status_idx ON public.co_records USING btree (status_normalized);
+
+
+--
+-- Name: co_records_type_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_type_idx ON public.co_records USING btree (type);
+
+
+--
+-- Name: co_records_priority_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_records_priority_idx ON public.co_records USING btree (priority_normalized);
+
+
+--
+-- Name: co_staging_rows_job_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_staging_rows_job_idx ON public.co_staging_rows USING btree (upload_job_id);
+
+
+--
+-- Name: co_staging_rows_job_row_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX co_staging_rows_job_row_idx ON public.co_staging_rows USING btree (upload_job_id, row_number);
 
 
 --
@@ -1227,6 +1525,46 @@ ALTER TABLE ONLY public.mo_staging_rows
 
 ALTER TABLE ONLY public.mo_staging_rows
     ADD CONSTRAINT mo_staging_rows_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id) ON DELETE CASCADE;
+
+
+--
+-- Name: co_dashboard_json co_dashboard_json_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_dashboard_json
+    ADD CONSTRAINT co_dashboard_json_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: co_records co_records_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_records
+    ADD CONSTRAINT co_records_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: co_records co_records_uploaded_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_records
+    ADD CONSTRAINT co_records_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id);
+
+
+--
+-- Name: co_staging_rows co_staging_rows_upload_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_staging_rows
+    ADD CONSTRAINT co_staging_rows_upload_job_id_fkey FOREIGN KEY (upload_job_id) REFERENCES public.upload_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: co_staging_rows co_staging_rows_uploaded_file_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.co_staging_rows
+    ADD CONSTRAINT co_staging_rows_uploaded_file_id_fkey FOREIGN KEY (uploaded_file_id) REFERENCES public.uploaded_files(id) ON DELETE CASCADE;
 
 
 --

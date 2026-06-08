@@ -1411,16 +1411,16 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
-    // cjo-22: 24-Hour Jobs distribution → Top Service Items
-    make('cjo-22', '24-Hour Jobs Distribution → Top Service Items', 'Total job volume by hour of day across the chain. Click a bar to drill into the top service items for that hour.', 'COUNT(*) BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
+    // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
+    make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items requested by VIP guests at that hour.', 'COUNT(*) WHERE is_vip BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
       const GREEN = '#22c55e';
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
       const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
 
-      // Aggregate all-job hour→item maps across all chain hotels
+      // Aggregate VIP-only hour→item maps across all chain hotels
       const chainHourItem: Record<number, Record<string, number>> = {};
       for (const e of entries) {
-        const hourItemMap = e.summary.jo_hour_item_map ?? {};
+        const hourItemMap = e.summary.jo_vip_hour_item_map ?? {};
         for (const [hStr, itemMap] of Object.entries(hourItemMap)) {
           const h = Number(hStr);
           if (!chainHourItem[h]) chainHourItem[h] = {};
@@ -1433,8 +1433,8 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       return {
         chart: { type: 'column' },
         xAxis: { categories: hourLabels },
-        yAxis: { min: 0, title: { text: 'Jobs' } },
-        series: [{ type: 'column', name: 'Jobs', color: GREEN,
+        yAxis: { min: 0, title: { text: 'VIP Jobs' } },
+        series: [{ type: 'column', name: 'VIP Jobs', color: GREEN,
           data: hours24.map((h) => ({
             y: Object.values(chainHourItem[h] ?? {}).reduce((s, v) => s + v, 0),
             drilldown: `cjo22h:${h}`,
@@ -1447,7 +1447,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
             const topItems = Object.entries(chainHourItem[h] ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 15);
             return {
               id: `cjo22h:${h}`,
-              name: `${String(h).padStart(2, '0')}:00 — Top Service Items`,
+              name: `${String(h).padStart(2, '0')}:00 — Top Service Items (VIP)`,
               type: 'column', color: GREEN,
               dataLabels: { enabled: true },
               data: topItems.map(([itm, cnt]) => [itm, cnt]),

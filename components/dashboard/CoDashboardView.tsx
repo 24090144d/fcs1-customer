@@ -834,7 +834,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   });
   const topAttendants = topEntries(attendantCompletedMap, 10);
 
-  // co_chart_03 drilldown: top attendants per duration bucket
+  // co-03 drilldown: top attendants per duration bucket
   const durationBinAttendants = durationBins.map((bin) => {
     const binRows = completedRows.filter((row) => {
       const v = toMinutes(row);
@@ -844,7 +844,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     return topEntries(attCounts, 15).map(([name, y]) => ({ name, y }));
   });
 
-  // co_chart_04 drilldown: duration bucket counts per completion hour
+  // co-04 drilldown: duration bucket counts per completion hour
   const hourDurBucketCounts = Array.from({ length: 24 }, (_, hour) => {
     const hourRows = completedRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
@@ -860,7 +860,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     );
   });
 
-  // co_chart_15-20: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
+  // co-15-20: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
   const allHourRows24 = Array.from({ length: 24 }, (_, h) =>
     allRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
@@ -900,7 +900,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     return topEntries(m, 20).map(([name, y]) => ({ name, y }));
   });
 
-  // co_chart_21-24: Cleaning Duration distribution drilldown dimensions
+  // co-21-24: Cleaning Duration distribution drilldown dimensions
   const durBinRows = durationBins.map((bin) =>
     completedRows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && v >= bin.min && v < bin.max; })
   );
@@ -921,7 +921,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     return topEntries(m, 20).map(([name, y]) => ({ name, y }));
   });
 
-  // co_chart_25-27: 24-Hour Delayed Order distribution drilldown dimensions
+  // co-25-27: 24-Hour Delayed Order distribution drilldown dimensions
   const delayedRows = completedRows.filter(isDelayed);
   const delayedHourRows = Array.from({ length: 24 }, (_, h) =>
     delayedRows.filter((row) => {
@@ -945,7 +945,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     return topEntries(m, 20).map(([name, y]) => ({ name, y }));
   });
 
-  // co_chart_28-39: Dimension → 24-Hour / Cleaning Duration drilldowns
+  // co-28-39: Dimension → 24-Hour / Cleaning Duration drilldowns
   const _g1ByHour = (rows: CoRow[]) =>
     completionHourCategories.map((label, h) => ({
       name: label,
@@ -994,7 +994,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
 
   return [
     makeChartBase(
-      'co_chart_01',
+      'co-01',
       'Cleaning Status → Room Type',
       `Distribution of cleaning orders by cleaning status with drilldown into room type. ${suffix}.`,
       `COUNT(*) GROUP BY status_normalized DRILLDOWN room_type WHERE ${clause}`,
@@ -1016,7 +1016,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_02',
+      'co-02',
       'Stay Status vs Average Cleaning Duration',
       `Stay-status workload compared with average cleaning duration. ${suffix}.`,
       `COUNT(*) GROUP BY stay_status + AVG(actual_duration_minutes) WHERE ${clause}`,
@@ -1068,7 +1068,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_03',
+      'co-03',
       'Cleaning Duration → Attendant',
       `Duration distribution of completed orders with drilldown into top attendants per bucket. Average duration: ${completedDurationAverage.toFixed(1)} mins. ${suffix}.`,
       `COUNT(*) GROUP BY duration_bin DRILLDOWN attendant WHERE ${clause}`,
@@ -1119,7 +1119,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_04',
+      'co-04',
       '24-Hour Completion → Duration',
       `Completed orders by hour of day with drilldown into cleaning duration distribution per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(completed_time) DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1170,7 +1170,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_05',
+      'co-05',
       'Average Cleaning Duration by Cleaning Type',
       `Average time spent by cleaning service type. ${suffix}.`,
       `AVG(actual_duration_minutes) GROUP BY cleaning_type WHERE ${clause}`,
@@ -1182,7 +1182,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_06',
+      'co-06',
       'Room Type vs Average Cleaning Duration',
       `Room-type workload compared with average cleaning duration. ${suffix}.`,
       `COUNT(*) GROUP BY room_type + AVG(actual_duration_minutes) WHERE ${clause}`,
@@ -1232,7 +1232,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_07',
+      'co-07',
       'Stay Status → Cleaning Status',
       `Stay-status distribution with drilldown into cleaning status. ${suffix}.`,
       `COUNT(*) GROUP BY stay_status DRILLDOWN status_normalized WHERE ${clause}`,
@@ -1258,7 +1258,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_08',
+      'co-08',
       'Top 10 Attendants by Completed Credit vs Orders',
       `Completed credit versus completed-order throughput by attendant. ${suffix}.`,
       `COUNT(*) + SUM(cleaning_credit) WHERE status_normalized = 'Completed' GROUP BY attendant ORDER BY COUNT(*) DESC LIMIT 10`,
@@ -1299,7 +1299,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_09',
+      'co-09',
       'On-Time vs Delayed Orders',
       `Comparative split between on-time and delayed completions. ${suffix}.`,
       `COUNT(*) GROUP BY is_on_time WHERE completed = true AND ${clause}`,
@@ -1325,7 +1325,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_10',
+      'co-10',
       'Re-clean / Inspection Result Analysis',
       `Inspection pass/fail and re-clean pressure in one view. ${suffix}.`,
       `COUNT(*) GROUP BY pass_fail AND reclean_flag WHERE ${clause}`,
@@ -1361,7 +1361,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_11',
+      'co-11',
       'Daily Cleaning Order Trend',
       `Daily volume trend for total, completed, delayed, and re-clean orders. ${suffix}.`,
       `COUNT(*) BY DATE(created_date) WITH COMPLETION AND EXCEPTION LINES WHERE ${clause}`,
@@ -1395,7 +1395,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_12',
+      'co-12',
       'On-Time/Delayed vs Average Cleaning Duration',
       `On-time and delayed workload compared with average cleaning duration. ${suffix}.`,
       `COUNT(*) GROUP BY is_on_time + AVG(actual_duration_minutes) WHERE ${clause}`,
@@ -1447,7 +1447,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_13',
+      'co-13',
       'Ahead / On-Time / Behind Completion',
       `Completion timing split for finished orders. ${suffix}.`,
       `COUNT(*) GROUP BY completion_timing_bucket WHERE ${clause}`,
@@ -1518,7 +1518,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_14',
+      'co-14',
       'Hour × Floor Total Completion Credit',
       `Heatmap of total completion credit by hour and floor for completed orders. ${suffix}.`,
       `SUM(cleaning_credit) GROUP BY HOUR(completed_time), floor WHERE status_normalized = 'Completed' AND ${clause}`,
@@ -1572,7 +1572,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_15',
+      'co-15',
       '24-Hour Cleaning → Duration',
       `All cleaning orders by hour of day with drilldown into cleaning duration distribution per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1588,7 +1588,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_16',
+      'co-16',
       '24-Hour Cleaning → Stay Status',
       `All cleaning orders by hour of day with drilldown into stay status per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status WHERE ${clause}`,
@@ -1604,7 +1604,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_17',
+      'co-17',
       '24-Hour Cleaning → Cleaning Status',
       `All cleaning orders by hour of day with drilldown into cleaning status per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN status_normalized WHERE ${clause}`,
@@ -1620,7 +1620,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_18',
+      'co-18',
       '24-Hour Cleaning → Attendant',
       `Completed cleaning orders by hour of day with drilldown into top attendants per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE completed = true AND ${clause}`,
@@ -1636,7 +1636,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_19',
+      'co-19',
       '24-Hour Cleaning → On-Time/Delayed',
       `Completed cleaning orders by hour of day with drilldown into on-time vs delayed per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN is_on_time WHERE completed = true AND ${clause}`,
@@ -1652,7 +1652,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_20',
+      'co-20',
       '24-Hour Cleaning → Cleaning Type',
       `All cleaning orders by hour of day with drilldown into cleaning type per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN cleaning_type WHERE ${clause}`,
@@ -1668,7 +1668,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_21',
+      'co-21',
       'Cleaning Duration → Stay Status',
       `Cleaning duration distribution with drilldown into stay status per duration bucket. ${suffix}.`,
       `COUNT(*) GROUP BY duration_bin DRILLDOWN stay_status WHERE ${clause}`,
@@ -1683,7 +1683,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_22',
+      'co-22',
       'Cleaning Duration → Attendant',
       `Cleaning duration distribution with drilldown into top attendants per duration bucket. ${suffix}.`,
       `COUNT(*) GROUP BY duration_bin DRILLDOWN attendant WHERE ${clause}`,
@@ -1698,7 +1698,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_23',
+      'co-23',
       'Cleaning Duration → Cleaning Type',
       `Cleaning duration distribution with drilldown into cleaning type per duration bucket. ${suffix}.`,
       `COUNT(*) GROUP BY duration_bin DRILLDOWN cleaning_type WHERE ${clause}`,
@@ -1713,7 +1713,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_24',
+      'co-24',
       'Cleaning Duration → Room Type',
       `Cleaning duration distribution with drilldown into room type per duration bucket. ${suffix}.`,
       `COUNT(*) GROUP BY duration_bin DRILLDOWN room_type WHERE ${clause}`,
@@ -1728,7 +1728,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_25',
+      'co-25',
       '24-Hour Delayed → Stay Status',
       `Delayed orders by hour of day with drilldown into stay status per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status WHERE delayed = true AND ${clause}`,
@@ -1743,7 +1743,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_26',
+      'co-26',
       '24-Hour Delayed → Attendant',
       `Delayed orders by hour of day with drilldown into top attendants per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE delayed = true AND ${clause}`,
@@ -1758,7 +1758,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_27',
+      'co-27',
       '24-Hour Delayed → Room Type',
       `Delayed orders by hour of day with drilldown into room type per hour. ${suffix}.`,
       `COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN room_type WHERE delayed = true AND ${clause}`,
@@ -1773,7 +1773,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_28',
+      'co-28',
       'Stay Status → 24-Hour Cleaning Distribution',
       `Distribution of cleaning orders by stay status with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY stay_status DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1788,7 +1788,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_29',
+      'co-29',
       'Cleaning Status → 24-Hour Cleaning Distribution',
       `Distribution of cleaning orders by cleaning status with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY status_normalized DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1803,7 +1803,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_30',
+      'co-30',
       'Room Type → 24-Hour Cleaning Distribution',
       `Distribution of cleaning orders by room type with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY room_type DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1818,7 +1818,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_31',
+      'co-31',
       'On-Time/Delayed → 24-Hour Cleaning Distribution',
       `Distribution of completed orders by on-time/delayed status with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY is_on_time DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1833,7 +1833,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_32',
+      'co-32',
       'Cleaning Type → 24-Hour Cleaning Distribution',
       `Distribution of cleaning orders by cleaning type with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY cleaning_type DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1848,7 +1848,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_33',
+      'co-33',
       'Top 10 Attendants → 24-Hour Cleaning Distribution',
       `Top 10 attendants by completed orders with drilldown into 24-hour completion pattern. ${suffix}.`,
       `COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN HOUR(any_time) WHERE ${clause}`,
@@ -1863,7 +1863,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_34',
+      'co-34',
       'Stay Status → Cleaning Duration Distribution',
       `Distribution of completed orders by stay status with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY stay_status DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1878,7 +1878,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_35',
+      'co-35',
       'Cleaning Status → Cleaning Duration Distribution',
       `Distribution of completed orders by cleaning status with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY status_normalized DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1893,7 +1893,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_36',
+      'co-36',
       'Room Type → Cleaning Duration Distribution',
       `Distribution of completed orders by room type with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY room_type DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1908,7 +1908,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_37',
+      'co-37',
       'On-Time/Delayed → Cleaning Duration Distribution',
       `Distribution of completed orders by on-time/delayed status with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY is_on_time DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1923,7 +1923,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_38',
+      'co-38',
       'Cleaning Type → Cleaning Duration Distribution',
       `Distribution of completed orders by cleaning type with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY cleaning_type DRILLDOWN duration_bin WHERE ${clause}`,
@@ -1938,7 +1938,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       },
     ),
     makeChartBase(
-      'co_chart_39',
+      'co-39',
       'Top 10 Attendants → Cleaning Duration Distribution',
       `Top 10 attendants by completed orders with drilldown into cleaning duration distribution. ${suffix}.`,
       `COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN duration_bin WHERE ${clause}`,
@@ -2153,7 +2153,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     durBucketAttendants.set(_bi, topEntries(_attCounts, 15).map(([name, y]) => ({ name, y })));
   }
 
-  // cco_chart_18-23: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
+  // cco-18-23: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
   const ccoAllHourRows24 = Array.from({ length: 24 }, (_, h) =>
     allRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
@@ -2194,7 +2194,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     return topEntries(m, 20).map(([name, y]) => ({ name, y }));
   });
 
-  // cco_chart_24-27: Cleaning Duration distribution drilldown dimensions
+  // cco-24-27: Cleaning Duration distribution drilldown dimensions
   const ccoDurBinRows = _durBucketFns.map((fn) =>
     completedRows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && fn(v); })
   );
@@ -2218,7 +2218,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     completedRows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && fn(v); }).length
   );
 
-  // cco_chart_28-30: 24-Hour Delayed Order distribution drilldown dimensions
+  // cco-28-30: 24-Hour Delayed Order distribution drilldown dimensions
   const ccoDelayedRows = completedRows.filter(isDelayed);
   const ccoDelayedHourRows = Array.from({ length: 24 }, (_, h) =>
     ccoDelayedRows.filter((row) => {
@@ -2242,7 +2242,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     return topEntries(m, 20).map(([name, y]) => ({ name, y }));
   });
 
-  // cco_chart_31-42: Dimension → 24-Hour / Cleaning Duration drilldowns
+  // cco-31-42: Dimension → 24-Hour / Cleaning Duration drilldowns
   const _ccog1ByHour = (rows: CoRow[]) =>
     ccoHourCategories.map((label, h) => ({
       name: label,
@@ -2293,7 +2293,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     makeChartBase(id, title, `${note} ${suffix}.`, `${formula} WHERE ${clause}`, options);
 
   return [
-    make('cco_chart_01', 'Hotel → Cleaning Status', 'Distribution of cleaning orders by hotel with drilldown into cleaning status', 'COUNT(*) GROUP BY hotel_code DRILLDOWN status_normalized', {
+    make('cco-01', 'Hotel → Cleaning Status', 'Distribution of cleaning orders by hotel with drilldown into cleaning status', 'COUNT(*) GROUP BY hotel_code DRILLDOWN status_normalized', {
       chart: { type: 'pie' },
       title: { text: undefined },
       plotOptions: {
@@ -2325,7 +2325,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       },
     }),
-    make('cco_chart_02', 'Hotel vs Average Cleaning Duration', 'Hotel-to-hotel cleaning speed comparison with workload context', 'COUNT(*) + AVG(actual_duration_minutes) GROUP BY hotel_code', {
+    make('cco-02', 'Hotel vs Average Cleaning Duration', 'Hotel-to-hotel cleaning speed comparison with workload context', 'COUNT(*) + AVG(actual_duration_minutes) GROUP BY hotel_code', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { categories: hotelAvgDurationEntries.map((item) => item.hotel), crosshair: true },
@@ -2343,7 +2343,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'Avg Duration (min)', data: hotelAvgDurationEntries.map((item) => item.avg), yAxis: 1, color: '#ea580c', lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 }, dashStyle: 'Solid' },
       ],
     }),
-    make('cco_chart_03', '24-Hour Completion → Duration', 'Completed orders by hour of day with drilldown into cleaning duration distribution per hour', 'COUNT(*) GROUP BY HOUR(completed_time) DRILLDOWN duration_bin WHERE completed = true', {
+    make('cco-03', '24-Hour Completion → Duration', 'Completed orders by hour of day with drilldown into cleaning duration distribution per hour', 'COUNT(*) GROUP BY HOUR(completed_time) DRILLDOWN duration_bin WHERE completed = true', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category', title: { text: 'Hour of Day' } },
@@ -2378,7 +2378,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       },
     }),
-    make('cco_chart_04', 'Hotel vs Stay Status', 'Hotel-level cleaning order volume with drilldown into stay status', 'COUNT(*) BY hotel_code DRILLDOWN stay_status', {
+    make('cco-04', 'Hotel vs Stay Status', 'Hotel-level cleaning order volume with drilldown into stay status', 'COUNT(*) BY hotel_code DRILLDOWN stay_status', {
       chart: { type: 'bar' },
       title: { text: undefined },
       xAxis: { type: 'category' },
@@ -2408,7 +2408,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       },
     }),
-    make('cco_chart_05', 'Hotel vs Room Type', 'Hotel-level cleaning order volume with drilldown into room type', 'COUNT(*) BY hotel_code DRILLDOWN room_type', {
+    make('cco-05', 'Hotel vs Room Type', 'Hotel-level cleaning order volume with drilldown into room type', 'COUNT(*) BY hotel_code DRILLDOWN room_type', {
       chart: { type: 'bar' },
       title: { text: undefined },
       xAxis: { type: 'category' },
@@ -2438,7 +2438,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       },
     }),
-    make('cco_chart_06', 'Hotel vs Completion Credit', 'Hotel-level completed order volume compared with total completion credit', `COUNT(*) + SUM(cleaning_credit) WHERE status_normalized = 'Completed' GROUP BY hotel_code`, {
+    make('cco-06', 'Hotel vs Completion Credit', 'Hotel-level completed order volume compared with total completion credit', `COUNT(*) + SUM(cleaning_credit) WHERE status_normalized = 'Completed' GROUP BY hotel_code`, {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { categories: hotelCreditEntries.map((item) => item.hotel), crosshair: true },
@@ -2456,7 +2456,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'Completion Credit', data: hotelCreditEntries.map((item) => item.credit), color: '#ea580c', yAxis: 1, lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 }, dashStyle: 'Solid' },
       ],
     }),
-    make('cco_chart_07', 'Top 10 Hotels by Completed Credit vs Orders', 'Completed credit versus throughput by hotel for executive ranking', `COUNT(*) + SUM(cleaning_credit) WHERE status_normalized = 'Completed' GROUP BY hotel_code ORDER BY SUM(cleaning_credit) DESC LIMIT 10`, {
+    make('cco-07', 'Top 10 Hotels by Completed Credit vs Orders', 'Completed credit versus throughput by hotel for executive ranking', `COUNT(*) + SUM(cleaning_credit) WHERE status_normalized = 'Completed' GROUP BY hotel_code ORDER BY SUM(cleaning_credit) DESC LIMIT 10`, {
       chart: { type: 'line' },
       title: { text: undefined },
       xAxis: { categories: hotelCreditEntries.slice(0, 10).map((item) => item.hotel) },
@@ -2477,7 +2477,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'Completed Credit', data: hotelCreditEntries.slice(0, 10).map((item) => item.credit), color: '#ea580c', yAxis: 1 },
       ],
     }),
-    make('cco_chart_08', 'On-Time vs Delayed by Hotel', 'Punctuality comparison by hotel — On Time (green) and Delayed (red) stacked per hotel, ranked by most delayed first', 'COUNT(*) GROUP BY hotel_code, is_on_time WHERE completed = true', {
+    make('cco-08', 'On-Time vs Delayed by Hotel', 'Punctuality comparison by hotel — On Time (green) and Delayed (red) stacked per hotel, ranked by most delayed first', 'COUNT(*) GROUP BY hotel_code, is_on_time WHERE completed = true', {
       chart: { type: 'bar' },
       xAxis: { categories: delayedRankedHotels },
       yAxis: { title: { text: 'Orders' } },
@@ -2489,7 +2489,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'bar' as const, name: 'Delayed', color: '#9B2335', data: delayedRankedHotels.map((hotel) => hotelDelayedCounts.get(hotel) ?? 0) },
       ],
     }),
-    make('cco_chart_09', 'Re-clean / Inspection Result Analysis', `Inspection pass/fail and re-clean pressure in one view. ${suffix}.`, `COUNT(*) GROUP BY pass_fail AND reclean_flag WHERE ${clause}`, {
+    make('cco-09', 'Re-clean / Inspection Result Analysis', `Inspection pass/fail and re-clean pressure in one view. ${suffix}.`, `COUNT(*) GROUP BY pass_fail AND reclean_flag WHERE ${clause}`, {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { categories: ['Pass', 'Fail', 'No Inspection'] },
@@ -2516,7 +2516,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         },
       ],
     }),
-    make('cco_chart_10', 'Daily Cleaning Order Trend', `Daily volume trend for total, completed, delayed, and re-clean orders. ${suffix}.`, `COUNT(*) BY DATE(created_date) WITH COMPLETION AND EXCEPTION LINES WHERE ${clause}`, {
+    make('cco-10', 'Daily Cleaning Order Trend', `Daily volume trend for total, completed, delayed, and re-clean orders. ${suffix}.`, `COUNT(*) BY DATE(created_date) WITH COMPLETION AND EXCEPTION LINES WHERE ${clause}`, {
       chart: { type: 'line' },
       xAxis: { categories: dailyDates },
       yAxis: { title: { text: 'Orders' } },
@@ -2539,7 +2539,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'Re-clean', color: '#7c3aed', data: dailyDates.map((date) => dailyMap.get(date)?.reclean ?? 0) },
       ],
     }),
-    make('cco_chart_11', 'On-Time/Delayed vs Avg Duration by Hotel', 'On-time and delayed workload compared with average cleaning duration by hotel', 'COUNT(*) GROUP BY is_on_time + AVG(actual_duration_minutes) BY hotel_code', {
+    make('cco-11', 'On-Time/Delayed vs Avg Duration by Hotel', 'On-time and delayed workload compared with average cleaning duration by hotel', 'COUNT(*) GROUP BY is_on_time + AVG(actual_duration_minutes) BY hotel_code', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { categories: hotelAvgDurationEntries.map((item) => item.hotel), crosshair: true },
@@ -2558,7 +2558,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'Avg Duration (min)', data: hotelAvgDurationEntries.map((item) => item.avg), yAxis: 1, color: '#ea580c', lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 }, dashStyle: 'Solid' },
       ],
     }),
-    make('cco_chart_12', 'Ahead / On-Time / Behind Completion', `Completion timing split for finished orders. ${suffix}.`, `COUNT(*) GROUP BY completion_timing_bucket WHERE ${clause}`, {
+    make('cco-12', 'Ahead / On-Time / Behind Completion', `Completion timing split for finished orders. ${suffix}.`, `COUNT(*) GROUP BY completion_timing_bucket WHERE ${clause}`, {
       chart: { type: 'pie' },
       title: { text: undefined },
       plotOptions: {
@@ -2580,7 +2580,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         ],
       }],
     }),
-    make('cco_chart_13', 'Cleaning Duration → Attendant', `Duration distribution of completed orders with drilldown into top attendants per bucket. ${suffix}.`, `COUNT(*) GROUP BY duration_bin DRILLDOWN attendant WHERE ${clause}`, {
+    make('cco-13', 'Cleaning Duration → Attendant', `Duration distribution of completed orders with drilldown into top attendants per bucket. ${suffix}.`, `COUNT(*) GROUP BY duration_bin DRILLDOWN attendant WHERE ${clause}`, {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category', title: { text: 'Duration (mins)' } },
@@ -2608,7 +2608,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       },
     }),
-    make('cco_chart_14', 'Top Attendant Credit', `Top attendants by completed cleaning orders. ${suffix}.`, `COUNT(*) GROUP BY attendant WHERE ${clause} AND completed = true`, {
+    make('cco-14', 'Top Attendant Credit', `Top attendants by completed cleaning orders. ${suffix}.`, `COUNT(*) GROUP BY attendant WHERE ${clause} AND completed = true`, {
       chart: { type: 'treemap' },
       title: { text: undefined },
       plotOptions: {
@@ -2622,7 +2622,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
           .map(([name, value]) => ({ name, value })),
       }],
     }),
-    make('cco_chart_15', 'Hotel Readiness Risk Index', 'Ranks hotels by readiness risk using completion gap, delayed work, behind completions, and re-clean pressure', `Risk Score = completion_gap * 0.35 + delayed_rate * 0.25 + behind_rate * 0.25 + reclean_rate * 0.15 WHERE ${clause}`, {
+    make('cco-15', 'Hotel Readiness Risk Index', 'Ranks hotels by readiness risk using completion gap, delayed work, behind completions, and re-clean pressure', `Risk Score = completion_gap * 0.35 + delayed_rate * 0.25 + behind_rate * 0.25 + reclean_rate * 0.15 WHERE ${clause}`, {
       chart: { type: 'bar' },
       title: { text: undefined },
       xAxis: { categories: readinessRiskEntries.map((entry) => entry.hotel) },
@@ -2653,7 +2653,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         })),
       }],
     }),
-    make('cco_chart_16', 'Staffing Pressure by Hotel and Hour', `Heatmap of completed orders by local hour and hotel. ${suffix}.`, `COUNT(*) GROUP BY HOUR(completed_time), hotel_code WHERE status_normalized = 'Completed' AND ${clause}`, {
+    make('cco-16', 'Staffing Pressure by Hotel and Hour', `Heatmap of completed orders by local hour and hotel. ${suffix}.`, `COUNT(*) GROUP BY HOUR(completed_time), hotel_code WHERE status_normalized = 'Completed' AND ${clause}`, {
       chart: { type: 'heatmap' },
       title: { text: undefined },
       xAxis: { categories: hotelCodes, title: { text: 'Hotel' } },
@@ -2679,7 +2679,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         }))),
       }],
     }),
-    make('cco_chart_17', 'Quality Leakage by Hotel', 'Compares re-clean rate, inspection fail rate, and no-inspection volume by hotel', `reclean_rate + inspection_fail_rate + no_inspection_count BY hotel_code WHERE ${clause}`, {
+    make('cco-17', 'Quality Leakage by Hotel', 'Compares re-clean rate, inspection fail rate, and no-inspection volume by hotel', `reclean_rate + inspection_fail_rate + no_inspection_count BY hotel_code WHERE ${clause}`, {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { categories: qualityLeakageEntries.map((entry) => entry.hotel), crosshair: true },
@@ -2698,7 +2698,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
         { type: 'line', name: 'No Inspection Orders', data: qualityLeakageEntries.map((entry) => entry.noInspection), color: '#0f766e', yAxis: 1, lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 }, dashStyle: 'Solid' },
       ],
     }),
-    make('cco_chart_18', '24-Hour Cleaning → Duration', 'All cleaning orders by hour of day with drilldown into cleaning duration distribution per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN duration_bin', {
+    make('cco-18', '24-Hour Cleaning → Duration', 'All cleaning orders by hour of day with drilldown into cleaning duration distribution per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN duration_bin', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2708,7 +2708,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h], drilldown: `cco-h24dur:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-h24dur:${h}`, name: `${label} — Duration`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoh24DurBins[h] })) },
     }),
-    make('cco_chart_19', '24-Hour Cleaning → Stay Status', 'All cleaning orders by hour of day with drilldown into stay status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status', {
+    make('cco-19', '24-Hour Cleaning → Stay Status', 'All cleaning orders by hour of day with drilldown into stay status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2718,7 +2718,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h], drilldown: `cco-h24ss:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-h24ss:${h}`, name: `${label} — Stay Status`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoh24StayStatus[h] })) },
     }),
-    make('cco_chart_20', '24-Hour Cleaning → Cleaning Status', 'All cleaning orders by hour of day with drilldown into cleaning status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN status_normalized', {
+    make('cco-20', '24-Hour Cleaning → Cleaning Status', 'All cleaning orders by hour of day with drilldown into cleaning status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN status_normalized', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2728,7 +2728,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h], drilldown: `cco-h24cs:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-h24cs:${h}`, name: `${label} — Cleaning Status`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoh24CleaningStatus[h] })) },
     }),
-    make('cco_chart_21', '24-Hour Cleaning → Attendant', 'Completed cleaning orders by hour of day — click a bar to see top attendants for that hour as a treemap', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE completed = true', {
+    make('cco-21', '24-Hour Cleaning → Attendant', 'Completed cleaning orders by hour of day — click a bar to see top attendants for that hour as a treemap', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE completed = true', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2773,7 +2773,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see attendant split' },
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h] })) }],
     }),
-    make('cco_chart_22', '24-Hour Cleaning → On-Time/Delayed', 'Completed cleaning orders by hour of day with drilldown into on-time vs delayed per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN is_on_time WHERE completed = true', {
+    make('cco-22', '24-Hour Cleaning → On-Time/Delayed', 'Completed cleaning orders by hour of day with drilldown into on-time vs delayed per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN is_on_time WHERE completed = true', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2783,7 +2783,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h], drilldown: `cco-h24otd:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-h24otd:${h}`, name: `${label} — On-Time/Delayed`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoh24OnTimeDelayed[h] })) },
     }),
-    make('cco_chart_23', '24-Hour Cleaning → Cleaning Type', 'All cleaning orders by hour of day with drilldown into cleaning type per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN cleaning_type', {
+    make('cco-23', '24-Hour Cleaning → Cleaning Type', 'All cleaning orders by hour of day with drilldown into cleaning type per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN cleaning_type', {
       chart: { type: 'column' },
       title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
@@ -2793,7 +2793,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoAllHourCounts24[h], drilldown: `cco-h24ct:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-h24ct:${h}`, name: `${label} — Cleaning Type`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoh24CleaningType[h] })) },
     }),
-    make('cco_chart_24', 'Cleaning Duration → Stay Status', 'Cleaning duration distribution with drilldown into stay status per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN stay_status', {
+    make('cco-24', 'Cleaning Duration → Stay Status', 'Cleaning duration distribution with drilldown into stay status per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN stay_status', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Duration (mins)' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2802,7 +2802,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: durBucketLabels.map((label, i) => ({ name: label, y: ccoDurBinCounts[i], drilldown: `cco-durss:${i}` })) }],
       drilldown: { series: durBucketLabels.map((label, i) => ({ id: `cco-durss:${i}`, name: `${label} — Stay Status`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDurBinStayStatus[i] })) },
     }),
-    make('cco_chart_25', 'Cleaning Duration → Attendant', 'Cleaning duration distribution with drilldown into top attendants per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN attendant', {
+    make('cco-25', 'Cleaning Duration → Attendant', 'Cleaning duration distribution with drilldown into top attendants per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN attendant', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Duration (mins)' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2811,7 +2811,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: durBucketLabels.map((label, i) => ({ name: label, y: ccoDurBinCounts[i], drilldown: `cco-duratt:${i}` })) }],
       drilldown: { series: durBucketLabels.map((label, i) => ({ id: `cco-duratt:${i}`, name: `${label} — Attendants`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDurBinAttendant[i] })) },
     }),
-    make('cco_chart_26', 'Cleaning Duration → Cleaning Type', 'Cleaning duration distribution with drilldown into cleaning type per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN cleaning_type', {
+    make('cco-26', 'Cleaning Duration → Cleaning Type', 'Cleaning duration distribution with drilldown into cleaning type per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN cleaning_type', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Duration (mins)' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2820,7 +2820,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: durBucketLabels.map((label, i) => ({ name: label, y: ccoDurBinCounts[i], drilldown: `cco-durct:${i}` })) }],
       drilldown: { series: durBucketLabels.map((label, i) => ({ id: `cco-durct:${i}`, name: `${label} — Cleaning Type`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDurBinCleaningType[i] })) },
     }),
-    make('cco_chart_27', 'Cleaning Duration → Room Type', 'Cleaning duration distribution with drilldown into room type per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN room_type', {
+    make('cco-27', 'Cleaning Duration → Room Type', 'Cleaning duration distribution with drilldown into room type per duration bucket', 'COUNT(*) GROUP BY duration_bin DRILLDOWN room_type', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Duration (mins)' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2829,7 +2829,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: durBucketLabels.map((label, i) => ({ name: label, y: ccoDurBinCounts[i], drilldown: `cco-durrt:${i}` })) }],
       drilldown: { series: durBucketLabels.map((label, i) => ({ id: `cco-durrt:${i}`, name: `${label} — Room Type`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDurBinRoomType[i] })) },
     }),
-    make('cco_chart_28', '24-Hour Delayed → Stay Status', 'Delayed orders by hour of day with drilldown into stay status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status WHERE delayed = true', {
+    make('cco-28', '24-Hour Delayed → Stay Status', 'Delayed orders by hour of day with drilldown into stay status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status WHERE delayed = true', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
       yAxis: { title: { text: 'Delayed Orders' } },
@@ -2838,7 +2838,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyss:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyss:${h}`, name: `${label} — Stay Status`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourStayStatus[h] })) },
     }),
-    make('cco_chart_29', '24-Hour Delayed → Attendant', 'Delayed orders by hour of day with drilldown into top attendants per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE delayed = true', {
+    make('cco-29', '24-Hour Delayed → Attendant', 'Delayed orders by hour of day with drilldown into top attendants per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE delayed = true', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
       yAxis: { title: { text: 'Delayed Orders' } },
@@ -2847,7 +2847,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyatt:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyatt:${h}`, name: `${label} — Attendants`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourAttendant[h] })) },
     }),
-    make('cco_chart_30', '24-Hour Delayed → Room Type', 'Delayed orders by hour of day with drilldown into room type per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN room_type WHERE delayed = true', {
+    make('cco-30', '24-Hour Delayed → Room Type', 'Delayed orders by hour of day with drilldown into room type per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN room_type WHERE delayed = true', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
       yAxis: { title: { text: 'Delayed Orders' } },
@@ -2856,7 +2856,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyrt:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyrt:${h}`, name: `${label} — Room Type`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourRoomType[h] })) },
     }),
-    make('cco_chart_31', 'Stay Status → 24-Hour Cleaning Distribution', 'Orders by stay status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY stay_status DRILLDOWN HOUR(any_time)', {
+    make('cco-31', 'Stay Status → 24-Hour Cleaning Distribution', 'Orders by stay status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY stay_status DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Stay Status' } },
       yAxis: { title: { text: 'Orders' } },
@@ -2865,7 +2865,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hSS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimss24h:${i}` })) }],
       drilldown: { series: ccoDim24hSS.map((d, i) => ({ id: `cco-dimss24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_32', 'Cleaning Status → 24-Hour Cleaning Distribution', 'Orders by cleaning status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY status_normalized DRILLDOWN HOUR(any_time)', {
+    make('cco-32', 'Cleaning Status → 24-Hour Cleaning Distribution', 'Orders by cleaning status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY status_normalized DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Cleaning Status' } },
       yAxis: { title: { text: 'Orders' } },
@@ -2874,7 +2874,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hCS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimcs24h:${i}` })) }],
       drilldown: { series: ccoDim24hCS.map((d, i) => ({ id: `cco-dimcs24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_33', 'Room Type → 24-Hour Cleaning Distribution', 'Orders by room type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY room_type DRILLDOWN HOUR(any_time)', {
+    make('cco-33', 'Room Type → 24-Hour Cleaning Distribution', 'Orders by room type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY room_type DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Room Type' } },
       yAxis: { title: { text: 'Orders' } },
@@ -2883,7 +2883,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hRT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimrt24h:${i}` })) }],
       drilldown: { series: ccoDim24hRT.map((d, i) => ({ id: `cco-dimrt24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_34', 'On-Time/Delayed → 24-Hour Cleaning Distribution', 'Completed orders by on-time/delayed status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY is_on_time DRILLDOWN HOUR(any_time)', {
+    make('cco-34', 'On-Time/Delayed → 24-Hour Cleaning Distribution', 'Completed orders by on-time/delayed status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY is_on_time DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'On-Time / Delayed' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2892,7 +2892,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#16a34a', data: ccoDim24hOTD.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimotd24h:${i}` })) }],
       drilldown: { series: ccoDim24hOTD.map((d, i) => ({ id: `cco-dimotd24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_35', 'Cleaning Type → 24-Hour Cleaning Distribution', 'Orders by cleaning type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN HOUR(any_time)', {
+    make('cco-35', 'Cleaning Type → 24-Hour Cleaning Distribution', 'Orders by cleaning type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Cleaning Type' } },
       yAxis: { title: { text: 'Orders' } },
@@ -2901,7 +2901,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimct24h:${i}` })) }],
       drilldown: { series: ccoDim24hCT.map((d, i) => ({ id: `cco-dimct24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_36', 'Top 10 Attendants → 24-Hour Cleaning Distribution', 'Top 10 attendants by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN HOUR(any_time)', {
+    make('cco-36', 'Top 10 Attendants → 24-Hour Cleaning Distribution', 'Top 10 attendants by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2910,7 +2910,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#16a34a', data: ccoDim24hAtt.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimatt24h:${i}` })) }],
       drilldown: { series: ccoDim24hAtt.map((d, i) => ({ id: `cco-dimatt24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_37', 'Stay Status → Cleaning Duration Distribution', 'Completed orders by stay status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY stay_status DRILLDOWN duration_bin', {
+    make('cco-37', 'Stay Status → Cleaning Duration Distribution', 'Completed orders by stay status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY stay_status DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Stay Status' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2919,7 +2919,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurSS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimssdr:${i}` })) }],
       drilldown: { series: ccoDimDurSS.map((d, i) => ({ id: `cco-dimssdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_38', 'Cleaning Status → Cleaning Duration Distribution', 'Completed orders by cleaning status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY status_normalized DRILLDOWN duration_bin', {
+    make('cco-38', 'Cleaning Status → Cleaning Duration Distribution', 'Completed orders by cleaning status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY status_normalized DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Cleaning Status' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2928,7 +2928,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurCS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimcsdr:${i}` })) }],
       drilldown: { series: ccoDimDurCS.map((d, i) => ({ id: `cco-dimcsdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_39', 'Room Type → Cleaning Duration Distribution', 'Completed orders by room type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY room_type DRILLDOWN duration_bin', {
+    make('cco-39', 'Room Type → Cleaning Duration Distribution', 'Completed orders by room type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY room_type DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Room Type' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2937,7 +2937,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurRT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimrtdr:${i}` })) }],
       drilldown: { series: ccoDimDurRT.map((d, i) => ({ id: `cco-dimrtdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_40', 'On-Time/Delayed → Cleaning Duration Distribution', 'Completed orders by on-time/delayed status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY is_on_time DRILLDOWN duration_bin', {
+    make('cco-40', 'On-Time/Delayed → Cleaning Duration Distribution', 'Completed orders by on-time/delayed status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY is_on_time DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'On-Time / Delayed' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2946,7 +2946,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurOTD.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimotddr:${i}` })) }],
       drilldown: { series: ccoDimDurOTD.map((d, i) => ({ id: `cco-dimotddr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_41', 'Cleaning Type → Cleaning Duration Distribution', 'Completed orders by cleaning type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN duration_bin', {
+    make('cco-41', 'Cleaning Type → Cleaning Duration Distribution', 'Completed orders by cleaning type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Cleaning Type' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2955,7 +2955,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimctdr:${i}` })) }],
       drilldown: { series: ccoDimDurCT.map((d, i) => ({ id: `cco-dimctdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco_chart_42', 'Top 10 Attendants → Cleaning Duration Distribution', 'Top 10 attendants by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN duration_bin', {
+    make('cco-42', 'Top 10 Attendants → Cleaning Duration Distribution', 'Top 10 attendants by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
       yAxis: { title: { text: 'Completed Orders' } },

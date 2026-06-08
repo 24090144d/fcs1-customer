@@ -18,32 +18,34 @@ const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m =>
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const CHAIN_CHARTS = new Set(['chart_12', 'chart_13', 'chart_14', 'chart_15', 'chart_16', 'chart_17', 'chart_18', 'chart_20']);
-const GAUGE_CHARTS = new Set(['eac_06', 'chart_22', 'chart_23', 'chart_24', 'him09', 'him10', 'him35']);
-const CORP_IM_TOP_IDS = new Set(['chart_18', 'chart_19', 'chart_20', 'chart_21', 'chart_22', 'chart_23', 'chart_24', 'chart_25', 'chart_26', 'chart_27', 'chart_28', 'chart_29', 'chart_30', 'chart_31', 'chart_33', 'chart_34', 'chart_35', 'chart_36']);
-const JO_EAC_ORDER = ['jo_eac_01', 'jo_eac_02', 'jo_eac_03', 'jo_eac_04'];
-const JO_CHART_ORDER = ['jo_chart_01', 'jo_chart_02', 'jo_chart_03', 'jo_chart_04', 'jo_chart_05', 'jo_chart_06', 'jo_chart_07', 'jo_chart_08', 'jo_chart_09', 'jo_chart_10', 'jo_chart_11', 'jo_chart_12', 'jo_chart_13', 'jo_chart_14', 'jo_chart_15', 'jo_chart_16', 'jo_chart_17', 'jo_chart_18'];
-const HOTEL_MO_CHART_DISPLAY_ORDER = ['chart_01', 'chart_07', 'chart_03', 'chart_04', 'chart_05', 'chart_06', 'chart_02', 'chart_08', 'chart_09', 'chart_10'];
-const CORP_MO_CHART_DISPLAY_ORDER = ['cmo_chart_01', 'cmo_chart_02', 'cmo_chart_12', 'cmo_chart_04', 'cmo_chart_05', 'cmo_chart_06', 'cmo_chart_07', 'cmo_chart_08', 'cmo_chart_09', 'cmo_chart_10', 'cmo_chart_11', 'cmo_chart_03'];
+const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-65']);
+const GAUGE_CHARTS = new Set(['im-45', 'im-67', 'im-68', 'im-69', 'im-09', 'im-10', 'im-35']);
+const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
+const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
+const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22'];
+const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10'];
+const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
-  { code: 'cim01', id: 'chart_22', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
-  { code: 'cim02', id: 'chart_18', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
-  { code: 'cim03', id: 'chart_19', title: 'VIP Closure Rate vs VIP Incident by Hotel', note: 'Dual-axis chart for premium guest risk and recovery effectiveness. Benchmark: Good VIP Closure >= 95%; Bad < 90%.', formula: 'VIP Incidents = COUNT(vip_code valid) GROUP BY hotel; VIP Closure % = VIP Completed / VIP Incidents * 100' },
-  { code: 'cim04', id: 'chart_26', title: 'Hotel Incident -> Top 10 Incident Category', note: 'Drilldown from hotel totals to top 10 categories for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_category per hotel' },
-  { code: 'cim05', id: 'chart_21', title: 'Chain — Repeat Incident Rate by Hotel', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Repeat Rate % = repeat_count / total_cases * 100 per hotel' },
-  { code: 'cim06', id: 'chart_23', title: 'Worldmap Incident by Hotel', note: 'Country-level map with hotel-level labels for cross-region executive visibility. Benchmark: Good when no single country exceeds 50% of chain incidents; Bad when one country > 70%.', formula: 'Country Value = SUM(total_cases) GROUP BY country_code; Label = CONCAT(hotel_code, incident_count) list per country' },
-  { code: 'cim07', id: 'chart_24', title: 'Hotel -> Department', note: 'Hotel-to-department drilldown for operational ownership alignment. Benchmark: Good when no department exceeds 25% of hotel incidents; Bad > 40%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel' },
-  { code: 'cim08', id: 'chart_25', title: 'Hotel -> Source of Complaint', note: 'Hotel-to-source drilldown for channel quality control. Benchmark: Good when Unknown Source <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY source_of_complaint per hotel' },
-  { code: 'cim09', id: 'chart_20', title: 'VIP vs Non-VIP by Hotel', note: 'Stacked comparison of VIP and non-VIP load by hotel. Benchmark: Good VIP Share <= 6%; Watch 6–10%; Bad > 10%.', formula: 'VIP = COUNT(vip_code valid); Non-VIP = total_cases - VIP; GROUP BY hotel_code' },
-  { code: 'cim10', id: 'chart_27', title: 'Hotel -> Booking Source', note: 'Drilldown from hotel totals to booking source composition for commercial insights. Benchmark: Good when Unknown booking <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY booking_source per hotel' },
-  { code: 'cim11', id: 'chart_28', title: 'Multi-Hotel Benchmark Scorecard', note: 'Executive matrix comparing risk, critical, VIP, SLA, and trend in one panel. Benchmark: Good risk score <= 60; Watch 60–100; Bad > 100.', formula: 'Risk Score = (Critical*5) + (High*3) + (VIP*4) + (SLA Breach*3) + (Open*2) + volume_adjust' },
-  { code: 'cim12', id: 'chart_29', title: 'Hotel Risk Ranking', note: 'Ranks hotels by weighted risk for intervention priority. Benchmark: Good when high-risk hotel count reduces period-over-period; Bad when top hotel risk grows >10% WoW.', formula: 'Hotel Risk = Severity Score + (VIP*4) + (Open*2) + (SLA*3)' },
-  { code: 'cim13', id: 'chart_30', title: 'Severity vs Volume Quadrant', note: 'Bubble quadrant for strategic risk classification (high volume + high severity = immediate focus). Benchmark: Good when no hotel in top-right high-risk quadrant; Bad when multiple hotels cluster there.', formula: 'X=COUNT(cases), Y=AVG(severity score), Bubble=VIP cases, Color=country/region' },
-  { code: 'cim14', id: 'chart_31', title: 'Regional Risk Heatmap', note: 'Region matrix compares critical, VIP, SLA breach and trend intensity. Benchmark: Good when all risk cells trend down or stay green; Bad when >=2 metrics red in same region.', formula: 'Regional KPI = AVG(metric by hotel in region); Regional Risk = aggregate of weighted KPI intensities' },
-  { code: 'cim15', id: 'chart_33', title: 'Department Risk Heatmap', note: 'Shows department risk intensity by hotel to target governance actions. Benchmark: Good when top department risk <= 20% of hotel total; Bad > 35%.', formula: 'Department Risk Proxy = COUNT(cases) by hotel_code + department (or weighted severity where available)' },
-  { code: 'cim16', id: 'chart_34', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
-  { code: 'cim17', id: 'chart_35', title: 'Open Critical Aging Dashboard', note: 'Highlights unresolved critical burden (aging proxy) by hotel for escalation governance. Benchmark: Good = 0 open critical aging; Bad when persistent > 3 cases.', formula: 'Open Critical Aging Proxy = MIN(critical_cases, pending_cases) by hotel (aging date fallback when explicit age not present)' },
-  { code: 'cim18', id: 'chart_36', title: 'Hotel x Department Matrix', note: 'Cross-hotel department matrix for fast benchmarking and imbalance detection. Benchmark: Good when cross-hotel variance is balanced; Bad when one department dominates across multiple hotels.', formula: 'Matrix Cell = COUNT(incident_case) GROUP BY hotel_code, department' },
+  { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
+  { code: 'cim-02', id: 'cim-02', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
+  { code: 'cim-03', id: 'cim-03', title: 'VIP Closure Rate vs VIP Incident by Hotel', note: 'Dual-axis chart for premium guest risk and recovery effectiveness. Benchmark: Good VIP Closure >= 95%; Bad < 90%.', formula: 'VIP Incidents = COUNT(vip_code valid) GROUP BY hotel; VIP Closure % = VIP Completed / VIP Incidents * 100' },
+  { code: 'cim-04', id: 'cim-04', title: 'Hotel Incident -> Top 10 Incident Category', note: 'Drilldown from hotel totals to top 10 categories for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_category per hotel' },
+  { code: 'cim-05', id: 'cim-05', title: 'Chain — Repeat Incident Rate by Hotel', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Repeat Rate % = repeat_count / total_cases * 100 per hotel' },
+  { code: 'cim-06', id: 'cim-06', title: 'Worldmap Incident by Hotel', note: 'Country-level map with hotel-level labels for cross-region executive visibility. Benchmark: Good when no single country exceeds 50% of chain incidents; Bad when one country > 70%.', formula: 'Country Value = SUM(total_cases) GROUP BY country_code; Label = CONCAT(hotel_code, incident_count) list per country' },
+  { code: 'cim-07', id: 'cim-07', title: 'Hotel -> Department', note: 'Hotel-to-department drilldown for operational ownership alignment. Benchmark: Good when no department exceeds 25% of hotel incidents; Bad > 40%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel' },
+  { code: 'cim-08', id: 'cim-08', title: 'Hotel -> Source of Complaint', note: 'Hotel-to-source drilldown for channel quality control. Benchmark: Good when Unknown Source <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY source_of_complaint per hotel' },
+  { code: 'cim-09', id: 'cim-09', title: 'VIP vs Non-VIP by Hotel', note: 'Stacked comparison of VIP and non-VIP load by hotel. Benchmark: Good VIP Share <= 6%; Watch 6–10%; Bad > 10%.', formula: 'VIP = COUNT(vip_code valid); Non-VIP = total_cases - VIP; GROUP BY hotel_code' },
+  { code: 'cim-10', id: 'cim-10', title: 'Hotel -> Booking Source', note: 'Drilldown from hotel totals to booking source composition for commercial insights. Benchmark: Good when Unknown booking <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY booking_source per hotel' },
+  { code: 'cim-11', id: 'cim-11', title: 'Multi-Hotel Benchmark Scorecard', note: 'Executive matrix comparing risk, critical, VIP, SLA, and trend in one panel. Benchmark: Good risk score <= 60; Watch 60–100; Bad > 100.', formula: 'Risk Score = (Critical*5) + (High*3) + (VIP*4) + (SLA Breach*3) + (Open*2) + volume_adjust' },
+  { code: 'cim-12', id: 'cim-12', title: 'Hotel Risk Ranking', note: 'Ranks hotels by weighted risk for intervention priority. Benchmark: Good when high-risk hotel count reduces period-over-period; Bad when top hotel risk grows >10% WoW.', formula: 'Hotel Risk = Severity Score + (VIP*4) + (Open*2) + (SLA*3)' },
+  { code: 'cim-13', id: 'cim-13', title: 'Severity vs Volume Quadrant', note: 'Bubble quadrant for strategic risk classification (high volume + high severity = immediate focus). Benchmark: Good when no hotel in top-right high-risk quadrant; Bad when multiple hotels cluster there.', formula: 'X=COUNT(cases), Y=AVG(severity score), Bubble=VIP cases, Color=country/region' },
+  { code: 'cim-14', id: 'cim-14', title: 'Regional Risk Heatmap', note: 'Region matrix compares critical, VIP, SLA breach and trend intensity. Benchmark: Good when all risk cells trend down or stay green; Bad when >=2 metrics red in same region.', formula: 'Regional KPI = AVG(metric by hotel in region); Regional Risk = aggregate of weighted KPI intensities' },
+  { code: 'cim-15', id: 'cim-15', title: 'Department Risk Heatmap', note: 'Shows department risk intensity by hotel to target governance actions. Benchmark: Good when top department risk <= 20% of hotel total; Bad > 35%.', formula: 'Department Risk Proxy = COUNT(cases) by hotel_code + department (or weighted severity where available)' },
+  { code: 'cim-16', id: 'cim-16', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
+  { code: 'cim-17', id: 'cim-17', title: 'Open Critical Aging Dashboard', note: 'Highlights unresolved critical burden (aging proxy) by hotel for escalation governance. Benchmark: Good = 0 open critical aging; Bad when persistent > 3 cases.', formula: 'Open Critical Aging Proxy = MIN(critical_cases, pending_cases) by hotel (aging date fallback when explicit age not present)' },
+  { code: 'cim-18', id: 'cim-18', title: 'Hotel x Department Matrix', note: 'Cross-hotel department matrix for fast benchmarking and imbalance detection. Benchmark: Good when cross-hotel variance is balanced; Bad when one department dominates across multiple hotels.', formula: 'Matrix Cell = COUNT(incident_case) GROUP BY hotel_code, department' },
+  { code: 'cim-19', id: 'cim-19', title: 'Chain Weekly Incident Trend', note: 'Weekly chain-level incident trend with 4-week moving average for momentum and trajectory monitoring. Benchmark: Good when moving average is flat or declining; Bad when rising >10% WoW.', formula: 'Weekly Incidents = SUM(total) GROUP BY ISO_WEEK; Moving Avg = 4-week rolling average' },
+  { code: 'cim-20', id: 'cim-20', title: 'Chain SLA Breach Rate by Hotel', note: 'Ranks hotels by SLA breach rate to expose service delivery failures across the chain. Benchmark: Good <= 3%; Watch 3–5%; Bad > 5%.', formula: 'Breach Rate % = SLA_breach_cases / total_cases * 100 per hotel' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -411,7 +413,7 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
   }
 
   switch (def.id) {
-    case 'eac_01': return hcOpts({
+    case 'im-40': return hcOpts({
       chart: { type: 'pie' },
       series: [{ name: 'Status', type: 'pie', innerSize: '45%',
         data: Object.entries(byStatus).sort(([,a],[,b])=>b-a).map(([name,y])=>({
@@ -422,46 +424,46 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
       plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b><br>{point.y} ({point.percentage:.1f}%)' } } },
       tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} incidents ({point.percentage:.1f}%)' },
     });
-    case 'chart_03': return hcOpts({
+    case 'im-48': return hcOpts({
       chart: { type: 'pie' },
       series: [{ name: 'Incidents', type: 'pie', innerSize: '45%',
         data: Object.entries(byStatus).sort(([,a],[,b])=>b-a).map(([name,y])=>({ name,y,...(STAT_COLORS[name]?{color:STAT_COLORS[name]}:{}) })) }],
       plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b><br>{point.y} ({point.percentage:.1f}%)' } } },
     });
-    case 'eac_02': case 'chart_02': return hcOpts({
-      chart: { type: def.id === 'eac_02' ? 'column' : 'pie' },
-      ...(def.id === 'eac_02'
+    case 'im-41': case 'im-47': return hcOpts({
+      chart: { type: def.id === 'im-41' ? 'column' : 'pie' },
+      ...(def.id === 'im-41'
         ? { xAxis: { categories: SEV_ORDER.filter(s => bySeverity[s]) }, series: [{ name: 'Count', data: SEV_ORDER.filter(s=>bySeverity[s]).map(s=>({ y: bySeverity[s]??0, color: SEV_COLORS[s as keyof typeof SEV_COLORS] })) }] }
         : { series: [{ name:'Incidents', type:'pie', innerSize:'50%', data: SEV_ORDER.filter(s=>bySeverity[s]).map(s=>({ name:s, y:bySeverity[s], color:SEV_COLORS[s as keyof typeof SEV_COLORS] })) }] }),
-      plotOptions: def.id === 'eac_02'
+      plotOptions: def.id === 'im-41'
         ? { column: { dataLabels: { enabled: true } } }
         : { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
     });
-    case 'eac_03': case 'chart_04': return hcOpts({
-      chart: { type: def.id === 'eac_03' ? 'areaspline' : 'spline' },
+    case 'im-42': case 'im-49': return hcOpts({
+      chart: { type: def.id === 'im-42' ? 'areaspline' : 'spline' },
       xAxis: { categories: sortedDays, tickInterval: tickIv },
       yAxis: { title: { text: 'Incidents' }, min: 0 },
-      series: [{ name: 'Incidents', data: days.map(d => d.total), ...(def.id === 'eac_03' ? { fillOpacity: 0.15 } : {}) }],
+      series: [{ name: 'Incidents', data: days.map(d => d.total), ...(def.id === 'im-42' ? { fillOpacity: 0.15 } : {}) }],
       tooltip: { shared: true },
     });
-    case 'eac_04': case 'chart_01': {
-      const cats = topCats.slice(0, def.id === 'chart_01' ? 999 : 10);
+    case 'im-43': case 'im-46': {
+      const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 10);
       return hcOpts({
-        chart: { type: def.id === 'eac_04' ? 'bar' : 'column' },
+        chart: { type: def.id === 'im-43' ? 'bar' : 'column' },
         xAxis: { categories: cats },
         yAxis: { title: { text: 'Incidents' } },
         series: [{ name: 'Incidents', data: cats.map(c=>byCategory[c]??0) }],
-        plotOptions: { [def.id === 'eac_04' ? 'bar' : 'column']: { dataLabels: { enabled: true } } },
+        plotOptions: { [def.id === 'im-43' ? 'bar' : 'column']: { dataLabels: { enabled: true } } },
       });
     }
-    case 'chart_05': return hcOpts({
+    case 'im-50': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: sortedMonths },
       yAxis: { title: { text: 'Incidents' } },
       series: [{ name: 'Incidents', data: sortedMonths.map(m => monthMap[m] ?? 0) }],
       plotOptions: { column: { dataLabels: { enabled: true } } },
     });
-    case 'chart_11': return hcOpts({
+    case 'im-56': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: top10 },
       yAxis: { title: { text: 'Closure Rate (%)' }, min: 0, max: 100 },
@@ -469,7 +471,7 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
       tooltip: { pointFormat: 'Closure Rate: <b>{point.y:.1f}%</b>' },
     });
-    case 'chart_19': return hcOpts({
+    case 'cim-03': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: sortedWeeks, tickInterval: Math.max(1, Math.floor(sortedWeeks.length / 8)) },
       yAxis: { title: { text: 'Incidents' } },
@@ -487,7 +489,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
   const codes = entries.map(e => e.hotel_code);
 
   switch (id) {
-    case 'chart_12': return hcOpts({
+    case 'im-57': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'Incidents' } },
@@ -495,7 +497,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       plotOptions: { column: { dataLabels: { enabled: true } } },
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
-    case 'chart_13': return hcOpts({
+    case 'im-58': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'Closure Rate (%)' }, min: 0, max: 100 },
@@ -508,7 +510,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       }],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
     });
-    case 'chart_14': return hcOpts({
+    case 'im-59': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'VIP Share (%)' }, min: 0, max: 100 },
@@ -521,7 +523,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       }],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
     });
-    case 'chart_15': return hcOpts({
+    case 'im-60': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'Avg Severity (1–4)' }, min: 0, max: 4 },
@@ -534,7 +536,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       }],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.2f}' } } },
     });
-    case 'chart_16': {
+    case 'im-61': {
       // Collect all category keys across hotels, take top-6
       const allCatMap: Record<string, number> = {};
       for (const e of entries) for (const [k, v] of Object.entries(e.summary.category_map)) allCatMap[k] = (allCatMap[k] ?? 0) + v;
@@ -554,7 +556,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
         tooltip: { pointFormat: '<b>{series.name}</b>: {point.y:.1f}%<br/>' },
       });
     }
-    case 'chart_17': return hcOpts({
+    case 'im-62': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'Pending Rate (%)' }, min: 0, max: 100 },
@@ -567,7 +569,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       }],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
     });
-    case 'chart_18': {
+    case 'cim-02': {
       // Top-5 depts across chain → stacked bar per hotel
       const allDeptMap: Record<string, number> = {};
       for (const e of entries) for (const [k, v] of Object.entries(e.summary.dept_map)) allDeptMap[k] = (allDeptMap[k] ?? 0) + v;
@@ -585,7 +587,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
         tooltip: { pointFormat: '<b>{series.name}</b>: {point.y}<br/>' },
       });
     }
-    case 'chart_20': return hcOpts({
+    case 'cim-09': return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
       yAxis: { title: { text: 'Repeat Rate (%)' }, min: 0, max: 100 },
@@ -622,18 +624,18 @@ function buildDepartmentScopedOptions(def: ChartDef, department: string, summary
   const topCats = Object.entries(deptCategoryMap).sort(([, a], [, b]) => b - a).map(([k]) => k);
   const topItems = Object.entries(deptItemMap).sort(([, a], [, b]) => b - a).slice(0, 15).map(([k]) => k);
 
-  if (def.id === 'eac_04' || def.id === 'chart_01') {
-    const cats = topCats.slice(0, def.id === 'chart_01' ? 999 : 10);
+  if (def.id === 'im-43' || def.id === 'im-46') {
+    const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 10);
     return hcOpts({
-      chart: { type: def.id === 'eac_04' ? 'bar' : 'column' },
+      chart: { type: def.id === 'im-43' ? 'bar' : 'column' },
       xAxis: { categories: cats },
       yAxis: { title: { text: 'Incidents' } },
       series: [{ name: `${department} Incidents`, data: cats.map((c) => deptCategoryMap[c] ?? 0) }],
-      plotOptions: { [def.id === 'eac_04' ? 'bar' : 'column']: { dataLabels: { enabled: true } } },
+      plotOptions: { [def.id === 'im-43' ? 'bar' : 'column']: { dataLabels: { enabled: true } } },
     });
   }
 
-  if (def.id === 'chart_07') {
+  if (def.id === 'im-52') {
     return hcOpts({
       chart: { type: 'bar' },
       xAxis: { categories: topItems },
@@ -643,7 +645,7 @@ function buildDepartmentScopedOptions(def: ChartDef, department: string, summary
     });
   }
 
-  if (def.id === 'chart_18') {
+  if (def.id === 'cim-02') {
     const cats = Object.entries(deptCategoryMap).sort(([, a], [, b]) => b - a).slice(0, 10).map(([k]) => k);
     const data = cats.map((cat, y) => [0, y, deptCategoryMap[cat] ?? 0]);
     return hcOpts({
@@ -681,7 +683,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     return rank(a) - rank(b) || a.localeCompare(b);
   });
 
-  if (id === 'chart_18') {
+  if (id === 'cim-02') {
     return hcOpts({
       chart: { type: 'bar' },
       xAxis: { categories: codes },
@@ -696,7 +698,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_19') {
+  if (id === 'cim-03') {
     return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
@@ -726,7 +728,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_20') {
+  if (id === 'cim-09') {
     return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
@@ -750,8 +752,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_21') return buildChainOptions('chart_20', entries); // Repeat rate
-  if (id === 'chart_22') {
+  if (id === 'cim-05') return buildChainOptions('cim-09', entries); // Repeat rate
+  if (id === 'cim-01') {
     const topLevel = entries.map((e) => ({
       name: e.hotel_code,
       y: e.summary.total,
@@ -779,7 +781,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
   }
-  if (id === 'chart_23') {
+  if (id === 'cim-06') {
     if (!worldMapData) return undefined;
     const countryAgg = new Map<string, { total: number; hotels: string[] }>();
     for (const e of entries) {
@@ -850,7 +852,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       },
     });
   }
-  if (id === 'chart_24') {
+  if (id === 'cim-07') {
     const topLevel = entries.map((e) => ({
       name: e.hotel_code,
       y: e.summary.total,
@@ -890,7 +892,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
   }
-  if (id === 'chart_25') {
+  if (id === 'cim-08') {
     const topHotels = entries
       .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
       .sort((a, b) => b.total - a.total)
@@ -932,7 +934,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
   }
-  if (id === 'chart_26') {
+  if (id === 'cim-04') {
     const topLevel = entries.map((e) => ({
       name: e.hotel_code,
       y: e.summary.total,
@@ -960,7 +962,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
   }
-  if (id === 'chart_27') {
+  if (id === 'cim-10') {
     const topHotels = entries
       .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
       .sort((a, b) => b.total - a.total)
@@ -1002,7 +1004,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_28') {
+  if (id === 'cim-11') {
     const metrics = ['Risk Score', 'Critical %', 'VIP Cases', 'SLA Breach %', 'Trend %'];
     const byHotel = entries.map((e) => {
       const t = Math.max(e.summary.total, 1);
@@ -1030,7 +1032,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_29') {
+  if (id === 'cim-12') {
     const ranked = [...entries]
       .map((e) => ({ hotel: e.hotel_code, risk: riskScore(e) }))
       .sort((a, b) => b.risk - a.risk);
@@ -1043,7 +1045,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_30') {
+  if (id === 'cim-13') {
     return hcOpts({
       chart: { type: 'bubble' },
       xAxis: { title: { text: 'Incident Volume' } },
@@ -1063,7 +1065,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_31') {
+  if (id === 'cim-14') {
     const byRegion = new Map<string, { critical: number; vip: number; sla: number; trend: number; count: number }>();
     for (const e of entries) {
       const key = e.country_code || 'UNK';
@@ -1095,7 +1097,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_32') {
+  if (id === 'cim-19') {
     const weekAgg: Record<string, number> = {};
     for (const e of entries) for (const [w, v] of Object.entries(e.summary.week_map ?? {})) weekAgg[w] = (weekAgg[w] ?? 0) + v;
     let weeks = Object.keys(weekAgg).sort();
@@ -1121,7 +1123,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_33' || id === 'chart_36') {
+  if (id === 'cim-15' || id === 'cim-18') {
     const depts = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.dept_map ?? {}))))
       .sort((a, b) => (entries.reduce((s, e) => s + (e.summary.dept_map[b] ?? 0), 0)) - (entries.reduce((s, e) => s + (e.summary.dept_map[a] ?? 0), 0)))
       .slice(0, 10);
@@ -1132,11 +1134,11 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       xAxis: { categories: entries.map((e) => e.hotel_code) },
       yAxis: { categories: depts, title: { text: null }, reversed: true },
       colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
-      series: [{ type: 'heatmap', name: id === 'chart_33' ? 'Department Risk' : 'Department Cases', data, dataLabels: { enabled: true } }],
+      series: [{ type: 'heatmap', name: id === 'cim-15' ? 'Department Risk' : 'Department Cases', data, dataLabels: { enabled: true } }],
     });
   }
 
-  if (id === 'chart_34') {
+  if (id === 'cim-16') {
     const root: Record<string, number> = {};
     for (const e of entries) for (const [k, v] of Object.entries(e.summary.item_map ?? e.summary.category_map ?? {})) root[k] = (root[k] ?? 0) + v;
     const top = Object.entries(root).sort(([, a], [, b]) => b - a).slice(0, 10);
@@ -1156,7 +1158,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_35') {
+  if (id === 'cim-17') {
     const criticalOpen = entries.map((e) => {
       const critical = e.summary.severity_map?.Critical ?? 0;
       const pending = e.summary.pending ?? 0;
@@ -1171,7 +1173,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'chart_37') {
+  if (id === 'cim-20') {
     const target = 5;
     const rows = entries.map((e) => {
       const breach = Object.entries(e.summary.status_map ?? {}).filter(([k]) => /(breach|overdue|timeout|late|sla)/i.test(k)).reduce((s, [, v]) => s + v, 0);
@@ -1266,7 +1268,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
   });
 
   return [
-    make('cjo_chart_01', 'Total Jobs by Hotel -> Top Service Category', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its top service categories.', 'COUNT(*) BY hotel_code, then TOP service_item_category BY hotel_code', {
+    make('cjo-01', 'Total Jobs by Hotel -> Top Service Category', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its top service categories.', 'COUNT(*) BY hotel_code, then TOP service_item_category BY hotel_code', {
       chart: { type: 'pie' },
       series: [{
         type: 'pie',
@@ -1284,7 +1286,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         })),
       },
     }),
-    make('cjo_chart_02', 'Total Jobs by Hotel -> Job Status', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its job status distribution.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code', {
+    make('cjo-02', 'Total Jobs by Hotel -> Job Status', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its job status distribution.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code', {
       chart: { type: 'pie' },
       series: [{
         type: 'pie',
@@ -1304,16 +1306,16 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         })),
       },
     }),
-    make('cjo_chart_03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
+    make('cjo-03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
     }),
-    make('cjo_chart_04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
+    make('cjo-04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: timeoutRate }],
     }),
-    make('cjo_chart_05', 'Escalation Rate by Hotel', 'Escalation comparison for service stability review.', 'escalated_jobs / total_jobs * 100 BY hotel_code', {
+    make('cjo-05', 'Escalation Rate by Hotel', 'Escalation comparison for service stability review.', 'escalated_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Escalation %' } }, series: [{ type: 'column', name: 'Escalation %', data: escalationRate }],
     }),
-    make('cjo_chart_06', 'Worldmap Job Order by Hotel', 'Country-level map with hotel labels for chain-wide JO visibility.', 'Country Value = SUM(total_jobs) GROUP BY country_code; Label = CONCAT(hotel_code, total_jobs) list per country', {
+    make('cjo-06', 'Worldmap Job Order by Hotel', 'Country-level map with hotel labels for chain-wide JO visibility.', 'Country Value = SUM(total_jobs) GROUP BY country_code; Label = CONCAT(hotel_code, total_jobs) list per country', {
       chart: { type: 'map' },
       mapNavigation: { enabled: true },
       colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
@@ -1364,49 +1366,49 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    make('cjo_chart_07', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
+    make('cjo-07', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Reassignment %' } }, series: [{ type: 'column', name: 'Reassignment %', data: reassignmentRate }],
     }),
-    make('cjo_chart_08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
+    make('cjo-08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
     }),
-    make('cjo_chart_09', 'P90 Response Minutes by Hotel', 'Tail response time comparison by hotel.', 'P90(response_min) BY hotel_code', {
+    make('cjo-09', 'P90 Response Minutes by Hotel', 'Tail response time comparison by hotel.', 'P90(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'P90 Response (min)', data: p90Response }],
     }),
-    make('cjo_chart_10', 'Avg Resolution Minutes by Hotel', 'Average create-to-complete duration by hotel.', 'AVG(resolution_min) BY hotel_code', {
+    make('cjo-10', 'Avg Resolution Minutes by Hotel', 'Average create-to-complete duration by hotel.', 'AVG(resolution_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Resolution (min)', data: avgResolution }],
     }),
-    make('cjo_chart_11', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
+    make('cjo-11', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Total Quantity', data: totalQuantity }],
     }),
-    make('cjo_chart_12', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
+    make('cjo-12', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
       chart: { type: 'line' }, xAxis: { categories: weeks }, series: entries.map((e) => ({ type: 'line', name: e.hotel_code, data: weeks.map((wk) => e.summary.week_map?.[wk] ?? 0) })),
     }),
-    make('cjo_chart_13', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
+    make('cjo-13', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
       chart: { type: 'line' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'line', name: 'Completion %', data: weeklyCompletion }],
     }),
-    make('cjo_chart_14', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
+    make('cjo-14', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
       chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: weeklyTimeout }],
     }),
-    make('cjo_chart_15', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
+    make('cjo-15', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: statusKeys.map((status) => ({ type: 'column', name: status, data: entries.map((e) => e.summary.status_map?.[status] ?? 0) })),
     }),
-    make('cjo_chart_16', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
+    make('cjo-16', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
     }),
-    make('cjo_chart_17', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
+    make('cjo-17', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topItems.slice(0, 6).map((item) => ({ type: 'bar', name: item, data: entries.map((e) => e.summary.item_map?.[item] ?? 0) })),
     }),
-    make('cjo_chart_18', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
+    make('cjo-18', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topDepts.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_19', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
+    make('cjo-19', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topAssigned.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.assigned_dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_20', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
+    make('cjo-20', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo_chart_21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
+    make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
   ];
@@ -1623,17 +1625,17 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
   });
 
   return [
-    make('cmo_chart_01', 'Total Work Orders by Hotel -> Top Category', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its top maintenance categories.', 'COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO', {
+    make('cmo-01', 'Total Work Orders by Hotel -> Top Category', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its top maintenance categories.', 'COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO', {
       chart: { type: 'pie' },
       series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo-cat:${e.hotel_code}` })) }],
       drilldown: { series: entries.map((e) => ({ id: `cmo-cat:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Top Categories`, data: topN(e.summary.category_map ?? {}, 10).map(([name, y]) => ({ name, y })) })) },
     }),
-    make('cmo_chart_02', 'Total Work Orders by Hotel -> Job Status', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its status mix.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code WHERE type = MO', {
+    make('cmo-02', 'Total Work Orders by Hotel -> Job Status', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its status mix.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code WHERE type = MO', {
       chart: { type: 'pie' },
       series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo-status:${e.hotel_code}` })) }],
       drilldown: { series: entries.map((e) => ({ id: `cmo-status:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Job Status`, data: Object.entries(e.summary.status_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).map(([name, y]) => ({ name, y: Number(y) })) })) },
     }),
-    make('cmo_chart_03', 'Daily Work Order Trend by Hotel', 'Daily MO volume trend split by hotel for chain-level comparison.', 'COUNT(*) BY created_date, hotel_code WHERE type = MO', {
+    make('cmo-03', 'Daily Work Order Trend by Hotel', 'Daily MO volume trend split by hotel for chain-level comparison.', 'COUNT(*) BY created_date, hotel_code WHERE type = MO', {
       chart: { type: 'line' },
       xAxis: { categories: allDates },
       series: entries.map((e) => ({
@@ -1642,19 +1644,19 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         data: allDates.map((date) => (e.raw_daily ?? []).find((d) => d.date === date)?.total ?? 0),
       })),
     }),
-    make('cmo_chart_04', 'Completion Rate by Hotel', 'Hotel-level completion comparison for maintenance execution health.', 'completed_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
+    make('cmo-04', 'Completion Rate by Hotel', 'Hotel-level completion comparison for maintenance execution health.', 'completed_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
       chart: { type: 'column' },
       xAxis: { categories: hotelCodes },
       yAxis: { max: 100, title: { text: 'Completion %' } },
       series: [{ type: 'column', name: 'Completion %', data: entries.map((e) => e.summary.total > 0 ? r1((e.summary.completed / e.summary.total) * 100) : 0) }],
     }),
-    make('cmo_chart_05', 'Open Work Order Rate by Hotel', 'Compares open-order pressure by hotel.', 'open_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
+    make('cmo-05', 'Open Work Order Rate by Hotel', 'Compares open-order pressure by hotel.', 'open_orders / total_orders * 100 BY hotel_code WHERE type = MO', {
       chart: { type: 'column' },
       xAxis: { categories: hotelCodes },
       yAxis: { max: 100, title: { text: 'Open %' } },
       series: [{ type: 'column', name: 'Open %', data: entries.map((e) => e.summary.total > 0 ? r1((Math.max(e.summary.total - e.summary.completed - e.summary.cancelled, 0) / e.summary.total) * 100) : 0) }],
     }),
-    make('cmo_chart_06', 'Worldmap Maintenance by Hotel', 'Country-level map with hotel labels for chain-wide maintenance visibility.', 'Country Value = SUM(total_orders) GROUP BY country_code; Label = CONCAT(hotel_code, total_orders) list per country WHERE type = MO', {
+    make('cmo-06', 'Worldmap Maintenance by Hotel', 'Country-level map with hotel labels for chain-wide maintenance visibility.', 'Country Value = SUM(total_orders) GROUP BY country_code; Label = CONCAT(hotel_code, total_orders) list per country WHERE type = MO', {
       chart: { type: 'map' },
       mapNavigation: { enabled: true },
       colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
@@ -1709,7 +1711,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    make('cmo_chart_07', 'Guest Related Orders by Hotel', 'Compares guest-related and non-guest-related MO demand by hotel.', 'COUNT(*) guest_related vs non_guest_related BY hotel_code WHERE type = MO', {
+    make('cmo-07', 'Guest Related Orders by Hotel', 'Compares guest-related and non-guest-related MO demand by hotel.', 'COUNT(*) guest_related vs non_guest_related BY hotel_code WHERE type = MO', {
       chart: { type: 'bar' },
       xAxis: { categories: hotelCodes },
       plotOptions: { bar: { stacking: 'normal' } },
@@ -1718,18 +1720,18 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         { type: 'bar', name: 'Non Guest Related', data: entries.map((e) => Math.max((e.summary.total ?? 0) - (e.summary.vip_total ?? 0), 0)) },
       ],
     }),
-    make('cmo_chart_08', 'Severity Index by Hotel', 'Average severity comparison across hotels.', 'AVG(severity_weight) BY hotel_code WHERE type = MO', {
+    make('cmo-08', 'Severity Index by Hotel', 'Average severity comparison across hotels.', 'AVG(severity_weight) BY hotel_code WHERE type = MO', {
       chart: { type: 'column' },
       xAxis: { categories: hotelCodes },
       series: [{ type: 'column', name: 'Severity Index', data: entries.map((e) => e.summary.total > 0 ? r2((e.summary.severity_sum ?? 0) / e.summary.total) : 0) }],
     }),
-    make('cmo_chart_09', 'Top Categories by Hotel', 'Stacked category comparison across hotels for maintenance demand concentration.', 'COUNT(*) BY hotel_code, category WHERE type = MO', {
+    make('cmo-09', 'Top Categories by Hotel', 'Stacked category comparison across hotels for maintenance demand concentration.', 'COUNT(*) BY hotel_code, category WHERE type = MO', {
       chart: { type: 'bar' },
       xAxis: { categories: hotelCodes },
       plotOptions: { bar: { stacking: 'normal' } },
       series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
     }),
-    make('cmo_chart_10', 'Category Concentration by Hotel', 'Shows how dominant the top category is at each hotel.', 'MAX(category_count) / total_orders * 100 BY hotel_code WHERE type = MO', {
+    make('cmo-10', 'Category Concentration by Hotel', 'Shows how dominant the top category is at each hotel.', 'MAX(category_count) / total_orders * 100 BY hotel_code WHERE type = MO', {
       chart: { type: 'bar' },
       xAxis: { categories: hotelCodes },
       yAxis: { max: 100, title: { text: 'Top Category Share %' } },
@@ -1738,14 +1740,14 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         return e.summary.total > 0 ? r1((top / e.summary.total) * 100) : 0;
       }) }],
     }),
-    make('cmo_chart_11', 'Location Hotspots by Hotel', 'Heatmap of top maintenance hotspots by hotel using location or building.', 'COUNT(*) BY hotel_code, location WHERE type = MO', {
+    make('cmo-11', 'Location Hotspots by Hotel', 'Heatmap of top maintenance hotspots by hotel using location or building.', 'COUNT(*) BY hotel_code, location WHERE type = MO', {
       chart: { type: 'heatmap' },
       xAxis: { categories: hotelCodes },
       yAxis: { categories: allLocations, title: { text: null }, reversed: true },
       colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
       series: [{ type: 'heatmap', name: 'Orders', data: hotelCodes.flatMap((hotel, xi) => allLocations.map((location, yi) => [xi, yi, entries.find((e) => e.hotel_code === hotel)?.summary.location_map?.[location] ?? 0])), dataLabels: { enabled: true } }],
     }),
-    make('cmo_chart_12', 'Top Assets / Defects Across Chain', 'Treemap of the most frequent maintenance assets or defects across the chain.', 'COUNT(*) BY defect_or_asset WHERE type = MO', {
+    make('cmo-12', 'Top Assets / Defects Across Chain', 'Treemap of the most frequent maintenance assets or defects across the chain.', 'COUNT(*) BY defect_or_asset WHERE type = MO', {
       chart: { type: 'treemap' },
       series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topItems.map(([name, value]) => ({ name, value })) }],
     }),
@@ -2369,7 +2371,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     if (isCorp) return { fullPeriod: false };
     if (!fd) return { fullPeriod: filtered };
     const storedOptions = (def.options ?? {}) as Record<string, unknown>;
-    if (def.id === 'chart_03' && storedOptions.drilldown) return { fullPeriod: true };
+    if (def.id === 'mo-03' && storedOptions.drilldown) return { fullPeriod: true };
     const override = buildFilteredOptions(def, fd);
     return override ? { override, fullPeriod: false } : { fullPeriod: true };
   }, [fd, filtered, isCorp]);
@@ -3024,7 +3026,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
     let peakHour = deptScopedSummary?.peak_hour ?? 0;
     if (!deptScopedSummary) {
-      const hourChart = data.charts.find((c) => c.id === 'chart_21');
+      const hourChart = data.charts.find((c) => c.id === 'cim-05');
       const options = hourChart?.options as Record<string, unknown> | undefined;
       const series = options?.series as Array<Record<string, unknown>> | undefined;
       const hourData = series?.[0]?.data as number[] | undefined;
@@ -3192,7 +3194,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     const statusMap = fdAny?.byStatus ?? s.status_map ?? {};
     const itemMap = s.item_map ?? {};
     const roomMap = (s as { room_map?: Record<string, number> }).room_map
-      ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'chart_08')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
+      ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
     const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
     const topItems = Object.entries(itemMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 15);
     const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
@@ -3213,8 +3215,8 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
 
     const findDef = (id: string) => [...localizedEac, ...localizedCharts].find((c) => c.id === id);
     return [
-      make('him01', 'Daily Incident Trend', 'spline', 'Drilldown: Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: dayVals }] }, 'him01'),
-      make('him02', 'VIP -> Top 10 Incident Case', 'pie', 'Drilldown: VIP / Non-VIP → Top 10 Incident Case', 'Level 1 = COUNT by VIP segment; Level 2 = TOP 10 incident items by selected segment', {
+      make('im-01', 'Daily Incident Trend', 'spline', 'Drilldown: Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: dayVals }] }, 'im-01'),
+      make('im-02', 'VIP -> Top 10 Incident Case', 'pie', 'Drilldown: VIP / Non-VIP → Top 10 Incident Case', 'Level 1 = COUNT by VIP segment; Level 2 = TOP 10 incident items by selected segment', {
         series: [{
           type: 'pie',
           innerSize: '48%',
@@ -3240,7 +3242,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           }),
         },
       }, 'imd08'),
-      make('him03', 'Top 10 Department x Category Heatmap', 'heatmap', 'Drilldown: Department → Incident Category → Incident Item Name', 'COUNT by department x category (top 10 x top 10)', (() => {
+      make('im-03', 'Top 10 Department x Category Heatmap', 'heatmap', 'Drilldown: Department → Incident Category → Incident Item Name', 'COUNT by department x category (top 10 x top 10)', (() => {
         const dcm = (s as { dept_category_map?: Record<string, Record<string, number>> }).dept_category_map ?? {};
         const deptCats = Object.entries(dcm)
           .map(([d, m]) => [d, Object.values(m ?? {}).reduce((a, b) => a + b, 0)] as const)
@@ -3259,17 +3261,17 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           colorAxis: { min: 0 },
           series: [{ type: 'heatmap', data: heat }],
         } as Record<string, unknown>;
-      })(), 'him05'),
-      make('him04', 'Incident by Status → Department', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status -> department', {
+      })(), 'im-05'),
+      make('im-04', 'Incident by Status → Department', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status -> department', {
         series: [{
           type: 'pie',
           innerSize: '45%',
           name: 'Status',
-          data: statusKeys.map((k) => ({ name: k, y: Number(statusMap[k] ?? 0), drilldown: `him04:${k}` })),
+          data: statusKeys.map((k) => ({ name: k, y: Number(statusMap[k] ?? 0), drilldown: `im-04:${k}` })),
         }],
         drilldown: {
           series: statusKeys.map((k) => ({
-            id: `him04:${k}`,
+            id: `im-04:${k}`,
             type: 'pie',
             innerSize: '45%',
             name: `${k} Departments`,
@@ -3280,16 +3282,16 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd27'),
-      make('him05', 'Incident Resolution SLA Compliance', 'column', 'Drilldown: Department → Severity → Incident Case', 'SLA met / total', { xAxis: { categories: ['SLA Compliance'] }, yAxis: [{ max: 100, title: { text: '%' } }], series: [{ name: 'Compliance %', data: [s.total > 0 ? r1((s.completed / s.total) * 100) : 0] }] }, 'him02'),
-      make('him06', 'Severity Breakdown', 'column', 'Drilldown: Severity → Incident Status → Incident Case', 'COUNT by severity', { xAxis: { categories: severityKeys }, series: [{ name: 'Cases', data: severityKeys.map((k) => sevMap[k]) }] }, 'him03'),
-      make('him07', 'Incident Root Cause Flow', 'sankey', 'Drilldown: Department → Incident Category → Incident Item Name', 'Root-cause flow proxy', {
+      make('im-05', 'Incident Resolution SLA Compliance', 'column', 'Drilldown: Department → Severity → Incident Case', 'SLA met / total', { xAxis: { categories: ['SLA Compliance'] }, yAxis: [{ max: 100, title: { text: '%' } }], series: [{ name: 'Compliance %', data: [s.total > 0 ? r1((s.completed / s.total) * 100) : 0] }] }, 'im-02'),
+      make('im-06', 'Severity Breakdown', 'column', 'Drilldown: Severity → Incident Status → Incident Case', 'COUNT by severity', { xAxis: { categories: severityKeys }, series: [{ name: 'Cases', data: severityKeys.map((k) => sevMap[k]) }] }, 'im-03'),
+      make('im-07', 'Incident Root Cause Flow', 'sankey', 'Drilldown: Department → Incident Category → Incident Item Name', 'Root-cause flow proxy', {
         series: [{
           type: 'sankey',
           keys: ['from', 'to', 'weight'],
           data: topItems.slice(0, 8).map(([item, v], i) => [Object.keys(s.dept_map ?? {})[i % Math.max(1, Object.keys(s.dept_map ?? {}).length)] ?? 'Dept', item, Number(v)]),
         }],
       }, 'imo49'),
-      make('him08', 'Category vs Status', 'bar', 'Stacked comparison of status mix across top incident categories.', 'COUNT by incident_category and incident_status', {
+      make('im-08', 'Category vs Status', 'bar', 'Stacked comparison of status mix across top incident categories.', 'COUNT by incident_category and incident_status', {
         xAxis: { categories: topCats.map(([k]) => k) },
         plotOptions: { series: { stacking: 'normal' } },
         series: statusKeys.map((status) => ({
@@ -3298,10 +3300,10 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           data: topCats.map(([cat]) => Number((deptScopedSummary?.category_status_map?.[cat] ?? {})[status] ?? 0)),
         })),
       }, 'imd21'),
-      make('him09', 'Gauge — Closure Rate', 'pie', 'Drilldown: Incident Status → Incident Case', 'Completed Cases / Total Cases * 100', {
+      make('im-09', 'Gauge — Closure Rate', 'pie', 'Drilldown: Incident Status → Incident Case', 'Completed Cases / Total Cases * 100', {
         series: [{ type: 'pie', data: [{ y: s.total > 0 ? r1((s.completed / s.total) * 100) : 0 }] }],
-      }, 'him29'),
-      make('him10', 'Gauge — VIP Closure Rate', 'pie', 'Drilldown: VIP Code → Incident Status → Incident Case', 'VIP Completed Cases / VIP Cases * 100', {
+      }, 'im-29'),
+      make('im-10', 'Gauge — VIP Closure Rate', 'pie', 'Drilldown: VIP Code → Incident Status → Incident Case', 'VIP Completed Cases / VIP Cases * 100', {
         series: [{ type: 'pie', data: [{ y: s.vip_total > 0 ? r1((s.vip_completed / s.vip_total) * 100) : 0 }] }],
       }, 'him43'),
     ];
@@ -3364,12 +3366,12 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       options: { chart: { type }, ...options },
     });
     return [
-      make('him11', 'Daily Incident Volume', 'areaspline', 'Drilldown: Created Date → Department → Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: days.map((d) => d.total) }] }, 'imt11'),
-      make('him12', 'Weekly Incident Volume', 'column', 'Drilldown: Week → Department → Incident Case', 'COUNT by ISO week', { xAxis: { categories: weekCats }, series: [{ name: 'Incidents', data: weekCats.map((w) => weeklyMap[w] ?? 0) }] }, 'imt23'),
-      make('him13', 'Severity Weighted Incident Score', 'spline', 'Drilldown: Severity → Department → Incident Case', '4*Critical + 3*High + 2*Medium + 1*Low by date', { xAxis: { categories: dayCats }, series: [{ name: 'Weighted Score', data: days.map((d) => ((d.by_severity?.Critical ?? 0) * 4) + ((d.by_severity?.High ?? 0) * 3) + ((d.by_severity?.Medium ?? 0) * 2) + ((d.by_severity?.Low ?? 0))) }] }, 'imt32'),
-      make('him14', 'Monthly Incident Volume', 'column', 'Drilldown: Month → Department → Incident Case', 'COUNT by month', { xAxis: { categories: monthCats }, series: [{ name: 'Incidents', data: monthCats.map((m) => monthlyMap[m] ?? 0) }] }, 'imt37'),
-      make('him15', 'Incidents by Day of Week', 'column', 'Drilldown: Day of Week → Department → Incident Case', 'COUNT by day of week', { xAxis: { categories: dowCats }, series: [{ name: 'Incidents', data: dowCats.map((d) => dowMap[d] ?? 0) }] }, 'imt39'),
-      make('him16', 'Incident Forecast Prediction', 'spline', 'Drilldown: Forecast Date → Incident Category', '7-day moving average forecast', { xAxis: { categories: dayCats }, series: [{ name: 'Forecast', data: forecast }] }, 'imt48'),
+      make('im-11', 'Daily Incident Volume', 'areaspline', 'Drilldown: Created Date → Department → Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: days.map((d) => d.total) }] }, 'imt11'),
+      make('im-12', 'Weekly Incident Volume', 'column', 'Drilldown: Week → Department → Incident Case', 'COUNT by ISO week', { xAxis: { categories: weekCats }, series: [{ name: 'Incidents', data: weekCats.map((w) => weeklyMap[w] ?? 0) }] }, 'imt23'),
+      make('im-13', 'Severity Weighted Incident Score', 'spline', 'Drilldown: Severity → Department → Incident Case', '4*Critical + 3*High + 2*Medium + 1*Low by date', { xAxis: { categories: dayCats }, series: [{ name: 'Weighted Score', data: days.map((d) => ((d.by_severity?.Critical ?? 0) * 4) + ((d.by_severity?.High ?? 0) * 3) + ((d.by_severity?.Medium ?? 0) * 2) + ((d.by_severity?.Low ?? 0))) }] }, 'imt32'),
+      make('im-14', 'Monthly Incident Volume', 'column', 'Drilldown: Month → Department → Incident Case', 'COUNT by month', { xAxis: { categories: monthCats }, series: [{ name: 'Incidents', data: monthCats.map((m) => monthlyMap[m] ?? 0) }] }, 'imt37'),
+      make('im-15', 'Incidents by Day of Week', 'column', 'Drilldown: Day of Week → Department → Incident Case', 'COUNT by day of week', { xAxis: { categories: dowCats }, series: [{ name: 'Incidents', data: dowCats.map((d) => dowMap[d] ?? 0) }] }, 'imt39'),
+      make('im-16', 'Incident Forecast Prediction', 'spline', 'Drilldown: Forecast Date → Incident Category', '7-day moving average forecast', { xAxis: { categories: dayCats }, series: [{ name: 'Forecast', data: forecast }] }, 'imt48'),
     ];
   }, [isCorp, isJo, data.summary, data.raw_daily, fd, deptFd, deptScopedSummary, kpis, t]);
 
@@ -3382,7 +3384,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     const statusMap = fdAny?.byStatus ?? s.status_map ?? {};
     const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
     const topItems = Object.entries((deptScopedSummary?.item_map ?? s.item_map) ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 15);
-    const roomMap = deptScopedSummary?.room_map ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'chart_08')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
+    const roomMap = deptScopedSummary?.room_map ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
     const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
     const severityKeys = Object.keys(sevMap);
     const statusKeys = Object.keys(statusMap);
@@ -3403,7 +3405,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       options: { chart: { type }, ...options },
     });
     return [
-      make('him17', 'Closure Rate by Category', 'column', 'Drilldown: Incident Category → Incident Status → Incident Case', 'Completed / total by category', {
+      make('im-17', 'Closure Rate by Category', 'column', 'Drilldown: Incident Category → Incident Status → Incident Case', 'Completed / total by category', {
         xAxis: { type: 'category' },
         yAxis: { max: 100, title: { text: 'Closure %' } },
         series: [{
@@ -3428,7 +3430,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           }),
         },
       }, 'imd07'),
-      make('him18', 'Top Incident Categories', 'bar', 'Drilldown: Incident Category → Incident Item Name → Incident Case', 'TOP categories by count', {
+      make('im-18', 'Top Incident Categories', 'bar', 'Drilldown: Incident Category → Incident Item Name → Incident Case', 'TOP categories by count', {
         xAxis: { type: 'category' },
         series: [{
           name: 'Incidents',
@@ -3444,7 +3446,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd09'),
-      make('him19', 'Top 15 Incident Items', 'bar', 'Drilldown: Incident Item Name → Incident Location → Incident Case', 'TOP items by count', {
+      make('im-19', 'Top 15 Incident Items', 'bar', 'Drilldown: Incident Item Name → Incident Location → Incident Case', 'TOP items by count', {
         xAxis: { type: 'category' },
         series: [{
           name: 'Incidents',
@@ -3460,7 +3462,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd13'),
-      make('him20', 'Category × Severity', 'column', 'Drilldown: Incident Category → Severity → Incident Case', 'COUNT by category x severity', {
+      make('im-20', 'Category × Severity', 'column', 'Drilldown: Incident Category → Severity → Incident Case', 'COUNT by category x severity', {
         xAxis: { type: 'category' },
         series: [{
           type: 'column',
@@ -3477,7 +3479,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd17'),
-      make('him21', 'Top 10 Rooms by Incidents', 'bar', 'Drilldown: Room No → Incident Item Name → Incident Case', 'TOP rooms by incident count', {
+      make('im-21', 'Top 10 Rooms by Incidents', 'bar', 'Drilldown: Room No → Incident Item Name → Incident Case', 'TOP rooms by incident count', {
         xAxis: { type: 'category' },
         series: [{
           name: 'Incidents',
@@ -3496,7 +3498,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd19'),
-      make('him22', 'VIP Type -> Top 10 Incident', 'column', 'Drilldown: VIP/Non-VIP → Top 10 Incident Items', 'Level 1 = COUNT by VIP type; Level 2 = TOP 10 incident items within selected VIP type', {
+      make('im-22', 'VIP Type -> Top 10 Incident', 'column', 'Drilldown: VIP/Non-VIP → Top 10 Incident Items', 'Level 1 = COUNT by VIP type; Level 2 = TOP 10 incident items within selected VIP type', {
         xAxis: { type: 'category' },
         series: [{
           name: 'Incident Cases',
@@ -3535,7 +3537,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           ],
         },
       }, 'imd25'),
-      make('him23', 'Incidents by Category', 'column', 'Drilldown: Incident Category → Incident Item Name', 'COUNT by category', {
+      make('im-23', 'Incidents by Category', 'column', 'Drilldown: Incident Category → Incident Item Name', 'COUNT by category', {
         xAxis: { type: 'category' },
         series: [{ name: 'Incidents', type: 'column', data: topCats.map(([cat, v]) => ({ name: cat, y: Number(v), drilldown: `imd31:${cat}` })) }],
         drilldown: {
@@ -3547,7 +3549,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd31'),
-      make('him24', 'Severity Distribution', 'pie', 'Drilldown: Severity → Incident Category → Incident Case', 'COUNT by severity', {
+      make('im-24', 'Severity Distribution', 'pie', 'Drilldown: Severity → Incident Category → Incident Case', 'COUNT by severity', {
         series: [{
           type: 'pie',
           innerSize: '45%',
@@ -3562,7 +3564,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd33'),
-      make('him25', 'Status Distribution', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status', {
+      make('im-25', 'Status Distribution', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status', {
         series: [{
           type: 'pie',
           innerSize: '45%',
@@ -3577,7 +3579,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           })),
         },
       }, 'imd35'),
-      make('him26', 'Incident Source → Department', 'column', 'Drilldown: Source of Complaint → Department → Incident Case', 'COUNT by source -> department', {
+      make('im-26', 'Incident Source → Department', 'column', 'Drilldown: Source of Complaint → Department → Incident Case', 'COUNT by source -> department', {
         xAxis: { type: 'category' },
         series: [{
           type: 'column',
@@ -3624,31 +3626,31 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     });
 
     return [
-      make('him27', 'Incident Aging Bucket', 'column', 'Drilldown: Incident Status → Aging Bucket → Incident Case', 'Aging proxy by status', { xAxis: { categories: statusKeys }, series: [{ name: 'Cases', data: statusKeys.map((k) => (activeFd?.byStatus ?? s.status_map ?? {})[k] ?? 0) }] }, 'imo12'),
-      make('him28', 'Incidents by Hour of Day', 'column', 'Drilldown: Incident Hour → Department → Incident Case', 'COUNT by HOUR(incident_datetime)', {
+      make('im-27', 'Incident Aging Bucket', 'column', 'Drilldown: Incident Status → Aging Bucket → Incident Case', 'Aging proxy by status', { xAxis: { categories: statusKeys }, series: [{ name: 'Cases', data: statusKeys.map((k) => (activeFd?.byStatus ?? s.status_map ?? {})[k] ?? 0) }] }, 'imo12'),
+      make('im-28', 'Incidents by Hour of Day', 'column', 'Drilldown: Incident Hour → Department → Incident Case', 'COUNT by HOUR(incident_datetime)', {
         xAxis: { categories: Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`) },
         series: [{
           name: 'Incidents',
           data: Array.from({ length: 24 }, (_, h) => Number(deptScopedSummary?.hour_map?.[h] ?? 0)),
         }],
       }, 'imo15'),
-      make('him29', 'Open vs Closed SLA Breach', 'column', 'Drilldown: Incident Status → SLA Breach Flag → Incident Case', 'SLA breach proxy split', { plotOptions: { column: { stacking: 'normal' } }, xAxis: { categories: ['Open', 'Closed'] }, series: [{ name: 'Breach', data: [s.pending, Math.max(0, s.total - s.pending)] }, { name: 'Non-Breach', data: [0, 0] }] }, 'imo16'),
-      make('him30', 'Guest Journey Incident Stage', 'column', 'Drilldown: Arrival / Stay / Departure Stage → Incident Category → Incident Case', 'Stage proxy split', { xAxis: { categories: ['Arrival', 'Stay', 'Departure'] }, series: [{ name: 'Incidents', data: [Math.round(s.total * 0.2), Math.round(s.total * 0.6), Math.round(s.total * 0.2)] }] }, 'imo18'),
-      make('him31', 'Repeat Room Failure Analysis', 'packedbubble', 'Drilldown: Room No → Incident Item Name → Incident Case', 'Packed bubble by repeat room failures', {
+      make('im-29', 'Open vs Closed SLA Breach', 'column', 'Drilldown: Incident Status → SLA Breach Flag → Incident Case', 'SLA breach proxy split', { plotOptions: { column: { stacking: 'normal' } }, xAxis: { categories: ['Open', 'Closed'] }, series: [{ name: 'Breach', data: [s.pending, Math.max(0, s.total - s.pending)] }, { name: 'Non-Breach', data: [0, 0] }] }, 'imo16'),
+      make('im-30', 'Guest Journey Incident Stage', 'column', 'Drilldown: Arrival / Stay / Departure Stage → Incident Category → Incident Case', 'Stage proxy split', { xAxis: { categories: ['Arrival', 'Stay', 'Departure'] }, series: [{ name: 'Incidents', data: [Math.round(s.total * 0.2), Math.round(s.total * 0.6), Math.round(s.total * 0.2)] }] }, 'imo18'),
+      make('im-31', 'Repeat Room Failure Analysis', 'packedbubble', 'Drilldown: Room No → Incident Item Name → Incident Case', 'Packed bubble by repeat room failures', {
         series: [{
           type: 'packedbubble',
           name: 'Rooms',
           data: roomTop.length > 0 ? roomTop.map(([name, value]) => ({ name, value })) : [{ name: 'No Room Data', value: 0 }],
         }],
       }, 'imo20'),
-      make('him32', 'Department SLA Ranking', 'bar', 'Drilldown: Department → SLA Breach Flag → Incident Case', 'Pending-rate proxy by department', { xAxis: { categories: deptKeys }, series: [{ name: 'Risk Score', data: deptKeys.map((k) => s.dept_map?.[k] ?? 0) }] }, 'imo22'),
-      make('him33', 'Complaint Source Risk Ranking', 'bar', 'Drilldown: Source of Complaint → Severity → Incident Case', 'Source risk proxy', { xAxis: { categories: sourceKeys }, series: [{ name: 'Risk', data: sourceKeys.map((k) => s.source_map?.[k] ?? 0) }] }, 'imo28'),
-      make('him34', 'Department Incident Burden Score', 'treemap', 'Drilldown: Department → Incident Category → Incident Case', 'Treemap of department burden', { series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: deptKeys.map((k) => ({ name: k, value: s.dept_map?.[k] ?? 0 })) }] }, 'imo30'),
-      make('him35', 'Investigation Completion Quality', 'pie', 'Drilldown: Investigation Updated By 1 → Incident Case', 'Completion gauge proxy', {
+      make('im-32', 'Department SLA Ranking', 'bar', 'Drilldown: Department → SLA Breach Flag → Incident Case', 'Pending-rate proxy by department', { xAxis: { categories: deptKeys }, series: [{ name: 'Risk Score', data: deptKeys.map((k) => s.dept_map?.[k] ?? 0) }] }, 'imo22'),
+      make('im-33', 'Complaint Source Risk Ranking', 'bar', 'Drilldown: Source of Complaint → Severity → Incident Case', 'Source risk proxy', { xAxis: { categories: sourceKeys }, series: [{ name: 'Risk', data: sourceKeys.map((k) => s.source_map?.[k] ?? 0) }] }, 'imo28'),
+      make('im-34', 'Department Incident Burden Score', 'treemap', 'Drilldown: Department → Incident Category → Incident Case', 'Treemap of department burden', { series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: deptKeys.map((k) => ({ name: k, value: s.dept_map?.[k] ?? 0 })) }] }, 'imo30'),
+      make('im-35', 'Investigation Completion Quality', 'pie', 'Drilldown: Investigation Updated By 1 → Incident Case', 'Completion gauge proxy', {
         series: [{ type: 'pie', data: [{ y: s.total > 0 ? r1((s.completed / s.total) * 100) : 0 }] }],
       }, 'imo36'),
-      make('him36', 'VIP Repeat Incident Analysis', 'heatmap', 'Drilldown: VIP Code → Incident Item Name → Incident Case', 'VIP repeat proxy heatmap', { xAxis: { categories: ['VIP', 'Non-VIP'] }, yAxis: { categories: itemTop.slice(0, 10).map(([k]) => k) }, colorAxis: { min: 0 }, series: [{ type: 'heatmap', data: itemTop.slice(0, 10).flatMap(([, v], yi) => [[0, yi, Math.round(v * 0.25)], [1, yi, Math.round(v * 0.75)]]) }] }, 'imd26'),
-      make('him37', 'Booking Source Risk Analysis', 'bubble', 'Drilldown: Booking Source → Severity → Incident Case', 'Booking source risk proxy', {
+      make('im-36', 'VIP Repeat Incident Analysis', 'heatmap', 'Drilldown: VIP Code → Incident Item Name → Incident Case', 'VIP repeat proxy heatmap', { xAxis: { categories: ['VIP', 'Non-VIP'] }, yAxis: { categories: itemTop.slice(0, 10).map(([k]) => k) }, colorAxis: { min: 0 }, series: [{ type: 'heatmap', data: itemTop.slice(0, 10).flatMap(([, v], yi) => [[0, yi, Math.round(v * 0.25)], [1, yi, Math.round(v * 0.75)]]) }] }, 'imd26'),
+      make('im-37', 'Booking Source Risk Analysis', 'bubble', 'Drilldown: Booking Source → Severity → Incident Case', 'Booking source risk proxy', {
         xAxis: { categories: Object.keys(bookingMap).length > 0 ? Object.keys(bookingMap) : ['Unknown'] },
         series: [{
           type: 'bubble',
@@ -3657,8 +3659,8 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
             : [{ x: 0, y: 0, z: 1, name: 'Unknown' }],
         }],
       }, 'imo44'),
-      make('him38', 'Corporate Guest Complaint Ranking', 'bar', 'Drilldown: Company Name → Incident Category → Incident Case', 'Corporate complaint proxy', { xAxis: { categories: sourceKeys.slice(0, 10) }, series: [{ name: 'Complaints', data: sourceKeys.slice(0, 10).map((k) => s.source_map?.[k] ?? 0) }] }, 'imo46'),
-      make('him39', 'Shift Handover Incident Analysis', 'xrange', 'Drilldown: Incident Hour → Department → Incident Case', 'Shift window proxy', { xAxis: { type: 'datetime' }, yAxis: { categories: ['Night', 'Morning', 'Afternoon'], reversed: true }, series: [{ type: 'xrange', data: [{ x: Date.UTC(2026, 0, 1, 0), x2: Date.UTC(2026, 0, 1, 8), y: 0 }, { x: Date.UTC(2026, 0, 1, 8), x2: Date.UTC(2026, 0, 1, 16), y: 1 }, { x: Date.UTC(2026, 0, 1, 16), x2: Date.UTC(2026, 0, 2, 0), y: 2 }] }] }, 'imo47'),
+      make('im-38', 'Corporate Guest Complaint Ranking', 'bar', 'Drilldown: Company Name → Incident Category → Incident Case', 'Corporate complaint proxy', { xAxis: { categories: sourceKeys.slice(0, 10) }, series: [{ name: 'Complaints', data: sourceKeys.slice(0, 10).map((k) => s.source_map?.[k] ?? 0) }] }, 'imo46'),
+      make('im-39', 'Shift Handover Incident Analysis', 'xrange', 'Drilldown: Incident Hour → Department → Incident Case', 'Shift window proxy', { xAxis: { type: 'datetime' }, yAxis: { categories: ['Night', 'Morning', 'Afternoon'], reversed: true }, series: [{ type: 'xrange', data: [{ x: Date.UTC(2026, 0, 1, 0), x2: Date.UTC(2026, 0, 1, 8), y: 0 }, { x: Date.UTC(2026, 0, 1, 8), x2: Date.UTC(2026, 0, 1, 16), y: 1 }, { x: Date.UTC(2026, 0, 1, 16), x2: Date.UTC(2026, 0, 2, 0), y: 2 }] }] }, 'imo47'),
     ];
   }, [isCorp, isJo, data.summary, data.charts, fd, deptFd, deptScopedSummary, t]);
 
@@ -3669,7 +3671,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       const builderOverride = buildBuilderOverride(def, effectiveFd, deptScopedSummary);
       if (builderOverride) return { override: builderOverride, fullPeriod: false };
     }
-    const isImHotelCustomChart = !isCorp && !isJo && /^him\d+$/i.test(def.id);
+    const isImHotelCustomChart = !isCorp && !isJo && /^im-\d+$/i.test(def.id);
     if (!isCorp && !isJo && deptScopedSummary) {
       if (effectiveFd) {
         const scopedFiltered = buildFilteredOptions(def, effectiveFd);
@@ -3687,7 +3689,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       if (chainOpts) return { override: chainOpts, fullPeriod: false };
     }
     if (GAUGE_CHARTS.has(def.id)) {
-      const isHimGauge = /^him\d+$/i.test(def.id);
+      const isHimGauge = /^im-\d+$/i.test(def.id);
       const trackColor  = '#e6e6e6';
       const valueColor  = '#7cb5ec';
       const sliceBorder = themeTokens.surfaceAlt;
@@ -3774,16 +3776,14 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   const naText      = themeTokens.dashboard.naText;
 
   // Partition core charts
-  const operationalCharts = isJo ? localizedCharts : localizedCharts.filter(c => {
-    const n = parseInt(c.id.replace('chart_', ''));
-    return n >= 1 && n <= 11;
-  });
+  const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
+  const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
+  const operationalCharts = isJo ? localizedCharts : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
   const comparisonCharts = isJo ? [] : localizedCharts.filter(c => {
-    const n = parseInt(c.id.replace('chart_', ''));
     if (isCorp && CORP_IM_TOP_IDS.has(c.id)) return false;
-    return n >= 12 && n <= 20;
+    return IM_COMPARISON_IDS.has(c.id);
   });
-  const hourlyChart = isJo || isCorp ? undefined : localizedCharts.find(c => c.id === 'chart_21');
+  const hourlyChart = isJo || isCorp ? undefined : localizedCharts.find(c => c.id === 'im-66');
   const gaugeCharts = isJo ? [] : localizedCharts.filter(c => GAUGE_CHARTS.has(c.id) && !(isCorp && CORP_IM_TOP_IDS.has(c.id)));
   const hasChain    = activeChainEntries.length >= 2;
   const corpBenchmarkRows = useMemo(() => {

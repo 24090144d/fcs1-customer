@@ -59,12 +59,12 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
   jo: {
     kpis: items(seq('kpi_', 1, 10), 'kpi_labels_jo', 'kpi_notes_jo'),
     charts: [
-      // Hotel EAC charts — actual dashboard IDs jo_eac_01..jo_eac_04
-      ...items(['jo_eac_01', 'jo_eac_02', 'jo_eac_03', 'jo_eac_04'], 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
-      // Hotel operational charts — actual dashboard IDs jo_chart_01..jo_chart_18
-      ...items(seq('jo_chart_', 1, 18), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
-      // Corp-level charts — actual dashboard IDs cjo_chart_01..cjo_chart_22
-      ...items(seq('cjo_chart_', 1, 22), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
+      // Hotel EAC charts — actual dashboard IDs jo-01..jo-04
+      ...items(['jo-01', 'jo-02', 'jo-03', 'jo-04'], 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
+      // Hotel operational charts — actual dashboard IDs jo-05..jo-22
+      ...items(seq('jo-', 5, 22), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
+      // Corp-level charts — actual dashboard IDs cjo-01..cjo-22
+      ...items(seq('cjo-', 1, 22), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
     ],
   },
 
@@ -85,14 +85,10 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(seq('cmo_kpi_', 1, 10), 'hmo_kpi_labels', 'hmo_kpi_notes'),
     ],
     charts: [
-      // Hotel MO charts — actual dashboard IDs (chart_01..chart_10)
-      ...items(
-        ['chart_01', 'chart_02', 'chart_03', 'chart_04', 'chart_05',
-         'chart_06', 'chart_07', 'chart_08', 'chart_09', 'chart_10'],
-        'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo',
-      ),
-      // Corp MO charts — actual dashboard IDs cmo_chart_01..cmo_chart_12
-      ...items(seq('cmo_chart_', 1, 12), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
+      // Hotel MO charts — actual dashboard IDs mo-01..mo-10
+      ...items(seq('mo-', 1, 10), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
+      // Corp MO charts — actual dashboard IDs cmo-01..cmo-12
+      ...items(seq('cmo-', 1, 12), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
     ],
   },
 
@@ -108,10 +104,10 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       'kpi_notes_co',
     ),
     charts: [
-      // Hotel-level charts  co_chart_01 … co_chart_39
-      ...items(seq('co_chart_', 1, 39), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
-      // Corp-level charts  cco_chart_01 … cco_chart_42
-      ...items(seq('cco_chart_', 1, 42), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
+      // Hotel-level charts  co-01 … co-39
+      ...items(seq('co-', 1, 39), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
+      // Corp-level charts  cco-01 … cco-42
+      ...items(seq('cco-', 1, 42), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
     ],
   },
 
@@ -133,7 +129,16 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
         formulaPath: `corp_kpi_formulas.${id}`,
       })),
     ],
-    charts: items(seq('him', 1, 39), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+    charts: [
+      // EAC charts — actual dashboard IDs im-40..im-45
+      ...items(['im-40', 'im-41', 'im-42', 'im-43', 'im-44', 'im-45'], 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // Basic hotel IM charts — actual dashboard IDs im-46..im-69
+      ...items(seq('im-', 46, 69), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // im-scope-builder charts — actual dashboard IDs im-01..im-39
+      ...items(seq('im-', 1, 39), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // Corp IM charts — actual dashboard IDs cim-01..cim-20
+      ...items(seq('cim-', 1, 20), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+    ],
   },
 };
 

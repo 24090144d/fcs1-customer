@@ -303,6 +303,16 @@ function buildMoKpis(acc: ImAcc, type: MaintenanceType): KpiDef[] {
   ];
 }
 
+/** Rename chart_01..chart_10 → mo-01..mo-10 for MO dashboard chart IDs */
+function renameMoChartIds(charts: ChartDef[]): ChartDef[] {
+  const moMap: Record<string, string> = {
+    chart_01: 'mo-01', chart_02: 'mo-02', chart_03: 'mo-03', chart_04: 'mo-04',
+    chart_05: 'mo-05', chart_06: 'mo-06', chart_07: 'mo-07', chart_08: 'mo-08',
+    chart_09: 'mo-09', chart_10: 'mo-10',
+  };
+  return charts.map((c) => moMap[c.id] ? { ...c, id: moMap[c.id] } : c);
+}
+
 function buildMoJson(
   overall: ImAcc,
   byType: Record<MaintenanceType, ImAcc>,
@@ -314,9 +324,12 @@ function buildMoJson(
   const pmAcc = byType.PM;
   const base = buildImJson(moAcc, upload_job_id, source_name, hotel);
   const pmBase = buildImJson(pmAcc, upload_job_id, source_name, hotel);
+  const moCharts = renameMoChartIds(base.charts);
+  const pmCharts = renameMoChartIds(pmBase.charts);
 
   return {
     ...base,
+    charts: moCharts,
     meta: { ...base.meta, schema: 'mo-v1' },
     kpis: buildMoKpis(moAcc, 'MO'),
     kpis_by_type: {
@@ -324,8 +337,8 @@ function buildMoJson(
       PM: buildMoKpis(pmAcc, 'PM'),
     },
     charts_by_type: {
-      MO: base.charts,
-      PM: pmBase.charts,
+      MO: moCharts,
+      PM: pmCharts,
     },
     raw_daily_by_type: {
       MO: base.raw_daily,
@@ -714,7 +727,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
 
   const eac: ChartDef[] = [
     {
-      id: 'eac_01', title: 'Incident by Status → Department', filterable: true, height: 320,
+      id: 'im-40', title: 'Incident by Status → Department', filterable: true, height: 320,
       options: {
         chart: { type: 'pie' },
         series: [{
@@ -733,7 +746,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       formula: 'COUNT by incident_status → COUNT by department per status',
     },
     {
-      id: 'eac_02', title: 'Severity Breakdown', filterable: true,
+      id: 'im-41', title: 'Severity Breakdown', filterable: true,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: SEV_ORDER.filter(s => acc.severityMap[s]) },
@@ -749,7 +762,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       formula: 'COUNT by severity',
     },
     {
-      id: 'eac_03', title: 'Daily Incident Volume', filterable: true,
+      id: 'im-42', title: 'Daily Incident Volume', filterable: true,
       options: {
         chart: { type: 'areaspline' },
         xAxis: { categories: sortedDays, tickInterval: Math.max(1, Math.floor(sortedDays.length / 10)) },
@@ -761,7 +774,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       formula: 'COUNT by DATE(created_date)',
     },
     {
-      id: 'eac_04', title: 'Top Incident Categories', filterable: true,
+      id: 'im-43', title: 'Top Incident Categories', filterable: true,
       options: {
         chart: { type: 'bar' },
         xAxis: { categories: top10Cats },
@@ -774,7 +787,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       formula: 'COUNT by incident_category ORDER BY count DESC LIMIT 10',
     },
     {
-      id: 'eac_05', title: 'Incident Source → Department', filterable: false,
+      id: 'im-44', title: 'Incident Source → Department', filterable: false,
       options: sourceKeys.length > 0
         ? {
             chart: { type: 'pie' },
@@ -797,7 +810,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       formula: 'COUNT by complaint_source → COUNT by department per source',
     },
     {
-      id: 'eac_06', title: 'VIP Incident Share', filterable: false, height: 220,
+      id: 'im-45', title: 'VIP Incident Share', filterable: false, height: 220,
       options: hasVip
         ? gaugeOptions(vipShare!, 100, '#f59e0b', '%')
         : {
@@ -870,7 +883,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
 
   const highCritByCat = top10Cats.map(c => (acc.catSevMap[c]?.['High'] ?? 0) + (acc.catSevMap[c]?.['Critical'] ?? 0));
 
-  // Dept × category heatmap for chart_18 single-hotel fallback
+  // Dept × category heatmap for im-63 single-hotel fallback
   const deptCatData: [number, number, number][] = [];
   for (let di = 0; di < top8Depts.length; di++) {
     for (let ci = 0; ci < top8Cats.length; ci++) {
@@ -880,9 +893,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
   }
 
   const charts: ChartDef[] = [
-    // chart_01 — All categories column
+    // im-46 — All categories column
     {
-      id: 'chart_01', title: 'Incidents by Category', filterable: true,
+      id: 'im-46', title: 'Incidents by Category', filterable: true,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: allCats },
@@ -893,9 +906,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'All incident categories ranked by volume.',
       formula: 'COUNT by incident_category ORDER BY count DESC',
     },
-    // chart_02 — Severity donut
+    // im-47 — Severity donut
     {
-      id: 'chart_02', title: 'Severity Distribution', filterable: true,
+      id: 'im-47', title: 'Severity Distribution', filterable: true,
       options: {
         chart: { type: 'pie' },
         series: [{ name: 'Incidents', type: 'pie', innerSize: '50%', data: SEV_ORDER.filter(s => acc.severityMap[s]).map(s => ({ name: s, y: acc.severityMap[s], color: SEV_COLORS[s as keyof typeof SEV_COLORS] })) }],
@@ -904,9 +917,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Proportional share of each severity level.',
       formula: 'COUNT by severity ÷ Total × 100',
     },
-    // chart_03 — Status donut (filterable)
+    // im-48 — Status donut (filterable)
     {
-      id: 'chart_03', title: 'Status by Hotel', filterable: true,
+      id: 'im-48', title: 'Status by Hotel', filterable: true,
       options: {
         chart: { type: 'pie' },
         series: [{
@@ -935,9 +948,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Status distribution by hotel with drilldown into the created department responsible for each status group.',
       formula: 'COUNT by incident_status with drilldown COUNT by created_by_department within each status',
     },
-    // chart_04 — Daily trend spline (filterable)
+    // im-49 — Daily trend spline (filterable)
     {
-      id: 'chart_04', title: 'Daily Incident Trend', filterable: true,
+      id: 'im-49', title: 'Daily Incident Trend', filterable: true,
       options: {
         chart: { type: 'spline' },
         xAxis: { categories: sortedDays, tickInterval: Math.max(1, Math.floor(sortedDays.length / 10)) },
@@ -948,9 +961,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Daily incident volume. Use to identify spikes and weekly rhythms.',
       formula: 'COUNT by DATE(created_date)',
     },
-    // chart_05 — Monthly volume (filterable)
+    // im-50 — Monthly volume (filterable)
     {
-      id: 'chart_05', title: 'Monthly Incident Volume', filterable: true,
+      id: 'im-50', title: 'Monthly Incident Volume', filterable: true,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: sortedMonths },
@@ -961,9 +974,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Monthly aggregate incident count.',
       formula: 'COUNT by MONTH(created_date)',
     },
-    // chart_06 — Day of week
+    // im-51 — Day of week
     {
-      id: 'chart_06', title: 'Incidents by Day of Week', filterable: false,
+      id: 'im-51', title: 'Incidents by Day of Week', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: WD_NAMES },
@@ -974,9 +987,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Incident distribution by day of the week.',
       formula: 'COUNT by DAYOFWEEK(created_date)',
     },
-    // chart_07 — Top 15 items
+    // im-52 — Top 15 items
     {
-      id: 'chart_07', title: 'Top 15 Incident Items', filterable: false,
+      id: 'im-52', title: 'Top 15 Incident Items', filterable: false,
       options: {
         chart: { type: 'bar' },
         xAxis: { categories: topN(acc.itemMap, 15).map(([k]) => k) },
@@ -987,9 +1000,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'The 15 most-reported incident item types.',
       formula: 'COUNT by incident_item_name ORDER BY count DESC LIMIT 15',
     },
-    // chart_08 — Top 10 rooms
+    // im-53 — Top 10 rooms
     {
-      id: 'chart_08', title: 'Top 10 Rooms by Incidents', filterable: false,
+      id: 'im-53', title: 'Top 10 Rooms by Incidents', filterable: false,
       options: {
         chart: { type: 'bar' },
         xAxis: { categories: topN(acc.roomMap, 10).map(([k]) => `Room ${k}`) },
@@ -1000,9 +1013,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Rooms with the most incidents.',
       formula: 'COUNT by room_no ORDER BY count DESC LIMIT 10',
     },
-    // chart_09 — Category × Status stacked
+    // im-54 — Category × Status stacked
     {
-      id: 'chart_09', title: 'Category × Status (Stacked)', filterable: false,
+      id: 'im-54', title: 'Category × Status (Stacked)', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: top8Cats },
@@ -1013,9 +1026,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Status breakdown within the top 8 categories.',
       formula: 'COUNT by (incident_category, incident_status) for top 8 categories',
     },
-    // chart_10 — Category × Severity top 5
+    // im-55 — Category × Severity top 5
     {
-      id: 'chart_10', title: 'Category × Severity (Top 5)', filterable: false,
+      id: 'im-55', title: 'Category × Severity (Top 5)', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: top5Cats },
@@ -1026,9 +1039,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Severity distribution for the top 5 incident categories.',
       formula: 'COUNT by (incident_category, severity) for top 5 categories',
     },
-    // chart_11 — Closure rate by category (filterable)
+    // im-56 — Closure rate by category (filterable)
     {
-      id: 'chart_11', title: 'Closure Rate by Category (%)', filterable: true,
+      id: 'im-56', title: 'Closure Rate by Category (%)', filterable: true,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: top10Cats },
@@ -1040,9 +1053,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Percentage of incidents resolved within each category.',
       formula: 'COUNT(Completed) ÷ COUNT(all) × 100 per category',
     },
-    // chart_12 — Chain: Total Incidents (fallback: single hotel status pie)
+    // im-57 — Chain: Total Incidents (fallback: single hotel status pie)
     {
-      id: 'chart_12', title: 'Chain — Total Incidents by Hotel', filterable: false,
+      id: 'im-57', title: 'Chain — Total Incidents by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1053,9 +1066,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded. Upload additional hotels to enable cross-hotel comparison.',
       formula: 'COUNT per hotel',
     },
-    // chart_13 — Chain: Closure Rate (fallback: single hotel)
+    // im-58 — Chain: Closure Rate (fallback: single hotel)
     {
-      id: 'chart_13', title: 'Chain — Closure Rate by Hotel', filterable: false,
+      id: 'im-58', title: 'Chain — Closure Rate by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1066,9 +1079,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'Completed ÷ Total × 100 per hotel',
     },
-    // chart_14 — Chain: VIP Share (fallback: single hotel)
+    // im-59 — Chain: VIP Share (fallback: single hotel)
     {
-      id: 'chart_14', title: 'Chain — VIP Incident Share by Hotel', filterable: false,
+      id: 'im-59', title: 'Chain — VIP Incident Share by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1079,9 +1092,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'VIP Incidents ÷ Total × 100 per hotel',
     },
-    // chart_15 — Chain: Avg Severity Score (fallback: single hotel)
+    // im-60 — Chain: Avg Severity Score (fallback: single hotel)
     {
-      id: 'chart_15', title: 'Chain — Avg Severity Score by Hotel', filterable: false,
+      id: 'im-60', title: 'Chain — Avg Severity Score by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1092,9 +1105,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'Weighted avg severity score per hotel',
     },
-    // chart_16 — Chain: Category Mix stacked % (fallback: single hotel top-5 category share)
+    // im-61 — Chain: Category Mix stacked % (fallback: single hotel top-5 category share)
     {
-      id: 'chart_16', title: 'Chain — Category Mix by Hotel', filterable: false,
+      id: 'im-61', title: 'Chain — Category Mix by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1108,9 +1121,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'COUNT by category per hotel as % of total',
     },
-    // chart_17 — Chain: Pending Rate (fallback: single hotel)
+    // im-62 — Chain: Pending Rate (fallback: single hotel)
     {
-      id: 'chart_17', title: 'Chain — Pending Rate by Hotel', filterable: false,
+      id: 'im-62', title: 'Chain — Pending Rate by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1121,9 +1134,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'Pending ÷ Total × 100 per hotel',
     },
-    // chart_18 — Dept × Category heatmap (single-hotel) / Chain dept comparison
+    // im-63 — Dept × Category heatmap (single-hotel) / Chain dept comparison
     {
-      id: 'chart_18', title: 'Department × Category Heatmap', filterable: false,
+      id: 'im-63', title: 'Department × Category Heatmap', filterable: false,
       options: top8Depts.length > 0
         ? {
             chart: { type: 'heatmap' },
@@ -1140,9 +1153,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Incident density across departments and categories. Identifies which departments handle which categories most.',
       formula: 'COUNT by (department, incident_category) for top 8 each',
     },
-    // chart_19 — Weekly volume (filterable)
+    // im-64 — Weekly volume (filterable)
     {
-      id: 'chart_19', title: 'Weekly Incident Volume', filterable: true,
+      id: 'im-64', title: 'Weekly Incident Volume', filterable: true,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: sortedWeeks, tickInterval: Math.max(1, Math.floor(sortedWeeks.length / 8)) },
@@ -1153,9 +1166,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Weekly incident count. Useful for identifying multi-week trends and seasonal patterns.',
       formula: 'COUNT by ISO week (YYYY-Www)',
     },
-    // chart_20 — Chain: Repeat Rate (fallback: single hotel repeat rate)
+    // im-65 — Chain: Repeat Rate (fallback: single hotel repeat rate)
     {
-      id: 'chart_20', title: 'Chain — Repeat Incident Rate by Hotel', filterable: false,
+      id: 'im-65', title: 'Chain — Repeat Incident Rate by Hotel', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: [hotel.hotelCode] },
@@ -1166,9 +1179,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Chain comparison not available — only one hotel uploaded.',
       formula: 'Incidents in repeated room+category+item groups ÷ Total × 100 per hotel',
     },
-    // chart_21 — Hour of day column
+    // im-66 — Hour of day column
     {
-      id: 'chart_21', title: 'Incidents by Hour of Day', filterable: false,
+      id: 'im-66', title: 'Incidents by Hour of Day', filterable: false,
       options: {
         chart: { type: 'column' },
         xAxis: { categories: Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`) },
@@ -1180,16 +1193,16 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       note: 'Incident distribution across 24 hours. Identifies peak operational hours for staffing decisions.',
       formula: 'COUNT by HOUR(incident_datetime)',
     },
-    // chart_22 — Gauge: Closure Rate
+    // im-67 — Gauge: Closure Rate
     {
-      id: 'chart_22', title: 'Gauge — Closure Rate', filterable: false, height: 220,
+      id: 'im-67', title: 'Gauge — Closure Rate', filterable: false, height: 220,
       options: gaugeOptions(closureRate, 100, '#22c55e', '%'),
       note: `Overall closure rate: ${r1(closureRate)}% of ${total} incidents resolved.`,
       formula: 'Completed ÷ Total × 100',
     },
-    // chart_23 — Gauge: VIP Closure Rate
+    // im-68 — Gauge: VIP Closure Rate
     {
-      id: 'chart_23', title: 'Gauge — VIP Closure Rate', filterable: false, height: 220,
+      id: 'im-68', title: 'Gauge — VIP Closure Rate', filterable: false, height: 220,
       options: hasVip
         ? gaugeOptions(vipClosure!, 100, '#f59e0b', '%')
         : gaugeOptions(0, 100, '#e2e8f0', '%'),
@@ -1198,9 +1211,9 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
         : 'No VIP incidents detected in this upload.',
       formula: 'Completed VIP ÷ Total VIP × 100',
     },
-    // chart_24 — Gauge: Avg Severity Score (max 4)
+    // im-69 — Gauge: Avg Severity Score (max 4)
     {
-      id: 'chart_24', title: 'Gauge — Avg Severity Score', filterable: false, height: 220,
+      id: 'im-69', title: 'Gauge — Avg Severity Score', filterable: false, height: 220,
       options: gaugeOptions(avgSev, 4, '#ef4444', 'pts'),
       note: `Average severity: ${r2(avgSev)} / 4.0. Low=1, Medium=2, High=3, Critical=4.`,
       formula: '(Low×1 + Medium×2 + High×3 + Critical×4) ÷ Total',
@@ -1475,25 +1488,25 @@ function buildJoEac(_acc: ImAcc, jo: JoKpiAcc): ChartDef[] {
   const others = Object.values(cumulative).reduce((s, v) => s + v, 0) - top.reduce((s, [, v]) => s + v, 0);
   return [
     {
-      id: 'jo_eac_01', title: 'Cumulative Weekly Service Category Share (Donut Race)', filterable: false,
+      id: 'jo-01', title: 'Cumulative Weekly Service Category Share (Donut Race)', filterable: false,
       note: 'Animated cumulative weekly donut race showing long-run share shifts by service category. Impact: sustained cumulative dominance reveals structural demand pressure points. Resolution: rebalance capacity plans, inventory, and preventive actions toward categories with persistent cumulative growth.',
       formula: 'RUNNING_SUM(COUNT(*)) BY service_category OVER created_week (ASC), Top 10 + Others',
       options: { chart: { type: 'pie' }, series: [{ name: 'Cumulative Jobs', type: 'pie', innerSize: '45%', data: [...top.map(([name, y]) => ({ name, y })), ...(others > 0 ? [{ name: 'Others', y: others }] : [])] }] },
     },
     {
-      id: 'jo_eac_02', title: 'SLA vs Jobs by week', filterable: false,
+      id: 'jo-02', title: 'SLA vs Jobs by week', filterable: false,
       note: 'Week-ascending workload bars with SLA compliance line.',
       formula: 'COUNT(*) and SLA% BY created_week (ASC)',
       options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'SLA %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'SLA %', type: 'spline', yAxis: 1, data: weekSla }] },
     },
     {
-      id: 'jo_eac_03', title: 'Closing Rate vs Jobs by week', filterable: false,
+      id: 'jo-03', title: 'Closing Rate vs Jobs by week', filterable: false,
       note: 'Week-ascending workload bars with closing rate line.',
       formula: 'COUNT(*) and completed% BY created_week (ASC)',
       options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'Close %', type: 'spline', yAxis: 1, data: weekClose }] },
     },
     {
-      id: 'jo_eac_04', title: 'Status -> Service Category (Drilldown)', filterable: false,
+      id: 'jo-04', title: 'Status -> Service Category (Drilldown)', filterable: false,
       note: 'Click a status slice to drill down into service category mix.',
       formula: 'COUNT(*) BY status, then COUNT(*) BY service_category within status',
       options: {
@@ -1526,31 +1539,31 @@ function buildJoCharts(_acc: ImAcc, jo: JoKpiAcc): ChartDef[] {
   const catRespP90 = Object.fromEntries(Object.entries(jo.catItemResponse).map(([c, m]) => [c, percentile(Object.values(m).flat(), 90) ?? 0]));
   const catResP90 = Object.fromEntries(Object.entries(jo.catItemResolution).map(([c, m]) => [c, percentile(Object.values(m).flat(), 90) ?? 0]));
 
-  const drillCount = buildDrilldownDonut('jo_chart_01', 'Service Category -> Service Items (Drilldown)', 'Shows where demand is concentrated. Click a category slice to drill into its top service items. Impact: concentrated demand can overload teams and slow fulfillment. Resolution: rebalance staffing, pre-stage inventory, and standardize high-volume request handling for the largest item clusters.', 'COUNT(*) by category then item', jo.catTotal, jo.catItemCount);
-  const drillRespAvg = buildDrilldownDonut('jo_chart_12', 'Avg Response by Service Category -> Service Items (Drilldown)', 'Average first-response time by category; click to drill into item-level contributors. Impact: slow first response directly impacts guest perception. Resolution: define fast-response SOPs for worst items and introduce response-time alerts.', 'AVG(response_min) by category then item', catRespAvg, Object.fromEntries(Object.entries(jo.catItemResponse).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, r2(arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1))]))])));
-  const drillResAvg = buildDrilldownDonut('jo_chart_13', 'Avg Resolution by Service Category -> Service Items (Drilldown)', 'Average end-to-end resolution time by category with item drilldown. Impact: long resolution cycles reduce operational throughput. Resolution: remove approval/parts delays and set item-level turnaround standards.', 'AVG(resolution_min) by category then item', catResAvg, Object.fromEntries(Object.entries(jo.catItemResolution).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, r2(arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1))]))])));
-  const drillBreach = buildDrilldownDonut('jo_chart_14', 'SLA Breach Minutes by Service Category -> Service Items (Drilldown)', 'Total breach minutes concentration by category with item drilldown. Impact: concentrated breach minutes identify where SLA risk is financially and reputationally highest. Resolution: prioritize chronic breach items for process redesign and escalation governance.', 'SUM(sla_breach_min) by category then item', Object.fromEntries(Object.entries(jo.catItemBreachMins).map(([c, m]) => [c, Object.values(m).reduce((s, v) => s + v, 0)])), jo.catItemBreachMins);
-  const drillEsc = buildDrilldownDonut('jo_chart_15', 'Escalation by Service Category -> Service Items (Drilldown)', 'Escalation concentration by category; click for item-level problem areas. Impact: high escalation indicates service instability or unclear ownership. Resolution: strengthen first-line decision rights, update runbooks, and clarify escalation triggers.', 'SUM(escalated_flag) by category then item', catEsc, jo.catItemEscalations);
-  const drillRespP90 = buildDrilldownDonut('jo_chart_17', 'Response P90 by Service Category -> Service Items (Drilldown)', 'P90 response time exposes tail-risk delays by category and item. Impact: long-tail response outliers hurt VIP/peak-time experience. Resolution: enforce priority routing and exception handling for high-P90 items.', 'P90(response_min) by category then item', catRespP90, Object.fromEntries(Object.entries(jo.catItemResponse).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, percentile(arr, 90) ?? 0]))])));
-  const drillResP90 = buildDrilldownDonut('jo_chart_18', 'Resolution P90 by Service Category -> Service Items (Drilldown)', 'P90 resolution time shows worst-case completion behavior by category and item. Impact: tail resolution delays drive complaints and SLA penalties. Resolution: target root-cause items with dedicated recovery plans and stricter completion SLAs.', 'P90(resolution_min) by category then item', catResP90, Object.fromEntries(Object.entries(jo.catItemResolution).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, percentile(arr, 90) ?? 0]))])));
+  const drillCount = buildDrilldownDonut('jo-05', 'Service Category -> Service Items (Drilldown)', 'Shows where demand is concentrated. Click a category slice to drill into its top service items. Impact: concentrated demand can overload teams and slow fulfillment. Resolution: rebalance staffing, pre-stage inventory, and standardize high-volume request handling for the largest item clusters.', 'COUNT(*) by category then item', jo.catTotal, jo.catItemCount);
+  const drillRespAvg = buildDrilldownDonut('jo-16', 'Avg Response by Service Category -> Service Items (Drilldown)', 'Average first-response time by category; click to drill into item-level contributors. Impact: slow first response directly impacts guest perception. Resolution: define fast-response SOPs for worst items and introduce response-time alerts.', 'AVG(response_min) by category then item', catRespAvg, Object.fromEntries(Object.entries(jo.catItemResponse).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, r2(arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1))]))])));
+  const drillResAvg = buildDrilldownDonut('jo-17', 'Avg Resolution by Service Category -> Service Items (Drilldown)', 'Average end-to-end resolution time by category with item drilldown. Impact: long resolution cycles reduce operational throughput. Resolution: remove approval/parts delays and set item-level turnaround standards.', 'AVG(resolution_min) by category then item', catResAvg, Object.fromEntries(Object.entries(jo.catItemResolution).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, r2(arr.reduce((s, v) => s + v, 0) / Math.max(arr.length, 1))]))])));
+  const drillBreach = buildDrilldownDonut('jo-18', 'SLA Breach Minutes by Service Category -> Service Items (Drilldown)', 'Total breach minutes concentration by category with item drilldown. Impact: concentrated breach minutes identify where SLA risk is financially and reputationally highest. Resolution: prioritize chronic breach items for process redesign and escalation governance.', 'SUM(sla_breach_min) by category then item', Object.fromEntries(Object.entries(jo.catItemBreachMins).map(([c, m]) => [c, Object.values(m).reduce((s, v) => s + v, 0)])), jo.catItemBreachMins);
+  const drillEsc = buildDrilldownDonut('jo-19', 'Escalation by Service Category -> Service Items (Drilldown)', 'Escalation concentration by category; click for item-level problem areas. Impact: high escalation indicates service instability or unclear ownership. Resolution: strengthen first-line decision rights, update runbooks, and clarify escalation triggers.', 'SUM(escalated_flag) by category then item', catEsc, jo.catItemEscalations);
+  const drillRespP90 = buildDrilldownDonut('jo-21', 'Response P90 by Service Category -> Service Items (Drilldown)', 'P90 response time exposes tail-risk delays by category and item. Impact: long-tail response outliers hurt VIP/peak-time experience. Resolution: enforce priority routing and exception handling for high-P90 items.', 'P90(response_min) by category then item', catRespP90, Object.fromEntries(Object.entries(jo.catItemResponse).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, percentile(arr, 90) ?? 0]))])));
+  const drillResP90 = buildDrilldownDonut('jo-22', 'Resolution P90 by Service Category -> Service Items (Drilldown)', 'P90 resolution time shows worst-case completion behavior by category and item. Impact: tail resolution delays drive complaints and SLA penalties. Resolution: target root-cause items with dedicated recovery plans and stricter completion SLAs.', 'P90(resolution_min) by category then item', catResP90, Object.fromEntries(Object.entries(jo.catItemResolution).map(([c, m]) => [c, Object.fromEntries(Object.entries(m).map(([i, arr]) => [i, percentile(arr, 90) ?? 0]))])));
 
   return [
     drillCount,
-    { id: 'jo_chart_02', title: 'JO Closing Rate vs Jobs Trend by week', filterable: false, note: 'Weekly workload (bars) versus closure efficiency (line) in ascending week order. Impact: rising jobs with falling close rate indicates backlog risk. Resolution: add short-term capacity, prioritize aging jobs, and enforce daily closure targets until rate stabilizes.', formula: 'COUNT(*) and completed% by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'Close %', type: 'spline', yAxis: 1, data: weekClose }] } },
-    { id: 'jo_chart_03', title: 'SLA Compliance vs Jobs Trend by week', filterable: false, note: 'Compares weekly incoming volume with SLA performance in ascending week order. Impact: SLA dips during high-volume weeks reveal process bottlenecks. Resolution: deploy surge playbook, tighten handoff SLAs, and monitor breach-prone queues hourly.', formula: 'COUNT(*) and SLA% by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'SLA %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'SLA %', type: 'spline', yAxis: 1, data: weekSla }] } },
-    { id: 'jo_chart_04', title: 'Timeout Trend', filterable: false, note: 'Weekly timeout volume trend to detect service interruptions early. Impact: timeout spikes reduce guest satisfaction and increase repeat contacts. Resolution: identify root-cause weeks, fix routing/escalation delays, and set alert thresholds for timeout spikes.', formula: 'SUM(timeout_flag) by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, series: [{ name: 'Timeouts', data: weekTimeout }] } },
-    { id: 'jo_chart_05', title: 'Status vs Top 10 Departments', filterable: false, note: 'Vertical stacked view of status mix across the top 10 departments by volume. Impact: high open/pending share in specific departments signals queue congestion. Resolution: redistribute tickets, clear blockers, and set department-level WIP limits with daily review.', formula: 'COUNT(*) by department and status', options: { chart: { type: 'column' }, xAxis: { categories: top10Dept }, plotOptions: { column: { stacking: 'normal' } }, series: statuses.map((s) => ({ name: s, type: 'column', data: top10Dept.map((d) => jo.deptStatusMap[d]?.[s] ?? 0) })) } },
-    { id: 'jo_chart_06', title: 'Top 10 Service Category Volume', filterable: false, note: 'Shows demand (bars) and close rate (line) by top categories. Impact: high-volume/low-close categories are critical performance gaps. Resolution: assign category owners, create playbooks, and track close-rate recovery by category weekly.', formula: 'COUNT(*) and completed% by category', options: { chart: { type: 'column' }, xAxis: { categories: topCats }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, min: 0, max: 100 }], series: [{ name: 'Jobs', type: 'column', data: topCats.map((c) => jo.catTotal[c] ?? 0) }, { name: 'Close %', type: 'spline', yAxis: 1, data: catCloseRate }] } },
-    { id: 'jo_chart_07', title: 'Top 10 Service Item Volume', filterable: false, note: 'Ranks the most requested service items. Impact: item concentration can create recurring operational strain. Resolution: bundle common tasks, automate repetitive steps, and pre-allocate resources for top items.', formula: 'COUNT(*) by service_item', options: { chart: { type: 'bar' }, xAxis: { categories: topItems.map(([k]) => k) }, series: [{ name: 'Jobs', data: topItems.map(([, v]) => v) }] } },
-    { id: 'jo_chart_08', title: 'Top 10 Assigned Department Volume', filterable: false, note: 'Shows departments receiving the highest assignment load. Impact: uneven load can cause response delays and burnout. Resolution: rebalance dispatch rules and cross-train teams to absorb peaks.', formula: 'COUNT(*) by assigned_department', options: { chart: { type: 'bar' }, xAxis: { categories: topAssigned.map(([k]) => k) }, series: [{ name: 'Jobs', data: topAssigned.map(([, v]) => v) }] } },
-    { id: 'jo_chart_09', title: 'Top 10 Created By Department Volume', filterable: false, note: 'Shows request-origin departments generating the most JOs. Impact: large demand sources may indicate upstream process gaps. Resolution: run preventive actions with source departments to reduce avoidable requests.', formula: 'COUNT(*) by created_by_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCreatedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCreatedBy.map(([, v]) => v) }] } },
-    { id: 'jo_chart_10', title: 'Top 10 Completed Department Volume', filterable: false, note: 'Shows departments completing the highest JO volume. Impact: low completion share versus assignment share may indicate execution bottlenecks. Resolution: compare assigned vs completed mix and remove completion blockers.', formula: 'COUNT(*) by completed_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCompletedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCompletedBy.map(([, v]) => v) }] } },
-    { id: 'jo_chart_11', title: 'Top Location Volume', filterable: false, note: 'Highlights locations with the largest JO demand. Impact: hotspots can degrade on-site service quality if unmanaged. Resolution: deploy location-specific staffing, stock, and preventive maintenance actions.', formula: 'COUNT(*) by location', options: { chart: { type: 'bar' }, xAxis: { categories: topLocations.map(([k]) => k) }, series: [{ name: 'Jobs', data: topLocations.map(([, v]) => v) }] } },
+    { id: 'jo-06', title: 'JO Closing Rate vs Jobs Trend by week', filterable: false, note: 'Weekly workload (bars) versus closure efficiency (line) in ascending week order. Impact: rising jobs with falling close rate indicates backlog risk. Resolution: add short-term capacity, prioritize aging jobs, and enforce daily closure targets until rate stabilizes.', formula: 'COUNT(*) and completed% by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'Close %', type: 'spline', yAxis: 1, data: weekClose }] } },
+    { id: 'jo-07', title: 'SLA Compliance vs Jobs Trend by week', filterable: false, note: 'Compares weekly incoming volume with SLA performance in ascending week order. Impact: SLA dips during high-volume weeks reveal process bottlenecks. Resolution: deploy surge playbook, tighten handoff SLAs, and monitor breach-prone queues hourly.', formula: 'COUNT(*) and SLA% by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'SLA %' }, opposite: true, max: 100, min: 0 }], series: [{ name: 'Jobs', type: 'column', data: weekJobs }, { name: 'SLA %', type: 'spline', yAxis: 1, data: weekSla }] } },
+    { id: 'jo-08', title: 'Timeout Trend', filterable: false, note: 'Weekly timeout volume trend to detect service interruptions early. Impact: timeout spikes reduce guest satisfaction and increase repeat contacts. Resolution: identify root-cause weeks, fix routing/escalation delays, and set alert thresholds for timeout spikes.', formula: 'SUM(timeout_flag) by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, series: [{ name: 'Timeouts', data: weekTimeout }] } },
+    { id: 'jo-09', title: 'Status vs Top 10 Departments', filterable: false, note: 'Vertical stacked view of status mix across the top 10 departments by volume. Impact: high open/pending share in specific departments signals queue congestion. Resolution: redistribute tickets, clear blockers, and set department-level WIP limits with daily review.', formula: 'COUNT(*) by department and status', options: { chart: { type: 'column' }, xAxis: { categories: top10Dept }, plotOptions: { column: { stacking: 'normal' } }, series: statuses.map((s) => ({ name: s, type: 'column', data: top10Dept.map((d) => jo.deptStatusMap[d]?.[s] ?? 0) })) } },
+    { id: 'jo-10', title: 'Top 10 Service Category Volume', filterable: false, note: 'Shows demand (bars) and close rate (line) by top categories. Impact: high-volume/low-close categories are critical performance gaps. Resolution: assign category owners, create playbooks, and track close-rate recovery by category weekly.', formula: 'COUNT(*) and completed% by category', options: { chart: { type: 'column' }, xAxis: { categories: topCats }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, min: 0, max: 100 }], series: [{ name: 'Jobs', type: 'column', data: topCats.map((c) => jo.catTotal[c] ?? 0) }, { name: 'Close %', type: 'spline', yAxis: 1, data: catCloseRate }] } },
+    { id: 'jo-11', title: 'Top 10 Service Item Volume', filterable: false, note: 'Ranks the most requested service items. Impact: item concentration can create recurring operational strain. Resolution: bundle common tasks, automate repetitive steps, and pre-allocate resources for top items.', formula: 'COUNT(*) by service_item', options: { chart: { type: 'bar' }, xAxis: { categories: topItems.map(([k]) => k) }, series: [{ name: 'Jobs', data: topItems.map(([, v]) => v) }] } },
+    { id: 'jo-12', title: 'Top 10 Assigned Department Volume', filterable: false, note: 'Shows departments receiving the highest assignment load. Impact: uneven load can cause response delays and burnout. Resolution: rebalance dispatch rules and cross-train teams to absorb peaks.', formula: 'COUNT(*) by assigned_department', options: { chart: { type: 'bar' }, xAxis: { categories: topAssigned.map(([k]) => k) }, series: [{ name: 'Jobs', data: topAssigned.map(([, v]) => v) }] } },
+    { id: 'jo-13', title: 'Top 10 Created By Department Volume', filterable: false, note: 'Shows request-origin departments generating the most JOs. Impact: large demand sources may indicate upstream process gaps. Resolution: run preventive actions with source departments to reduce avoidable requests.', formula: 'COUNT(*) by created_by_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCreatedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCreatedBy.map(([, v]) => v) }] } },
+    { id: 'jo-14', title: 'Top 10 Completed Department Volume', filterable: false, note: 'Shows departments completing the highest JO volume. Impact: low completion share versus assignment share may indicate execution bottlenecks. Resolution: compare assigned vs completed mix and remove completion blockers.', formula: 'COUNT(*) by completed_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCompletedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCompletedBy.map(([, v]) => v) }] } },
+    { id: 'jo-15', title: 'Top Location Volume', filterable: false, note: 'Highlights locations with the largest JO demand. Impact: hotspots can degrade on-site service quality if unmanaged. Resolution: deploy location-specific staffing, stock, and preventive maintenance actions.', formula: 'COUNT(*) by location', options: { chart: { type: 'bar' }, xAxis: { categories: topLocations.map(([k]) => k) }, series: [{ name: 'Jobs', data: topLocations.map(([, v]) => v) }] } },
     drillRespAvg,
     drillResAvg,
     drillBreach,
     drillEsc,
-    { id: 'jo_chart_16', title: 'Top Reassignment by Department', filterable: false, note: 'Departments with the highest reassignment volume. Impact: frequent reassignment adds cycle time and accountability gaps. Resolution: improve assignment accuracy rules, skill mapping, and triage quality at intake.', formula: 'SUM(reassigned_flag) by department', options: { chart: { type: 'bar' }, xAxis: { categories: topN(jo.deptReassigned, 10).map(([k]) => k) }, series: [{ name: 'Reassigned Jobs', data: topN(jo.deptReassigned, 10).map(([, v]) => v) }] } },
+    { id: 'jo-20', title: 'Top Reassignment by Department', filterable: false, note: 'Departments with the highest reassignment volume. Impact: frequent reassignment adds cycle time and accountability gaps. Resolution: improve assignment accuracy rules, skill mapping, and triage quality at intake.', formula: 'SUM(reassigned_flag) by department', options: { chart: { type: 'bar' }, xAxis: { categories: topN(jo.deptReassigned, 10).map(([k]) => k) }, series: [{ name: 'Reassigned Jobs', data: topN(jo.deptReassigned, 10).map(([, v]) => v) }] } },
     drillRespP90,
     drillResP90,
   ];

@@ -87,7 +87,7 @@ function applyLabelRules(raw: Highcharts.Options, textColor: string, pointPalett
   if ((firstType === 'bar' || firstType === 'column') && barPointCount > 0 && barPointCount <= 10) {
     const plotOptions = (opts.plotOptions ?? {}) as Highcharts.PlotOptions;
     const target = firstType === 'bar' ? (plotOptions.bar ?? {}) : (plotOptions.column ?? {});
-    const shouldUseDistinctColors = barPointCount < 6;
+    const shouldUseDistinctColors = barPointCount < 6 && series.length === 1;
     opts.plotOptions = {
       ...plotOptions,
       [firstType]: {
@@ -102,15 +102,18 @@ function applyLabelRules(raw: Highcharts.Options, textColor: string, pointPalett
       },
     };
     // Force distinct point colors on short bar/column charts even when
-    // individual series options are present.
+    // individual series options are present. Only apply to column/bar — not to
+    // line/spline/etc on a secondary axis, which would suppress line rendering.
     if (shouldUseDistinctColors) {
       opts.series = series.map((s) => {
         const so = (s as unknown as Record<string, unknown>);
+        const sType = String((so.type as string | undefined) ?? firstType);
+        if (sType !== 'column' && sType !== 'bar') return so;
         return {
           ...so,
           colorByPoint: true,
         };
-      }) as Highcharts.SeriesOptionsType[];
+      }) as unknown as Highcharts.SeriesOptionsType[];
     }
   }
 
@@ -395,12 +398,16 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
     return hasMap ? 'mapChart' : 'chart';
   }, [options.series]);
 
-  // Re-apply theme on dark/light toggle; skip if user is mid-drilldown
+  // Re-apply theme on dark/light toggle; skip if user is mid-drilldown.
+  // Exclude xAxis/yAxis from the update — these hold structural chart config
+  // (axis count, opposite flag, etc.) and must not be overwritten by the
+  // single-object theme defaults after the chart has been initialised.
   useEffect(() => {
     const chart = chartRef.current?.chart;
     if (!chart) return;
     if ((chart as unknown as { drilldownLevels?: unknown[] }).drilldownLevels?.length) return;
-    chart.update(theme as Highcharts.Options, true, true);
+    const { xAxis: _x, yAxis: _y, ...styleOnlyTheme } = theme as unknown as Record<string, unknown>;
+    chart.update(styleOnlyTheme as Highcharts.Options, true, true);
   }, [theme]);
 
   // ── Card surface colors ───────────────────────────────────────────────────

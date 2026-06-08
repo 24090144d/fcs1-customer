@@ -12,6 +12,7 @@ import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
+import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -2185,6 +2186,15 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const [hotelFilter, setHotelFilter] = useState('ALL');
   const themeTokens = useMemo(() => getAppThemeTokens(selectedTheme, dark), [selectedTheme, dark]);
 
+  // ── Dashboard visibility config (from Configuration page) ─────────────────
+  const [moDashConfig, setMoDashConfig] = useState<ModuleConfig>(() => defaultModuleConfig('mo'));
+  useEffect(() => {
+    const reload = () => setMoDashConfig(loadModuleConfig('mo'));
+    reload();
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
+  }, []);
+
   useEffect(() => {
     const html = document.documentElement;
     const syncDark = () => setDark(html.classList.contains('dark'));
@@ -2570,7 +2580,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
       <div className="px-6 py-5 space-y-8">
         <section>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
-            {(corpKpis ?? scopedKpis).map((kpi) => (
+            {(corpKpis ?? scopedKpis).filter((kpi) => moDashConfig.kpis[kpi.id] !== false).map((kpi) => (
               <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
             ))}
           </div>
@@ -2580,7 +2590,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           {!isCorp && <SectionHead label={`${moduleDisplay} Charts`} dark={dark} />}
           {isCorp && <SectionHead label={corpBenchmarkChartsLabel} dark={dark} />}
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(isCorp ? corpMoCharts : scopedCharts).map((def) => (
+            {(isCorp ? corpMoCharts : scopedCharts).filter((def) => moDashConfig.charts[def.id] !== false).map((def) => (
               (() => {
                 const { override, fullPeriod } = chartOpts(def);
                 return (
@@ -2648,6 +2658,16 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   const [hotelFilter, setHotelFilter] = useState('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [deptScopedSummary, setDeptScopedSummary] = useState<DeptScopedSummary | null>(null);
+
+  // ── Dashboard visibility config (from Configuration page) ─────────────────
+  const modKey = isJo ? 'jo' : 'im';
+  const [stdDashConfig, setStdDashConfig] = useState<ModuleConfig>(() => defaultModuleConfig(modKey));
+  useEffect(() => {
+    const reload = () => setStdDashConfig(loadModuleConfig(modKey));
+    reload();
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
+  }, [modKey]);
   const dashboardIdentity = useMemo(
     () => [
       data.meta.schema,
@@ -3960,7 +3980,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         {/* ── KPIs ──────────────────────────────────────────────────────────── */}
         <section className="kpi-print-section">
           <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {localizedKpis.map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}
+            {localizedKpis.filter(k => stdDashConfig.kpis[k.id] !== false).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}
           </div>
           {filtered && (
             <p className="mt-1 font-mono" style={{ fontSize: '0.6rem', color: naText }}>
@@ -3992,7 +4012,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           <section>
             <SectionHead label={t('dashboard_ui.corp_jo_benchmark_charts', 'Corp JO Benchmark Charts')} dark={dark} />
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {corpJoCharts.map((def) => {
+              {corpJoCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
               })}
@@ -4023,7 +4043,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Executive Charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelExecutiveCharts.map((def) => {
+                    {imHotelExecutiveCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       const uiIndex = nextChartIndex();
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
@@ -4033,7 +4053,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Over the time charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelOverTimeCharts.map((def) => {
+                    {imHotelOverTimeCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       const uiIndex = nextChartIndex();
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
@@ -4043,7 +4063,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Drilldown charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelDrilldownCharts.map((def) => {
+                    {imHotelDrilldownCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       const uiIndex = nextChartIndex();
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
@@ -4053,7 +4073,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Operation Analysis'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelOperationAnalysisCharts.map((def, idx) => {
+                    {imHotelOperationAnalysisCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       const uiIndex = nextChartIndex();
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
@@ -4066,7 +4086,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={t('dashboard_ui.section_charts', 'Executive Analysis Charts')} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {reorderedEac.map((def) => {
+                    {reorderedEac.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
                     })}
@@ -4075,7 +4095,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={t('dashboard_ui.operational_jo', 'Operational Detail — JO View')} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {reorderedOperational.map((def) => {
+                    {reorderedOperational.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
                     })}

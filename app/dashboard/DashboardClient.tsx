@@ -1413,7 +1413,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     }),
     // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
     make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items requested by VIP guests at that hour.', 'COUNT(*) WHERE is_vip BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
-      const GREEN = '#6B8C42'; // vintage green
+      const GREEN = '#0F766E'; // deep teal
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
       const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
 
@@ -1462,7 +1462,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     })()),
     // ── cjo-23..26: 24-hour primary bar → drilldown per hour ──────────────────
     ...(() => {
-      const GREEN = '#6B8C42'; // vintage green
+      const GREEN = '#0F766E'; // deep teal
       const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
 

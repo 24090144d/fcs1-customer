@@ -1268,6 +1268,19 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
   };
 }
 
+// ── 24-hour duration buckets (shared by JO charts jo-23..jo-26) ──────────────
+const DUR_BUCKETS = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
+type DurBucket = typeof DUR_BUCKETS[number];
+function durBucket(minutes: number): DurBucket {
+  if (minutes < 15)  return '< 15 min';
+  if (minutes < 30)  return '15–30 min';
+  if (minutes < 60)  return '30–60 min';
+  if (minutes < 120) return '1–2 h';
+  if (minutes < 240) return '2–4 h';
+  if (minutes < 480) return '4–8 h';
+  return '8+ h';
+}
+
 interface JoKpiAcc {
   total: number;
   completed: number;
@@ -1294,6 +1307,23 @@ interface JoKpiAcc {
   catItemBreachMins: Record<string, Record<string, number>>;
   catItemEscalations: Record<string, Record<string, number>>;
   deptReassigned: Record<string, number>;
+  // ── 24-hour distribution data (jo-23..jo-26) ────────────────────────────
+  hourCompleted:       Record<number, number>;
+  hourAcknowledged:    Record<number, number>;
+  hourEscalated:       Record<number, number>;
+  hourSlaCompliant:    Record<number, number>;
+  hourSlaTotal:        Record<number, number>;
+  hourCompletionBuckets: Record<number, Record<string, number>>;
+  hourResponseBuckets:   Record<number, Record<string, number>>;
+  hourEscDelayBuckets:   Record<number, Record<string, number>>;
+  hourSlaCatTotal:       Record<number, Record<string, number>>;
+  hourSlaCatCompliant:   Record<number, Record<string, number>>;
+  // ── Aggregated maps stored in HotelSummary for corp drilldown ────────────
+  completionDurMap:  Record<string, number>;
+  responseDurMap:    Record<string, number>;
+  escalatedDurMap:   Record<string, number>;
+  slaCatMap:         Record<string, number>;
+  slaCatTotal:       Record<string, number>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1323,6 +1353,21 @@ function newJoKpiAcc(): JoKpiAcc {
     catItemBreachMins: {},
     catItemEscalations: {},
     deptReassigned: {},
+    hourCompleted: {},
+    hourAcknowledged: {},
+    hourEscalated: {},
+    hourSlaCompliant: {},
+    hourSlaTotal: {},
+    hourCompletionBuckets: {},
+    hourResponseBuckets: {},
+    hourEscDelayBuckets: {},
+    hourSlaCatTotal: {},
+    hourSlaCatCompliant: {},
+    completionDurMap: {},
+    responseDurMap: {},
+    escalatedDurMap: {},
+    slaCatMap: {},
+    slaCatTotal: {},
   };
 }
 
@@ -1408,13 +1453,67 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
       push2(acc.catItemResponse, category, item, m);
     }
   }
+  let resolutionMin: number | null = null;
   if (createdAt && completedAt) {
     const t1 = new Date(createdAt).getTime();
     const t2 = new Date(completedAt).getTime();
     if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
-      const m = (t2 - t1) / 60_000;
-      acc.resolutionMins.push(m);
-      push2(acc.catItemResolution, category, item, m);
+      resolutionMin = (t2 - t1) / 60_000;
+      acc.resolutionMins.push(resolutionMin);
+      push2(acc.catItemResolution, category, item, resolutionMin);
+    }
+  }
+
+  // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
+  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getHours(); })() : null;
+  if (createdHour !== null) {
+    acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
+
+    // jo-23: completed jobs per hour + completion duration drilldown
+    if (completedFlag) {
+      acc.hourCompleted[createdHour] = (acc.hourCompleted[createdHour] ?? 0) + 1;
+      if (resolutionMin !== null) {
+        const bkt = durBucket(resolutionMin);
+        if (!acc.hourCompletionBuckets[createdHour]) acc.hourCompletionBuckets[createdHour] = {};
+        acc.hourCompletionBuckets[createdHour][bkt] = (acc.hourCompletionBuckets[createdHour][bkt] ?? 0) + 1;
+        acc.completionDurMap[bkt] = (acc.completionDurMap[bkt] ?? 0) + 1;
+      }
+      // jo-26: SLA compliance per hour + category drilldown
+      const isSlaCompliant = !(delayMin !== null && delayMin > 0);
+      if (isSlaCompliant) acc.hourSlaCompliant[createdHour] = (acc.hourSlaCompliant[createdHour] ?? 0) + 1;
+      if (!acc.hourSlaCatTotal[createdHour]) acc.hourSlaCatTotal[createdHour] = {};
+      acc.hourSlaCatTotal[createdHour][category] = (acc.hourSlaCatTotal[createdHour][category] ?? 0) + 1;
+      if (isSlaCompliant) {
+        if (!acc.hourSlaCatCompliant[createdHour]) acc.hourSlaCatCompliant[createdHour] = {};
+        acc.hourSlaCatCompliant[createdHour][category] = (acc.hourSlaCatCompliant[createdHour][category] ?? 0) + 1;
+        acc.slaCatMap[category] = (acc.slaCatMap[category] ?? 0) + 1;
+      }
+      acc.slaCatTotal[category] = (acc.slaCatTotal[category] ?? 0) + 1;
+    }
+
+    // jo-24: acknowledged jobs per hour + response duration drilldown
+    if (createdAt && ackAt) {
+      const t1 = new Date(createdAt).getTime();
+      const t2 = new Date(ackAt).getTime();
+      if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
+        const responseMin = (t2 - t1) / 60_000;
+        acc.hourAcknowledged[createdHour] = (acc.hourAcknowledged[createdHour] ?? 0) + 1;
+        const bkt = durBucket(responseMin);
+        if (!acc.hourResponseBuckets[createdHour]) acc.hourResponseBuckets[createdHour] = {};
+        acc.hourResponseBuckets[createdHour][bkt] = (acc.hourResponseBuckets[createdHour][bkt] ?? 0) + 1;
+        acc.responseDurMap[bkt] = (acc.responseDurMap[bkt] ?? 0) + 1;
+      }
+    }
+
+    // jo-25: escalated jobs per hour + overdue duration drilldown
+    if (escalatedFlag) {
+      acc.hourEscalated[createdHour] = (acc.hourEscalated[createdHour] ?? 0) + 1;
+      if (delayMin !== null) {
+        const bkt = durBucket(delayMin);
+        if (!acc.hourEscDelayBuckets[createdHour]) acc.hourEscDelayBuckets[createdHour] = {};
+        acc.hourEscDelayBuckets[createdHour][bkt] = (acc.hourEscDelayBuckets[createdHour][bkt] ?? 0) + 1;
+        acc.escalatedDurMap[bkt] = (acc.escalatedDurMap[bkt] ?? 0) + 1;
+      }
     }
   }
 }
@@ -1566,7 +1665,137 @@ function buildJoCharts(_acc: ImAcc, jo: JoKpiAcc): ChartDef[] {
     { id: 'jo-20', title: 'Top Reassignment by Department', filterable: false, note: 'Departments with the highest reassignment volume. Impact: frequent reassignment adds cycle time and accountability gaps. Resolution: improve assignment accuracy rules, skill mapping, and triage quality at intake.', formula: 'SUM(reassigned_flag) by department', options: { chart: { type: 'bar' }, xAxis: { categories: topN(jo.deptReassigned, 10).map(([k]) => k) }, series: [{ name: 'Reassigned Jobs', data: topN(jo.deptReassigned, 10).map(([, v]) => v) }] } },
     drillRespP90,
     drillResP90,
+    ...buildJo24HourCharts(jo),
   ];
+}
+
+// ── 24-Hour distribution + drilldown charts (jo-23..jo-26) ───────────────────
+function buildJo24HourCharts(jo: JoKpiAcc): ChartDef[] {
+  const hours24 = Array.from({ length: 24 }, (_, i) => i);
+  const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
+  const GREEN = '#22c55e';
+
+  // jo-23: 24-Hour Completed Jobs → Completion Duration
+  const jo23: ChartDef = {
+        id: 'jo-23', filterable: false,
+        title: '24-Hour Completed Jobs Distribution → Completion Duration',
+        note: 'Bars show completed jobs per creation hour. Click any bar to drill into the completion duration distribution for that hour.',
+        formula: 'COUNT(completed) BY HOUR(created_datetime); drilldown: COUNT(*) BY completion_duration_bucket',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { categories: hourLabels },
+          yAxis: { min: 0, title: { text: 'Completed Jobs' } },
+          series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
+            data: hours24.map((h) => ({ y: jo.hourCompleted[h] ?? 0, drilldown: `jo23:h${h}` })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: hours24.map((h) => ({
+              id: `jo23:h${h}`,
+              name: `${hourLabels[h]} — Completion Duration`,
+              type: 'column', color: GREEN,
+              dataLabels: { enabled: true },
+              data: [...DUR_BUCKETS].map((b) => [b, jo.hourCompletionBuckets[h]?.[b] ?? 0]),
+            })),
+          },
+        },
+      };
+
+      // jo-24: 24-Hour Acknowledged Jobs → Response Duration
+      const jo24: ChartDef = {
+        id: 'jo-24', filterable: false,
+        title: '24-Hour Acknowledged Jobs Distribution → Response Duration',
+        note: 'Bars show acknowledged (responded) jobs per creation hour. Click any bar to drill into the response duration distribution for that hour.',
+        formula: 'COUNT(acknowledged) BY HOUR(created_datetime); drilldown: COUNT(*) BY response_duration_bucket',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { categories: hourLabels },
+          yAxis: { min: 0, title: { text: 'Acknowledged Jobs' } },
+          series: [{ type: 'column', name: 'Acknowledged Jobs', color: GREEN,
+            data: hours24.map((h) => ({ y: jo.hourAcknowledged[h] ?? 0, drilldown: `jo24:h${h}` })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: hours24.map((h) => ({
+              id: `jo24:h${h}`,
+              name: `${hourLabels[h]} — Response Duration`,
+              type: 'column', color: GREEN,
+              dataLabels: { enabled: true },
+              data: [...DUR_BUCKETS].map((b) => [b, jo.hourResponseBuckets[h]?.[b] ?? 0]),
+            })),
+          },
+        },
+      };
+
+      // jo-25: 24-Hour Escalated Jobs → Overdue Duration
+      const jo25: ChartDef = {
+        id: 'jo-25', filterable: false,
+        title: '24-Hour Escalated Jobs Distribution → Overdue Duration',
+        note: 'Bars show escalated jobs per creation hour. Click any bar to drill into the overdue (delay) duration distribution for that hour.',
+        formula: 'COUNT(escalated) BY HOUR(created_datetime); drilldown: COUNT(*) BY delay_duration_bucket',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { categories: hourLabels },
+          yAxis: { min: 0, title: { text: 'Escalated Jobs' } },
+          series: [{ type: 'column', name: 'Escalated Jobs', color: GREEN,
+            data: hours24.map((h) => ({ y: jo.hourEscalated[h] ?? 0, drilldown: `jo25:h${h}` })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: hours24.map((h) => ({
+              id: `jo25:h${h}`,
+              name: `${hourLabels[h]} — Overdue Duration`,
+              type: 'column', color: GREEN,
+              dataLabels: { enabled: true },
+              data: [...DUR_BUCKETS].map((b) => [b, jo.hourEscDelayBuckets[h]?.[b] ?? 0]),
+            })),
+          },
+        },
+      };
+
+      // jo-26: 24-Hour SLA Compliance% → Service Item Category
+      const jo26: ChartDef = {
+        id: 'jo-26', filterable: false,
+        title: '24-Hour SLA Compliance% Distribution → Service Item Category',
+        note: 'SLA compliance rate per creation hour. Click any bar to drill into SLA compliance by service item category for that hour.',
+        formula: 'SLA% BY HOUR(created_datetime); drilldown: SLA% BY service_item_category',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { categories: hourLabels },
+          yAxis: { min: 0, max: 100, title: { text: 'SLA Compliance %' } },
+          series: [{ type: 'column', name: 'SLA %', color: GREEN,
+            data: hours24.map((h) => {
+              const total = jo.hourSlaTotal[h] ?? 0;
+              const compliant = jo.hourSlaCompliant[h] ?? 0;
+              return { y: total > 0 ? r1((compliant / total) * 100) : 0, drilldown: `jo26:h${h}` };
+            }),
+            dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
+          drilldown: {
+            series: hours24.map((h) => {
+              const catKeys = Object.keys(jo.hourSlaCatTotal[h] ?? {})
+                .sort((a, b) => (jo.hourSlaCatTotal[h]?.[b] ?? 0) - (jo.hourSlaCatTotal[h]?.[a] ?? 0));
+              return {
+                id: `jo26:h${h}`,
+                name: `${hourLabels[h]} — SLA by Category`,
+                type: 'column', color: GREEN,
+                dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+                data: catKeys.map((cat) => {
+                  const tot = jo.hourSlaCatTotal[h]?.[cat] ?? 0;
+                  const comp = jo.hourSlaCatCompliant[h]?.[cat] ?? 0;
+                  return [cat, tot > 0 ? r1((comp / tot) * 100) : 0];
+                }),
+              };
+            }),
+          },
+        },
+      };
+
+  return [jo23, jo24, jo25, jo26];
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -1998,6 +2227,12 @@ export async function POST(req: NextRequest) {
     generatedJson.kpis = buildJoKpis(joKpiAcc);
     generatedJson.eac = buildJoEac(acc, joKpiAcc);
     generatedJson.charts = buildJoCharts(acc, joKpiAcc);
+    // Inject JO-specific duration/SLA maps into summary for corp cross-hotel drilldown
+    generatedJson.summary.jo_completion_dur_map = joKpiAcc.completionDurMap;
+    generatedJson.summary.jo_response_dur_map   = joKpiAcc.responseDurMap;
+    generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
+    generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
+    generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';

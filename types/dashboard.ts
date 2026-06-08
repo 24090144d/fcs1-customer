@@ -82,6 +82,12 @@ export interface HotelSummary {
   created_by_dept_map?: Record<string, number>;
   completed_by_dept_map?: Record<string, number>;
   location_map?: Record<string, number>;
+  // JO-specific: duration distributions and SLA-by-category for cross-hotel corp drilldown
+  jo_completion_dur_map?: Record<string, number>;
+  jo_response_dur_map?: Record<string, number>;
+  jo_escalated_dur_map?: Record<string, number>;
+  jo_sla_cat_map?: Record<string, number>;   // category → SLA-compliant completed count
+  jo_sla_cat_total?: Record<string, number>; // category → total completed count
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

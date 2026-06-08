@@ -22,7 +22,7 @@ const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-6
 const GAUGE_CHARTS = new Set(['im-45', 'im-67', 'im-68', 'im-69', 'im-09', 'im-10', 'im-35']);
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
-const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22'];
+const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10'];
 const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
@@ -1411,6 +1411,112 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
+    // ── 24-Hour bar-drilldown charts: corp level (cjo-23..cjo-26) ─────────────
+    ...(() => {
+      const GREEN = '#22c55e';
+      const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
+
+      // cjo-23: Completed Jobs by Hotel → Completion Duration Distribution
+      const cjo23 = make('cjo-23', 'Completed Jobs by Hotel → Completion Duration', 'Total completed jobs per hotel. Click a hotel bar to see its completion duration distribution.', 'COUNT(completed) BY hotel_code; drilldown: COUNT(*) BY completion_duration_bucket', {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Completed Jobs' } },
+        series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
+          data: entries.map((e) => ({ y: e.summary.completed ?? 0, drilldown: `cjo23:${e.hotel_code}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => ({
+            id: `cjo23:${e.hotel_code}`,
+            name: `${e.hotel_code} — Completion Duration`,
+            type: 'column', color: GREEN,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => [b, e.summary.jo_completion_dur_map?.[b] ?? 0]),
+          })),
+        },
+      });
+
+      // cjo-24: Acknowledged Jobs by Hotel → Response Duration Distribution
+      const cjo24 = make('cjo-24', 'Acknowledged Jobs by Hotel → Response Duration', 'Total acknowledged jobs per hotel. Click a hotel bar to see its response duration distribution.', 'COUNT(acknowledged) BY hotel_code; drilldown: COUNT(*) BY response_duration_bucket', {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Acknowledged Jobs' } },
+        series: [{ type: 'column', name: 'Acknowledged Jobs', color: GREEN,
+          data: entries.map((e) => ({
+            y: e.summary.jo_response_dur_map ? Object.values(e.summary.jo_response_dur_map).reduce((s, v) => s + v, 0) : 0,
+            drilldown: `cjo24:${e.hotel_code}`,
+          })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => ({
+            id: `cjo24:${e.hotel_code}`,
+            name: `${e.hotel_code} — Response Duration`,
+            type: 'column', color: GREEN,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => [b, e.summary.jo_response_dur_map?.[b] ?? 0]),
+          })),
+        },
+      });
+
+      // cjo-25: Escalated Jobs by Hotel → Overdue Duration Distribution
+      const cjo25 = make('cjo-25', 'Escalated Jobs by Hotel → Overdue Duration', 'Total escalated jobs per hotel. Click a hotel bar to see its overdue duration distribution.', 'COUNT(escalated) BY hotel_code; drilldown: COUNT(*) BY delay_duration_bucket', {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Escalated Jobs' } },
+        series: [{ type: 'column', name: 'Escalated Jobs', color: GREEN,
+          data: entries.map((e) => ({
+            y: e.summary.jo_escalated_dur_map ? Object.values(e.summary.jo_escalated_dur_map).reduce((s, v) => s + v, 0) : 0,
+            drilldown: `cjo25:${e.hotel_code}`,
+          })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => ({
+            id: `cjo25:${e.hotel_code}`,
+            name: `${e.hotel_code} — Overdue Duration`,
+            type: 'column', color: GREEN,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => [b, e.summary.jo_escalated_dur_map?.[b] ?? 0]),
+          })),
+        },
+      });
+
+      // cjo-26: SLA Compliance% by Hotel → Service Item Category SLA
+      const cjo26 = make('cjo-26', 'SLA Compliance% by Hotel → Service Item Category', 'SLA compliance rate per hotel. Click a hotel bar to see SLA% per service item category.', 'SLA% BY hotel_code; drilldown: SLA% BY service_item_category', {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, max: 100, title: { text: 'SLA Compliance %' } },
+        series: [{ type: 'column', name: 'SLA %', color: GREEN,
+          data: entries.map((e) => ({ y: getChainKpiValue(e, 'kpi_03') ?? 0, drilldown: `cjo26:${e.hotel_code}` })),
+          dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const catMap = e.summary.jo_sla_cat_map ?? {};
+            const catTotal = e.summary.jo_sla_cat_total ?? {};
+            const cats = Object.keys(catTotal).sort((a, b) => (catTotal[b] ?? 0) - (catTotal[a] ?? 0));
+            return {
+              id: `cjo26:${e.hotel_code}`,
+              name: `${e.hotel_code} — SLA by Category`,
+              type: 'column', color: GREEN,
+              dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+              data: cats.map((cat) => {
+                const tot = catTotal[cat] ?? 0;
+                const comp = catMap[cat] ?? 0;
+                return [cat, tot > 0 ? r1((comp / tot) * 100) : 0];
+              }),
+            };
+          }),
+        },
+      });
+
+      return [cjo23, cjo24, cjo25, cjo26];
+    })(),
   ];
 }
 

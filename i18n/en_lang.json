@@ -602,7 +602,15 @@
     "jo-19": "🟣 Escalation by Service Category",
     "jo-20": "Top Reassignment by Department",
     "jo-21": "🟣 Resolution Time by Department",
-    "jo-22": "🟣 Resolution P90 by Service Category"
+    "jo-22": "🟣 Resolution P90 by Service Category",
+    "jo-23": "🟣 24-Hour Completed Jobs → Completion Duration",
+    "jo-24": "🟣 24-Hour Acknowledged Jobs → Response Duration",
+    "jo-25": "🟣 24-Hour Escalated Jobs → Overdue Duration",
+    "jo-26": "🟣 24-Hour SLA Compliance% → Service Item Category",
+    "cjo-23": "🟢 Completed Jobs by Hotel → Completion Duration",
+    "cjo-24": "🟢 Acknowledged Jobs by Hotel → Response Duration",
+    "cjo-25": "🟢 Escalated Jobs by Hotel → Overdue Duration",
+    "cjo-26": "🟢 SLA Compliance% by Hotel → Service Item Category"
   },
   "chart_notes_jo": {
     "hjo01": "Animated cumulative weekly donut race showing long-run share shifts by service category. Impact: sustained cumulative dominance reveals structural demand pressure points. Resolution: rebalance capacity plans, inventory, and preventive actions toward categories with persistent cumulative growth.",
@@ -692,7 +700,15 @@
     "jo-19": "Escalation concentration by category with item-level drilldown.",
     "jo-20": "Departments with the highest reassignment volume.",
     "jo-21": "Resolution duration profile by department for identifying long-tail execution delays.",
-    "jo-22": "P90 resolution time by category and item showing worst-case completion behavior."
+    "jo-22": "P90 resolution time by category and item showing worst-case completion behavior.",
+    "jo-23": "Completed jobs by hour of day. Click a bar to drill into completion duration distribution for that hour.",
+    "jo-24": "Acknowledged jobs by hour of day. Click a bar to drill into response duration distribution for that hour.",
+    "jo-25": "Escalated jobs by hour of day. Click a bar to drill into overdue duration distribution for that hour.",
+    "jo-26": "SLA compliance per hour of day. Click a bar to drill into SLA rate by service item category for that hour.",
+    "cjo-23": "Total completed jobs per hotel. Click a hotel bar to see its completion duration distribution.",
+    "cjo-24": "Total acknowledged jobs per hotel. Click a hotel bar to see its response duration distribution.",
+    "cjo-25": "Total escalated jobs per hotel. Click a hotel bar to see its overdue duration distribution.",
+    "cjo-26": "SLA compliance rate per hotel. Click a hotel bar to see SLA% per service item category."
   },
   "chart_titles_co": {
     "co-01": "🟣 Cleaning Status -> Room Type",
@@ -900,7 +916,15 @@
     "cjo-18": "#17 · Department Origin Load — JO generation by department origin across hotels identifies systemic upstream gaps.",
     "cjo-19": "#18 · Assigned Department Load — compares which departments are absorbing the most execution demand per hotel.",
     "cjo-21": "#19 · Completion Throughput — which departments are completing the most JOs per hotel; drives accountability reporting.",
-    "cjo-22": "#20 · Chain Tail Completion — P90 resolution by category and item across the chain targets the worst-case outliers for chain-level SLA governance."
+    "cjo-22": "#20 · Chain Tail Completion — P90 resolution by category and item across the chain targets the worst-case outliers for chain-level SLA governance.",
+    "jo-23": "#21 · Hourly Completion Load — completed jobs by hour with duration drilldown surfaces peak completion times and longest-duration hours for shift staffing optimisation.",
+    "jo-24": "#22 · Hourly Response Load — acknowledged jobs by hour with response duration drilldown reveals when response latency is highest relative to demand.",
+    "jo-25": "#23 · Hourly Escalation Load — escalated jobs by hour with overdue duration drilldown identifies which hours produce the most severe SLA breaches.",
+    "jo-26": "#24 · Hourly SLA Compliance — SLA rate by hour with category drilldown identifies which service categories drive SLA failures at specific times of day.",
+    "cjo-23": "#21 · Completed Jobs by Hotel — hotel-level completion volume with duration drilldown benchmarks completion throughput and speed across the chain.",
+    "cjo-24": "#22 · Acknowledged Jobs by Hotel — hotel-level acknowledgment load with response duration drilldown identifies which hotels have the slowest acknowledgment processes.",
+    "cjo-25": "#23 · Escalated Jobs by Hotel — hotel-level escalation volume with overdue duration drilldown surfaces which hotels carry the most severe SLA overruns.",
+    "cjo-26": "#24 · SLA Compliance by Hotel — chain SLA rate with category drilldown pinpoints which service categories drive non-compliance at each hotel."
   },
   "chart_bv_mo": {
     "mo-01": "#1 · Property MO Volume Mix — outer donut shows total work orders by category; click to drill into job types, revealing where maintenance demand is concentrated for this property.",

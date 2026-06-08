@@ -102,6 +102,10 @@ export interface HotelSummary {
   jo_hour_sla_comp_map?:       Record<string, number>;                        // hour → SLA compliant count
   jo_hour_sla_cat_total_map?:  Record<string, Record<string, number>>;        // hour → cat → eligible count
   jo_hour_sla_cat_comp_map?:   Record<string, Record<string, number>>;        // hour → cat → compliant count
+  // jo-27/cjo-27: job status → hour → count
+  jo_status_hour_map?:   Record<string, Record<string, number>>;
+  // jo-28/cjo-28: escalation group → hour → count
+  jo_escgroup_hour_map?: Record<string, Record<string, number>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

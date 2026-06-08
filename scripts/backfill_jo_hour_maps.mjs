@@ -82,6 +82,8 @@ function computeHourMaps(rows) {
   const hourSlaComp        = {};
   const hourSlaCatTotal    = {};
   const hourSlaCatComp     = {};
+  const statusHourMap      = {};   // jo-27: status → hour → count
+  const escGroupHourMap    = {};   // jo-28: escalation_group → hour → count
 
   for (const row of rows) {
     const status       = row.job_status ?? '';
@@ -143,6 +145,18 @@ function computeHourMaps(rows) {
         inc2(hourEscBkt, h, durBucket(delayMin));
       }
     }
+
+    // jo-27: status → hour
+    const statusKey = (status || 'Unknown').trim();
+    if (!statusHourMap[statusKey]) statusHourMap[statusKey] = {};
+    statusHourMap[statusKey][h] = (statusHourMap[statusKey][h] ?? 0) + 1;
+
+    // jo-28: escalation group → hour (non-empty only)
+    const escGroupKey = (escGroup ?? '').toString().trim();
+    if (escGroupKey) {
+      if (!escGroupHourMap[escGroupKey]) escGroupHourMap[escGroupKey] = {};
+      escGroupHourMap[escGroupKey][h] = (escGroupHourMap[escGroupKey][h] ?? 0) + 1;
+    }
   }
 
   return {
@@ -155,6 +169,8 @@ function computeHourMaps(rows) {
     jo_hour_sla_comp_map:       hourSlaComp,
     jo_hour_sla_cat_total_map:  hourSlaCatTotal,
     jo_hour_sla_cat_comp_map:   hourSlaCatComp,
+    jo_status_hour_map:         statusHourMap,
+    jo_escgroup_hour_map:       escGroupHourMap,
   };
 }
 

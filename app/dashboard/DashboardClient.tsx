@@ -22,7 +22,7 @@ const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-6
 const GAUGE_CHARTS = new Set(['im-45', 'im-67', 'im-68', 'im-69', 'im-09', 'im-10', 'im-35']);
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
-const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26'];
+const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10'];
 const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
@@ -1602,7 +1602,69 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       });
 
-      return [cjo23, cjo24, cjo25, cjo26];
+      // cjo-27: Job Status → 24-Hour distribution
+      const chainStatusHour: Record<string, Record<number, number>> = {};
+      for (const e of entries) {
+        const m = e.summary.jo_status_hour_map ?? {};
+        for (const [s, hm] of Object.entries(m)) {
+          if (!chainStatusHour[s]) chainStatusHour[s] = {};
+          for (const [h, v] of Object.entries(hm)) chainStatusHour[s][+h] = (chainStatusHour[s][+h] ?? 0) + v;
+        }
+      }
+      const cjo27 = make('cjo-27', 'Job Status → 24-Hour Jobs Distribution', 'Job count by status across the chain. Click a status bar to see its 24-hour distribution.', 'COUNT(*) BY job_status; drilldown: COUNT(*) BY created_hour', {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: GREEN,
+          data: Object.entries(chainStatusHour)
+            .map(([s, hm]) => ({ name: s, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo27:${s}` }))
+            .sort((a, b) => b.y - a.y),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: Object.entries(chainStatusHour).map(([s, hm]) => ({
+            id: `cjo27:${s}`,
+            name: `${s} — 24-Hour Distribution`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[h] ?? 0 })),
+          })),
+        },
+      });
+
+      // cjo-28: Escalation Group → 24-Hour distribution
+      const chainEscGroupHour: Record<string, Record<number, number>> = {};
+      for (const e of entries) {
+        const m = e.summary.jo_escgroup_hour_map ?? {};
+        for (const [g, hm] of Object.entries(m)) {
+          if (!chainEscGroupHour[g]) chainEscGroupHour[g] = {};
+          for (const [h, v] of Object.entries(hm)) chainEscGroupHour[g][+h] = (chainEscGroupHour[g][+h] ?? 0) + v;
+        }
+      }
+      const cjo28 = make('cjo-28', 'Escalation Group → 24-Hour Jobs Distribution', 'Escalated job count by escalation group across the chain. Click a group bar to see its 24-hour distribution.', 'COUNT(*) BY escalation_group; drilldown: COUNT(*) BY created_hour', {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: GREEN,
+          data: Object.entries(chainEscGroupHour)
+            .map(([g, hm]) => ({ name: g, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo28:${g}` }))
+            .sort((a, b) => b.y - a.y),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: Object.entries(chainEscGroupHour).map(([g, hm]) => ({
+            id: `cjo28:${g}`,
+            name: `${g} — 24-Hour Distribution`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[h] ?? 0 })),
+          })),
+        },
+      });
+
+      return [cjo23, cjo24, cjo25, cjo26, cjo27, cjo28];
     })(),
   ];
 }

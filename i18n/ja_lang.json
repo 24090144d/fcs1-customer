@@ -610,7 +610,11 @@
     "cjo-23": "🟢 24-Hour Completed Jobs → Completion Duration Range",
     "cjo-24": "🟢 24-Hour Acknowledged Jobs → Response Time Distribution",
     "cjo-25": "🟢 24-Hour Escalated Jobs → Overdue Duration Distribution",
-    "cjo-26": "🟢 24-Hour Jobs Distribution → Top Item Category"
+    "cjo-26": "🟢 24-Hour Jobs Distribution → Top Item Category",
+    "jo-27": "🟣 Job Status → 24-Hour Jobs Distribution",
+    "jo-28": "🟣 Escalation Group → 24-Hour Jobs Distribution",
+    "cjo-27": "🟢 Job Status → 24-Hour Jobs Distribution",
+    "cjo-28": "🟢 Escalation Group → 24-Hour Jobs Distribution"
   },
   "chart_notes_jo": {
     "hjo01": "サービスカテゴリ別の長期的シェア変動を示すアニメーション累積週次ドーナツレース。影響：持続的な累積優位は構造的需要プレッシャーポイントを明らかにする。対策：累積成長が持続的なカテゴリに向けてキャパシティ計画、在庫、予防措置を再調整。",
@@ -708,7 +712,11 @@
     "cjo-23": "Completed job volume by hour of day across the chain. Click a bar to see the completion duration range (mins) distribution for that hour.",
     "cjo-24": "Acknowledged job volume by hour of day across the chain. Click a bar to see the response time range (mins) distribution for that hour.",
     "cjo-25": "Escalated job volume by hour of day across the chain. Click a bar to see the overdue duration range (mins) distribution for that hour.",
-    "cjo-26": "Total job volume by hour of day across the chain. Click a bar to see the top service item categories for that hour."
+    "cjo-26": "Total job volume by hour of day across the chain. Click a bar to see the top service item categories for that hour.",
+    "jo-27": "Job count by status. Click a status bar to drill into its 24-hour distribution.",
+    "jo-28": "Job count by escalation group. Click a group bar to drill into its 24-hour distribution.",
+    "cjo-27": "Job count by status across the chain. Click a status bar to drill into its 24-hour distribution.",
+    "cjo-28": "Job count by escalation group across the chain. Click a group bar to drill into its 24-hour distribution."
   },
   "chart_titles_co": {
     "co-01": "🟣 清掃ステータス → 部屋タイプ",
@@ -924,7 +932,11 @@
     "cjo-23": "#21 · Completion Clock — completed job distribution by hour with duration-range drilldown reveals peak completion hours and whether fast or slow jobs dominate each time slot.",
     "cjo-24": "#22 · Response Clock — acknowledged job distribution by hour with response-time drilldown identifies which hours have the slowest acknowledgment response across the chain.",
     "cjo-25": "#23 · Escalation Clock — escalated job distribution by hour with overdue-duration drilldown surfaces the hours where SLA overruns are most severe chain-wide.",
-    "cjo-26": "#24 · Category Clock — total job distribution by hour with top item category drilldown reveals which hours and categories drive chain-wide demand peaks."
+    "cjo-26": "#24 · Category Clock — total job distribution by hour with top item category drilldown reveals which hours and categories drive chain-wide demand peaks.",
+    "jo-27": "#25 · Status-Hour Load — job status volume with 24-hour drilldown reveals which statuses spike at specific hours, guiding shift allocation and escalation triggers.",
+    "jo-28": "#26 · Escalation-Hour Load — escalation group volume with 24-hour drilldown identifies when and which groups receive the most escalated jobs for targeted response planning.",
+    "cjo-27": "#25 · Chain Status Clock — job status distribution across the chain with 24-hour drilldown reveals which statuses and hours drive operational backlogs chain-wide.",
+    "cjo-28": "#26 · Chain Escalation Clock — escalation group distribution across the chain with 24-hour drilldown pinpoints which groups and hours concentrate chain-wide escalation pressure."
   },
   "chart_bv_mo": {
     "mo-01": "#1 · Property MO Volume Mix — outer donut shows total work orders by category; click to drill into job types, revealing where maintenance demand is concentrated for this property.",

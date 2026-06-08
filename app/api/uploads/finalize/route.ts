@@ -1346,6 +1346,10 @@ interface JoKpiAcc {
   vipHourItemCount: Record<number, Record<string, number>>;
   // ── All-jobs 24-hour × service-item (cjo-22) ─────────────────────────────
   hourItemCount:    Record<number, Record<string, number>>;
+  // ── jo-27: job status → hour → count ─────────────────────────────────────
+  statusHourMap:    Record<string, Record<number, number>>;
+  // ── jo-28: escalation group → hour → count ───────────────────────────────
+  escGroupHourMap:  Record<string, Record<number, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1393,6 +1397,8 @@ function newJoKpiAcc(): JoKpiAcc {
     vipHourCount: {},
     vipHourItemCount: {},
     hourItemCount: {},
+    statusHourMap: {},
+    escGroupHourMap: {},
   };
 }
 
@@ -1545,6 +1551,17 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
         acc.hourEscDelayBuckets[createdHour][bkt] = (acc.hourEscDelayBuckets[createdHour][bkt] ?? 0) + 1;
         acc.escalatedDurMap[bkt] = (acc.escalatedDurMap[bkt] ?? 0) + 1;
       }
+    }
+
+    // jo-27: job status → hour
+    if (!acc.statusHourMap[status]) acc.statusHourMap[status] = {};
+    acc.statusHourMap[status][createdHour] = (acc.statusHourMap[status][createdHour] ?? 0) + 1;
+
+    // jo-28: escalation group → hour (non-empty escalation_group only)
+    const escGroupRaw = (toStr(rr.escalation_group) ?? '').trim();
+    if (escGroupRaw) {
+      if (!acc.escGroupHourMap[escGroupRaw]) acc.escGroupHourMap[escGroupRaw] = {};
+      acc.escGroupHourMap[escGroupRaw][createdHour] = (acc.escGroupHourMap[escGroupRaw][createdHour] ?? 0) + 1;
     }
   }
   // ── VIP 24-hour accumulation (cjo-22) ─────────────────────────────────────
@@ -1835,7 +1852,68 @@ function buildJo24HourCharts(jo: JoKpiAcc): ChartDef[] {
         },
       };
 
-  return [jo23, jo24, jo25, jo26];
+  const TEAL   = '#0F766E';
+  const ORANGE = '#C2410C';
+
+  // jo-27: Job Status → 24-Hour distribution
+  const jo27: ChartDef = {
+    id: 'jo-27', filterable: false,
+    title: 'Job Status → 24-Hour Jobs Distribution',
+    note: 'Job count by status. Click a status bar to see its 24-hour distribution.',
+    formula: 'COUNT(*) BY job_status; drilldown: COUNT(*) BY HOUR(created_datetime)',
+    options: {
+      chart: { type: 'column' },
+      xAxis: { type: 'category' },
+      yAxis: { min: 0, title: { text: 'Jobs' } },
+      series: [{ type: 'column', name: 'Jobs', color: TEAL,
+        data: Object.entries(jo.statusHourMap)
+          .map(([s, hm]) => ({ name: s, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo27:${s}` }))
+          .sort((a, b) => b.y - a.y),
+        dataLabels: { enabled: true },
+      }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+      drilldown: {
+        series: Object.entries(jo.statusHourMap).map(([s, hm]) => ({
+          id: `jo27:${s}`,
+          name: `${s} — 24-Hour Distribution`,
+          type: 'column', color: ORANGE,
+          dataLabels: { enabled: true },
+          data: hours24.map((h) => ({ name: hourLabels[h], y: hm[h] ?? 0 })),
+        })),
+      },
+    },
+  };
+
+  // jo-28: Escalation Group → 24-Hour distribution
+  const jo28: ChartDef = {
+    id: 'jo-28', filterable: false,
+    title: 'Escalation Group → 24-Hour Jobs Distribution',
+    note: 'Escalated job count by escalation group. Click a group bar to see its 24-hour distribution.',
+    formula: 'COUNT(*) BY escalation_group; drilldown: COUNT(*) BY HOUR(created_datetime)',
+    options: {
+      chart: { type: 'column' },
+      xAxis: { type: 'category' },
+      yAxis: { min: 0, title: { text: 'Jobs' } },
+      series: [{ type: 'column', name: 'Jobs', color: TEAL,
+        data: Object.entries(jo.escGroupHourMap)
+          .map(([g, hm]) => ({ name: g, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo28:${g}` }))
+          .sort((a, b) => b.y - a.y),
+        dataLabels: { enabled: true },
+      }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+      drilldown: {
+        series: Object.entries(jo.escGroupHourMap).map(([g, hm]) => ({
+          id: `jo28:${g}`,
+          name: `${g} — 24-Hour Distribution`,
+          type: 'column', color: ORANGE,
+          dataLabels: { enabled: true },
+          data: hours24.map((h) => ({ name: hourLabels[h], y: hm[h] ?? 0 })),
+        })),
+      },
+    },
+  };
+
+  return [jo23, jo24, jo25, jo26, jo27, jo28];
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -2304,6 +2382,11 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_vip_hour_item_map = Object.fromEntries(
       Object.entries(joKpiAcc.vipHourItemCount).map(([h, m]) => [h, { ...m }]),
     );
+    // jo-27/jo-28: status/escgroup → hour maps
+    const s2m = (m: Record<string, Record<number, number>>) =>
+      Object.fromEntries(Object.entries(m).map(([k, hm]) => [k, Object.fromEntries(Object.entries(hm).map(([h, v]) => [h, v]))]));
+    generatedJson.summary.jo_status_hour_map   = s2m(joKpiAcc.statusHourMap);
+    generatedJson.summary.jo_escgroup_hour_map = s2m(joKpiAcc.escGroupHourMap);
     // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
       Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [

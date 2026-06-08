@@ -360,8 +360,18 @@ interface ModuleConfigPanelProps {
   t: (path: string, fallback?: string) => string;
 }
 
+/** Corp chart IDs start with c + module prefix (cjo-, cmo-, cco-, cim-). */
+const CORP_PREFIXES = ['cjo-', 'cmo-', 'cco-', 'cim-'];
+function isCorpChart(id: string): boolean {
+  return CORP_PREFIXES.some((p) => id.startsWith(p));
+}
+
 function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
   const def = MODULE_DEFS[mod];
+
+  // Split charts into hotel and corp groups
+  const hotelCharts = useMemo(() => def.charts.filter((c) => !isCorpChart(c.id)), [def.charts]);
+  const corpCharts  = useMemo(() => def.charts.filter((c) =>  isCorpChart(c.id)), [def.charts]);
 
   const [draft, setDraft]     = useState<ModuleConfig>(() => defaultModuleConfig(mod));
   const [saved, setSaved]     = useState<ModuleConfig | null>(null);
@@ -381,13 +391,14 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
     }));
   }, []);
 
-  const setAll = useCallback((group: 'kpis' | 'charts', value: boolean) => {
-    const ids = def[group].map((item) => item.id);
+  /** Toggle all items in a subset of a group (e.g. only hotel charts). */
+  const setSubset = useCallback((group: 'kpis' | 'charts', items: ConfigItem[], value: boolean) => {
+    const ids = items.map((item) => item.id);
     setDraft((prev) => ({
       ...prev,
-      [group]: Object.fromEntries(ids.map((id) => [id, value])),
+      [group]: { ...prev[group], ...Object.fromEntries(ids.map((id) => [id, value])) },
     }));
-  }, [def]);
+  }, []);
 
   const handleSave = () => {
     persistModuleConfig(mod, draft);
@@ -404,30 +415,49 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
 
   return (
     <div>
-      {/* KPI Group — collapsed by default to keep focus on Charts */}
+      {/* 1 — KPI Group — collapsed by default */}
       <GroupPanel
         title="KPI Group"
         items={def.kpis}
         checked={draft.kpis}
         onToggle={(id) => toggle('kpis', id)}
-        onAll={(v) => setAll('kpis', v)}
+        onAll={(v) => setSubset('kpis', def.kpis, v)}
         pal={pal}
         t={t}
         defaultOpen={false}
       />
 
-      {/* Charts Group — tall enough to show 8-10 rows without scrolling */}
-      <GroupPanel
-        title="Charts Group"
-        items={def.charts}
-        checked={draft.charts}
-        onToggle={(id) => toggle('charts', id)}
-        onAll={(v) => setAll('charts', v)}
-        pal={pal}
-        t={t}
-        formulaLabel="Business Value"
-        scrollHeight={420}
-      />
+      {/* 2 — Hotel Charts Group — collapsed by default */}
+      {hotelCharts.length > 0 && (
+        <GroupPanel
+          title="Hotel Charts Group"
+          items={hotelCharts}
+          checked={draft.charts}
+          onToggle={(id) => toggle('charts', id)}
+          onAll={(v) => setSubset('charts', hotelCharts, v)}
+          pal={pal}
+          t={t}
+          formulaLabel="Business Value"
+          defaultOpen={false}
+          scrollHeight={420}
+        />
+      )}
+
+      {/* 3 — Corp Charts Group — expanded by default */}
+      {corpCharts.length > 0 && (
+        <GroupPanel
+          title="Corp Charts Group"
+          items={corpCharts}
+          checked={draft.charts}
+          onToggle={(id) => toggle('charts', id)}
+          onAll={(v) => setSubset('charts', corpCharts, v)}
+          pal={pal}
+          t={t}
+          formulaLabel="Business Value"
+          defaultOpen={true}
+          scrollHeight={420}
+        />
+      )}
 
       {/* Footer actions */}
       <div className="mt-4 flex items-center gap-3">

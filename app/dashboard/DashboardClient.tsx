@@ -1413,7 +1413,8 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     }),
     // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
     make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items requested by VIP guests at that hour.', 'COUNT(*) WHERE is_vip BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
-      const GREEN = '#0F766E'; // deep teal
+      const GREEN  = '#0F766E'; // deep teal — primary bars
+      const ORANGE = '#C2410C'; // burnt orange — drilldown bars
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
       const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
 
@@ -1451,7 +1452,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
             return {
               id: `cjo22h:${h}`,
               name: `${String(h).padStart(2, '0')}:00 — Top Service Items (VIP)`,
-              type: 'column', color: GREEN,
+              type: 'column', color: ORANGE,
               dataLabels: { enabled: true },
               // {name, y} format → Highcharts uses name as x-axis category label
               data: topItems.map(([itm, cnt]) => ({ name: itm, y: cnt })),
@@ -1462,7 +1463,8 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     })()),
     // ── cjo-23..26: 24-hour primary bar → drilldown per hour ──────────────────
     ...(() => {
-      const GREEN = '#0F766E'; // deep teal
+      const GREEN  = '#0F766E'; // deep teal — primary bars
+      const ORANGE = '#C2410C'; // burnt orange — drilldown bars
       const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
 
@@ -1518,7 +1520,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           series: hours24.map((h) => ({
             id: `cjo23h:${h}`,
             name: `${String(h).padStart(2, '0')}:00 — Completion Duration`,
-            type: 'column', color: GREEN,
+            type: 'column', color: ORANGE,
             dataLabels: { enabled: true },
             data: DUR.map((b) => ({ name: b, y: chainCompBkt[h]?.[b] ?? 0 })),
           })),
@@ -1543,7 +1545,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           series: hours24.map((h) => ({
             id: `cjo24h:${h}`,
             name: `${String(h).padStart(2, '0')}:00 — Response Time`,
-            type: 'column', color: GREEN,
+            type: 'column', color: ORANGE,
             dataLabels: { enabled: true },
             data: DUR.map((b) => ({ name: b, y: chainRespBkt[h]?.[b] ?? 0 })),
           })),
@@ -1564,7 +1566,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           series: hours24.map((h) => ({
             id: `cjo25h:${h}`,
             name: `${String(h).padStart(2, '0')}:00 — Overdue Duration`,
-            type: 'column', color: GREEN,
+            type: 'column', color: ORANGE,
             dataLabels: { enabled: true },
             data: DUR.map((b) => ({ name: b, y: chainEscBkt[h]?.[b] ?? 0 })),
           })),
@@ -1593,7 +1595,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
             return {
               id: `cjo26h:${h}`,
               name: `${String(h).padStart(2, '0')}:00 — SLA by Category`,
-              type: 'column', color: GREEN,
+              type: 'column', color: ORANGE,
               dataLabels: { enabled: true, format: '{point.y:.1f}%' },
               data: cats.map((cat) => {
                 const tot = catTot[cat] ?? 0;

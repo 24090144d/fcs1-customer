@@ -1800,39 +1800,35 @@ function buildJo24HourCharts(jo: JoKpiAcc): ChartDef[] {
         },
       };
 
-      // jo-26: 24-Hour SLA Compliance% → Service Item Category
+      // jo-26: 24-Hour Jobs Distribution → Top Item Category
       const jo26: ChartDef = {
         id: 'jo-26', filterable: false,
-        title: '24-Hour SLA Compliance% Distribution → Service Item Category',
-        note: 'SLA compliance rate per creation hour. Click any bar to drill into SLA compliance by service item category for that hour.',
-        formula: 'SLA% BY HOUR(created_datetime); drilldown: SLA% BY service_item_category',
+        title: '24-Hour Jobs Distribution → Top Item Category',
+        note: 'Total jobs by hour of day. Click a bar to drill into the top service item categories for that hour.',
+        formula: 'COUNT(*) BY HOUR(created_datetime); drilldown: COUNT(*) BY service_item_category',
         options: {
           chart: { type: 'column' },
-          xAxis: { categories: hourLabels },
-          yAxis: { min: 0, max: 100, title: { text: 'SLA Compliance %' } },
-          series: [{ type: 'column', name: 'SLA %', color: GREEN,
-            data: hours24.map((h) => {
-              const total = jo.hourSlaTotal[h] ?? 0;
-              const compliant = jo.hourSlaCompliant[h] ?? 0;
-              return { y: total > 0 ? r1((compliant / total) * 100) : 0, drilldown: `jo26:h${h}` };
-            }),
-            dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Jobs' } },
+          series: [{ type: 'column', name: 'Jobs', color: '#0F766E',
+            data: hours24.map((h) => ({
+              name: hourLabels[h],
+              y: jo.hourSlaTotal[h] ?? 0,
+              drilldown: `jo26:h${h}`,
+            })),
+            dataLabels: { enabled: true },
           }],
-          plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
+          plotOptions: { column: { dataLabels: { enabled: true } } },
           drilldown: {
             series: hours24.map((h) => {
-              const catKeys = Object.keys(jo.hourSlaCatTotal[h] ?? {})
-                .sort((a, b) => (jo.hourSlaCatTotal[h]?.[b] ?? 0) - (jo.hourSlaCatTotal[h]?.[a] ?? 0));
+              const catTot = jo.hourSlaCatTotal[h] ?? {};
+              const cats = Object.keys(catTot).sort((a, b) => (catTot[b] ?? 0) - (catTot[a] ?? 0));
               return {
                 id: `jo26:h${h}`,
-                name: `${hourLabels[h]} — SLA by Category`,
-                type: 'column', color: GREEN,
-                dataLabels: { enabled: true, format: '{point.y:.1f}%' },
-                data: catKeys.map((cat) => {
-                  const tot = jo.hourSlaCatTotal[h]?.[cat] ?? 0;
-                  const comp = jo.hourSlaCatCompliant[h]?.[cat] ?? 0;
-                  return [cat, tot > 0 ? r1((comp / tot) * 100) : 0];
-                }),
+                name: `${hourLabels[h]} — Top Item Category`,
+                type: 'column', color: '#C2410C',
+                dataLabels: { enabled: true },
+                data: cats.map((cat) => ({ name: cat, y: catTot[cat] ?? 0 })),
               };
             }),
           },

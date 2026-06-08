@@ -1573,35 +1573,30 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       });
 
-      // cjo-26: 24-Hour SLA Compliance% → Top Service Item Category
-      const cjo26 = make('cjo-26', '24-Hour SLA Compliance% → Top Service Item Category', 'SLA compliance% by hour across the chain. Click a bar to see SLA% by service item category for that hour.', 'SLA% BY created_hour; drilldown: SLA% BY service_item_category', {
+      // cjo-26: 24-Hour Jobs Distribution → Top Item Category
+      const cjo26 = make('cjo-26', '24-Hour Jobs Distribution → Top Item Category', 'Total job volume by hour across the chain. Click a bar to see the top service item categories for that hour.', 'COUNT(*) BY created_hour; drilldown: COUNT(*) BY service_item_category', {
         chart: { type: 'column' },
         xAxis: { type: 'category' },
-        yAxis: { min: 0, max: 100, title: { text: 'SLA Compliance %' } },
-        series: [{ type: 'column', name: 'SLA %', color: GREEN,
-          data: hours24.map((h) => {
-            const tot = chainSlaTot[h] ?? 0;
-            const comp = chainSlaComp[h] ?? 0;
-            return { name: `${String(h).padStart(2, '0')}:00`, y: tot > 0 ? r1((comp / tot) * 100) : 0, drilldown: `cjo26h:${h}` };
-          }),
-          dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: GREEN,
+          data: hours24.map((h) => ({
+            name: `${String(h).padStart(2, '0')}:00`,
+            y: chainSlaTot[h] ?? 0,
+            drilldown: `cjo26h:${h}`,
+          })),
+          dataLabels: { enabled: true },
         }],
-        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
+        plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
           series: hours24.map((h) => {
             const catTot = chainCatTot[h] ?? {};
-            const catComp = chainCatComp[h] ?? {};
             const cats = Object.keys(catTot).sort((a, b) => (catTot[b] ?? 0) - (catTot[a] ?? 0));
             return {
               id: `cjo26h:${h}`,
-              name: `${String(h).padStart(2, '0')}:00 — SLA by Category`,
+              name: `${String(h).padStart(2, '0')}:00 — Top Item Category`,
               type: 'column', color: ORANGE,
-              dataLabels: { enabled: true, format: '{point.y:.1f}%' },
-              data: cats.map((cat) => {
-                const tot = catTot[cat] ?? 0;
-                const comp = catComp[cat] ?? 0;
-                return { name: cat, y: tot > 0 ? r1((comp / tot) * 100) : 0 };
-              }),
+              dataLabels: { enabled: true },
+              data: cats.map((cat) => ({ name: cat, y: catTot[cat] ?? 0 })),
             };
           }),
         },

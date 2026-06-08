@@ -1427,8 +1427,12 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
   const location = toStr(rr.location) ?? 'Unknown';
   const completedFlag = statusRaw.includes('complete') || statusRaw.includes('close') || statusRaw.includes('done') || statusRaw.includes('finish');
   const timeoutFlag = statusRaw.includes('timeout');
-  const escalatedFlag = !!toStr(rr.escalation_group);
   const reassignedFlag = (toStr(rr.reassigned_job) ?? '').trim().toLowerCase() === 'yes';
+
+  // delayMin must be computed before escalatedFlag (escalated = overdue, i.e. delay > 0)
+  const delayMin = parseDurationMinutes(rr.delay_duration);
+  // escalation_group is often absent; treat any positive delay as escalated/overdue
+  const escalatedFlag = !!(toStr(rr.escalation_group)) || (delayMin !== null && delayMin > 0);
 
   if (completedFlag) acc.completed++;
   if (timeoutFlag) acc.timeout++;
@@ -1438,7 +1442,6 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
   const qty = toNum(rr.quantity);
   if (qty !== null) acc.quantityTotal += qty;
 
-  const delayMin = parseDurationMinutes(rr.delay_duration);
   if (completedFlag && delayMin !== null && delayMin > 0) acc.slaBreachCompleted++;
 
   inc2(acc.statusCatMap, status, category);

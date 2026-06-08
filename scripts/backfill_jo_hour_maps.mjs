@@ -57,8 +57,9 @@ function completedFlag(status) {
   return s.includes('complete') || s.includes('close') || s.includes('done') || s.includes('finish');
 }
 
-function escalatedFlag(escalationGroup) {
-  return !!(escalationGroup && escalationGroup.toString().trim());
+function escalatedFlag(escalationGroup, delayMin) {
+  // escalation_group is often absent; treat any positive delay as escalated/overdue
+  return !!(escalationGroup && escalationGroup.toString().trim()) || (delayMin !== null && delayMin > 0);
 }
 
 function inc(obj, key) {
@@ -92,8 +93,8 @@ function computeHourMaps(rows) {
     const delayRaw     = row.delay_duration;
 
     const isCompleted  = completedFlag(status);
-    const isEscalated  = escalatedFlag(escGroup);
     const delayMin     = parseDurationMinutes(delayRaw);
+    const isEscalated  = escalatedFlag(escGroup, delayMin);
     const isSlaComp    = !(delayMin !== null && delayMin > 0);
 
     // Extract created-at hour (pg driver returns JS Date for timestamptz)

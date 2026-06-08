@@ -2280,6 +2280,20 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
+    // ── 24-hour bucket maps for cjo-23..cjo-26 ────────────────────────────────
+    const h2s = (m: Record<number, number>) =>
+      Object.fromEntries(Object.entries(m).map(([h, v]) => [h, v]));
+    const h2m = (m: Record<number, Record<string, number>>) =>
+      Object.fromEntries(Object.entries(m).map(([h, inner]) => [h, { ...inner }]));
+    generatedJson.summary.jo_hour_comp_map          = h2s(joKpiAcc.hourCompleted);
+    generatedJson.summary.jo_hour_comp_bkt_map      = h2m(joKpiAcc.hourCompletionBuckets);
+    generatedJson.summary.jo_hour_resp_bkt_map      = h2m(joKpiAcc.hourResponseBuckets);
+    generatedJson.summary.jo_hour_esc_map           = h2s(joKpiAcc.hourEscalated);
+    generatedJson.summary.jo_hour_esc_bkt_map       = h2m(joKpiAcc.hourEscDelayBuckets);
+    generatedJson.summary.jo_hour_sla_total_map     = h2s(joKpiAcc.hourSlaTotal);
+    generatedJson.summary.jo_hour_sla_comp_map      = h2s(joKpiAcc.hourSlaCompliant);
+    generatedJson.summary.jo_hour_sla_cat_total_map = h2m(joKpiAcc.hourSlaCatTotal);
+    generatedJson.summary.jo_hour_sla_cat_comp_map  = h2m(joKpiAcc.hourSlaCatCompliant);
     // All-jobs 24-hour × service-item map (for cjo-22)
     generatedJson.summary.jo_hour_item_map = Object.fromEntries(
       Object.entries(joKpiAcc.hourItemCount).map(([h, m]) => [h, { ...m }]),

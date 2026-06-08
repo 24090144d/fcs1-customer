@@ -607,10 +607,10 @@
     "jo-24": "🟣 24-Hour Acknowledged Jobs → Response Duration",
     "jo-25": "🟣 24-Hour Escalated Jobs → Overdue Duration",
     "jo-26": "🟣 24-Hour SLA Compliance% → Service Item Category",
-    "cjo-23": "🟢 Completed Jobs by Hotel → Completion Duration",
-    "cjo-24": "🟢 Acknowledged Jobs by Hotel → Response Duration",
-    "cjo-25": "🟢 Escalated Jobs by Hotel → Overdue Duration",
-    "cjo-26": "🟢 SLA Compliance% by Hotel → Service Item Category"
+    "cjo-23": "🟢 24-Hour Completed Jobs → Completion Duration Range",
+    "cjo-24": "🟢 24-Hour Acknowledged Jobs → Response Time Distribution",
+    "cjo-25": "🟢 24-Hour Escalated Jobs → Overdue Duration Distribution",
+    "cjo-26": "🟢 24-Hour SLA Compliance% → Top Service Item Category"
   },
   "chart_notes_jo": {
     "hjo01": "サービスカテゴリ別の長期的シェア変動を示すアニメーション累積週次ドーナツレース。影響：持続的な累積優位は構造的需要プレッシャーポイントを明らかにする。対策：累積成長が持続的なカテゴリに向けてキャパシティ計画、在庫、予防措置を再調整。",
@@ -705,10 +705,10 @@
     "jo-24": "Acknowledged jobs by hour of day. Click a bar to drill into response duration distribution for that hour.",
     "jo-25": "Escalated jobs by hour of day. Click a bar to drill into overdue duration distribution for that hour.",
     "jo-26": "SLA compliance per hour of day. Click a bar to drill into SLA rate by service item category for that hour.",
-    "cjo-23": "Total completed jobs per hotel. Click a hotel bar to see its completion duration distribution.",
-    "cjo-24": "Total acknowledged jobs per hotel. Click a hotel bar to see its response duration distribution.",
-    "cjo-25": "Total escalated jobs per hotel. Click a hotel bar to see its overdue duration distribution.",
-    "cjo-26": "SLA compliance rate per hotel. Click a hotel bar to see SLA% per service item category."
+    "cjo-23": "Completed job volume by hour of day across the chain. Click a bar to see the completion duration range (mins) distribution for that hour.",
+    "cjo-24": "Acknowledged job volume by hour of day across the chain. Click a bar to see the response time range (mins) distribution for that hour.",
+    "cjo-25": "Escalated job volume by hour of day across the chain. Click a bar to see the overdue duration range (mins) distribution for that hour.",
+    "cjo-26": "SLA compliance% by hour of day across the chain. Click a bar to see SLA% breakdown by service item category for that hour."
   },
   "chart_titles_co": {
     "co-01": "🟣 清掃ステータス → 部屋タイプ",
@@ -921,10 +921,10 @@
     "jo-24": "#22 · Hourly Response Load — acknowledged jobs by hour with response duration drilldown reveals when response latency is highest relative to demand.",
     "jo-25": "#23 · Hourly Escalation Load — escalated jobs by hour with overdue duration drilldown identifies which hours produce the most severe SLA breaches.",
     "jo-26": "#24 · Hourly SLA Compliance — SLA rate by hour with category drilldown identifies which service categories drive SLA failures at specific times of day.",
-    "cjo-23": "#21 · Completed Jobs by Hotel — hotel-level completion volume with duration drilldown benchmarks completion throughput and speed across the chain.",
-    "cjo-24": "#22 · Acknowledged Jobs by Hotel — hotel-level acknowledgment load with response duration drilldown identifies which hotels have the slowest acknowledgment processes.",
-    "cjo-25": "#23 · Escalated Jobs by Hotel — hotel-level escalation volume with overdue duration drilldown surfaces which hotels carry the most severe SLA overruns.",
-    "cjo-26": "#24 · SLA Compliance by Hotel — chain SLA rate with category drilldown pinpoints which service categories drive non-compliance at each hotel."
+    "cjo-23": "#21 · Completion Clock — completed job distribution by hour with duration-range drilldown reveals peak completion hours and whether fast or slow jobs dominate each time slot.",
+    "cjo-24": "#22 · Response Clock — acknowledged job distribution by hour with response-time drilldown identifies which hours have the slowest acknowledgment response across the chain.",
+    "cjo-25": "#23 · Escalation Clock — escalated job distribution by hour with overdue-duration drilldown surfaces the hours where SLA overruns are most severe chain-wide.",
+    "cjo-26": "#24 · SLA Compliance Clock — hourly SLA compliance% with service category drilldown pinpoints which hours and categories drive non-compliance across the chain."
   },
   "chart_bv_mo": {
     "mo-01": "#1 · Property MO Volume Mix — outer donut shows total work orders by category; click to drill into job types, revealing where maintenance demand is concentrated for this property.",

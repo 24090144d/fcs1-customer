@@ -92,6 +92,16 @@ export interface HotelSummary {
   jo_vip_hour_map?: Record<string, number>;  // hour → VIP job count
   jo_vip_hour_item_map?: Record<string, Record<string, number>>; // hour → item → VIP count
   jo_hour_item_map?: Record<string, Record<string, number>>;     // hour → item → all-job count
+  // 24-hour drilldown data for cjo-23..cjo-26
+  jo_hour_comp_map?:           Record<string, number>;                        // hour → completed count
+  jo_hour_comp_bkt_map?:       Record<string, Record<string, number>>;        // hour → dur-bucket → count
+  jo_hour_resp_bkt_map?:       Record<string, Record<string, number>>;        // hour → resp-bucket → count
+  jo_hour_esc_map?:            Record<string, number>;                        // hour → escalated count
+  jo_hour_esc_bkt_map?:        Record<string, Record<string, number>>;        // hour → overdue-bucket → count
+  jo_hour_sla_total_map?:      Record<string, number>;                        // hour → SLA eligible count
+  jo_hour_sla_comp_map?:       Record<string, number>;                        // hour → SLA compliant count
+  jo_hour_sla_cat_total_map?:  Record<string, Record<string, number>>;        // hour → cat → eligible count
+  jo_hour_sla_cat_comp_map?:   Record<string, Record<string, number>>;        // hour → cat → compliant count
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

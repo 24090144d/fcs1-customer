@@ -1460,104 +1460,145 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       };
     })()),
-    // ── 24-Hour bar-drilldown charts: corp level (cjo-23..cjo-26) ─────────────
+    // ── cjo-23..26: 24-hour primary bar → drilldown per hour ──────────────────
     ...(() => {
       const GREEN = '#22c55e';
       const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
 
-      // cjo-23: Completed Jobs by Hotel → Completion Duration Distribution
-      const cjo23 = make('cjo-23', 'Completed Jobs by Hotel → Completion Duration', 'Total completed jobs per hotel. Click a hotel bar to see its completion duration distribution.', 'COUNT(completed) BY hotel_code; drilldown: COUNT(*) BY completion_duration_bucket', {
+      // ── Aggregate each hour-level map chain-wide ───────────────────────────
+      function sumHour(key: keyof typeof entries[0]['summary']): Record<number, number> {
+        const out: Record<number, number> = {};
+        for (const e of entries) {
+          const m = e.summary[key] as Record<string, number> | undefined ?? {};
+          for (const [h, v] of Object.entries(m)) out[+h] = (out[+h] ?? 0) + (v as number);
+        }
+        return out;
+      }
+      function sumHourBkt(key: keyof typeof entries[0]['summary']): Record<number, Record<string, number>> {
+        const out: Record<number, Record<string, number>> = {};
+        for (const e of entries) {
+          const m = e.summary[key] as Record<string, Record<string, number>> | undefined ?? {};
+          for (const [h, inner] of Object.entries(m)) {
+            if (!out[+h]) out[+h] = {};
+            for (const [bkt, cnt] of Object.entries(inner)) out[+h][bkt] = (out[+h][bkt] ?? 0) + cnt;
+          }
+        }
+        return out;
+      }
+
+      const chainCompH    = sumHour('jo_hour_comp_map');
+      const chainCompBkt  = sumHourBkt('jo_hour_comp_bkt_map');
+      const chainRespBkt  = sumHourBkt('jo_hour_resp_bkt_map');
+      const chainEscH     = sumHour('jo_hour_esc_map');
+      const chainEscBkt   = sumHourBkt('jo_hour_esc_bkt_map');
+      const chainSlaTot   = sumHour('jo_hour_sla_total_map');
+      const chainSlaComp  = sumHour('jo_hour_sla_comp_map');
+      const chainCatTot   = sumHourBkt('jo_hour_sla_cat_total_map');
+      const chainCatComp  = sumHourBkt('jo_hour_sla_cat_comp_map');
+
+      const mkHourData = (vals: Record<number, number>, id: string) =>
+        hours24.map((h) => ({
+          name: `${String(h).padStart(2, '0')}:00`,
+          y: vals[h] ?? 0,
+          drilldown: `${id}:${h}`,
+        }));
+
+      // cjo-23: 24-Hour Completed Jobs → Completion Duration Range distribution
+      const cjo23 = make('cjo-23', '24-Hour Completed Jobs → Completion Duration Range', 'Completed job volume by hour across the chain. Click a bar to see the completion duration (mins) range distribution for that hour.', 'COUNT(completed) BY created_hour; drilldown: COUNT(*) BY duration_bucket', {
         chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
+        xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'Completed Jobs' } },
         series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
-          data: entries.map((e) => ({ y: e.summary.completed ?? 0, drilldown: `cjo23:${e.hotel_code}` })),
+          data: mkHourData(chainCompH, 'cjo23h'),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
-          series: entries.map((e) => ({
-            id: `cjo23:${e.hotel_code}`,
-            name: `${e.hotel_code} — Completion Duration`,
+          series: hours24.map((h) => ({
+            id: `cjo23h:${h}`,
+            name: `${String(h).padStart(2, '0')}:00 — Completion Duration`,
             type: 'column', color: GREEN,
             dataLabels: { enabled: true },
-            data: DUR.map((b) => [b, e.summary.jo_completion_dur_map?.[b] ?? 0]),
+            data: DUR.map((b) => ({ name: b, y: chainCompBkt[h]?.[b] ?? 0 })),
           })),
         },
       });
 
-      // cjo-24: Acknowledged Jobs by Hotel → Response Duration Distribution
-      const cjo24 = make('cjo-24', 'Acknowledged Jobs by Hotel → Response Duration', 'Total acknowledged jobs per hotel. Click a hotel bar to see its response duration distribution.', 'COUNT(acknowledged) BY hotel_code; drilldown: COUNT(*) BY response_duration_bucket', {
+      // cjo-24: 24-Hour Acknowledged Jobs → Response Time distribution
+      const cjo24 = make('cjo-24', '24-Hour Acknowledged Jobs → Response Time Distribution', 'Acknowledged job volume by hour across the chain. Click a bar to see the response time (mins) range distribution for that hour.', 'COUNT(acknowledged) BY created_hour; drilldown: COUNT(*) BY response_bucket', {
         chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
+        xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'Acknowledged Jobs' } },
         series: [{ type: 'column', name: 'Acknowledged Jobs', color: GREEN,
-          data: entries.map((e) => ({
-            y: e.summary.jo_response_dur_map ? Object.values(e.summary.jo_response_dur_map).reduce((s, v) => s + v, 0) : 0,
-            drilldown: `cjo24:${e.hotel_code}`,
+          data: hours24.map((h) => ({
+            name: `${String(h).padStart(2, '0')}:00`,
+            y: Object.values(chainRespBkt[h] ?? {}).reduce((s, v) => s + v, 0),
+            drilldown: `cjo24h:${h}`,
           })),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
-          series: entries.map((e) => ({
-            id: `cjo24:${e.hotel_code}`,
-            name: `${e.hotel_code} — Response Duration`,
+          series: hours24.map((h) => ({
+            id: `cjo24h:${h}`,
+            name: `${String(h).padStart(2, '0')}:00 — Response Time`,
             type: 'column', color: GREEN,
             dataLabels: { enabled: true },
-            data: DUR.map((b) => [b, e.summary.jo_response_dur_map?.[b] ?? 0]),
+            data: DUR.map((b) => ({ name: b, y: chainRespBkt[h]?.[b] ?? 0 })),
           })),
         },
       });
 
-      // cjo-25: Escalated Jobs by Hotel → Overdue Duration Distribution
-      const cjo25 = make('cjo-25', 'Escalated Jobs by Hotel → Overdue Duration', 'Total escalated jobs per hotel. Click a hotel bar to see its overdue duration distribution.', 'COUNT(escalated) BY hotel_code; drilldown: COUNT(*) BY delay_duration_bucket', {
+      // cjo-25: 24-Hour Escalated Jobs → Overdue Duration distribution
+      const cjo25 = make('cjo-25', '24-Hour Escalated Jobs → Overdue Duration Distribution', 'Escalated job volume by hour across the chain. Click a bar to see the overdue duration (mins) range distribution for that hour.', 'COUNT(escalated) BY created_hour; drilldown: COUNT(*) BY overdue_bucket', {
         chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
+        xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'Escalated Jobs' } },
         series: [{ type: 'column', name: 'Escalated Jobs', color: GREEN,
-          data: entries.map((e) => ({
-            y: e.summary.jo_escalated_dur_map ? Object.values(e.summary.jo_escalated_dur_map).reduce((s, v) => s + v, 0) : 0,
-            drilldown: `cjo25:${e.hotel_code}`,
-          })),
+          data: mkHourData(chainEscH, 'cjo25h'),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
-          series: entries.map((e) => ({
-            id: `cjo25:${e.hotel_code}`,
-            name: `${e.hotel_code} — Overdue Duration`,
+          series: hours24.map((h) => ({
+            id: `cjo25h:${h}`,
+            name: `${String(h).padStart(2, '0')}:00 — Overdue Duration`,
             type: 'column', color: GREEN,
             dataLabels: { enabled: true },
-            data: DUR.map((b) => [b, e.summary.jo_escalated_dur_map?.[b] ?? 0]),
+            data: DUR.map((b) => ({ name: b, y: chainEscBkt[h]?.[b] ?? 0 })),
           })),
         },
       });
 
-      // cjo-26: SLA Compliance% by Hotel → Service Item Category SLA
-      const cjo26 = make('cjo-26', 'SLA Compliance% by Hotel → Service Item Category', 'SLA compliance rate per hotel. Click a hotel bar to see SLA% per service item category.', 'SLA% BY hotel_code; drilldown: SLA% BY service_item_category', {
+      // cjo-26: 24-Hour SLA Compliance% → Top Service Item Category
+      const cjo26 = make('cjo-26', '24-Hour SLA Compliance% → Top Service Item Category', 'SLA compliance% by hour across the chain. Click a bar to see SLA% by service item category for that hour.', 'SLA% BY created_hour; drilldown: SLA% BY service_item_category', {
         chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
+        xAxis: { type: 'category' },
         yAxis: { min: 0, max: 100, title: { text: 'SLA Compliance %' } },
         series: [{ type: 'column', name: 'SLA %', color: GREEN,
-          data: entries.map((e) => ({ y: getChainKpiValue(e, 'kpi_03') ?? 0, drilldown: `cjo26:${e.hotel_code}` })),
+          data: hours24.map((h) => {
+            const tot = chainSlaTot[h] ?? 0;
+            const comp = chainSlaComp[h] ?? 0;
+            return { name: `${String(h).padStart(2, '0')}:00`, y: tot > 0 ? r1((comp / tot) * 100) : 0, drilldown: `cjo26h:${h}` };
+          }),
           dataLabels: { enabled: true, format: '{point.y:.1f}%' },
         }],
         plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
         drilldown: {
-          series: entries.map((e) => {
-            const catMap = e.summary.jo_sla_cat_map ?? {};
-            const catTotal = e.summary.jo_sla_cat_total ?? {};
-            const cats = Object.keys(catTotal).sort((a, b) => (catTotal[b] ?? 0) - (catTotal[a] ?? 0));
+          series: hours24.map((h) => {
+            const catTot = chainCatTot[h] ?? {};
+            const catComp = chainCatComp[h] ?? {};
+            const cats = Object.keys(catTot).sort((a, b) => (catTot[b] ?? 0) - (catTot[a] ?? 0));
             return {
-              id: `cjo26:${e.hotel_code}`,
-              name: `${e.hotel_code} — SLA by Category`,
+              id: `cjo26h:${h}`,
+              name: `${String(h).padStart(2, '0')}:00 — SLA by Category`,
               type: 'column', color: GREEN,
               dataLabels: { enabled: true, format: '{point.y:.1f}%' },
               data: cats.map((cat) => {
-                const tot = catTotal[cat] ?? 0;
-                const comp = catMap[cat] ?? 0;
-                return [cat, tot > 0 ? r1((comp / tot) * 100) : 0];
+                const tot = catTot[cat] ?? 0;
+                const comp = catComp[cat] ?? 0;
+                return { name: cat, y: tot > 0 ? r1((comp / tot) * 100) : 0 };
               }),
             };
           }),

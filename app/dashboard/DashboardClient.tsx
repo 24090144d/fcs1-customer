@@ -1432,10 +1432,13 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
 
       return {
         chart: { type: 'column' },
-        xAxis: { categories: hourLabels },
+        // type:'category' lets both levels use point.name as the x-axis label —
+        // avoids the parent hourLabels array bleeding into the drilldown view.
+        xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'VIP Jobs' } },
         series: [{ type: 'column', name: 'VIP Jobs', color: GREEN,
           data: hours24.map((h) => ({
+            name: hourLabels[h],   // "00:00" … "23:00"
             y: Object.values(chainHourItem[h] ?? {}).reduce((s, v) => s + v, 0),
             drilldown: `cjo22h:${h}`,
           })),
@@ -1450,7 +1453,8 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
               name: `${String(h).padStart(2, '0')}:00 — Top Service Items (VIP)`,
               type: 'column', color: GREEN,
               dataLabels: { enabled: true },
-              data: topItems.map(([itm, cnt]) => [itm, cnt]),
+              // {name, y} format → Highcharts uses name as x-axis category label
+              data: topItems.map(([itm, cnt]) => ({ name: itm, y: cnt })),
             };
           }),
         },

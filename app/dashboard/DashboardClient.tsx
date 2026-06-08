@@ -1411,36 +1411,50 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
-    // cjo-22: Resolution P90 by Hotel → Service Category drilldown
-    make('cjo-22', 'Resolution P90 by Hotel → Service Category', 'P90 resolution time shows worst-case completion behavior per hotel. Click a hotel bar to drill into P90 by service category.', 'P90(resolution_min) BY hotel_code; drilldown: P90 BY service_category', (() => {
-      const allCats = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.jo_cat_res_p90 ?? {})))).sort((a, b) => {
-        const aMax = Math.max(...entries.map((e) => e.summary.jo_cat_res_p90?.[a] ?? 0));
-        const bMax = Math.max(...entries.map((e) => e.summary.jo_cat_res_p90?.[b] ?? 0));
-        return bMax - aMax;
-      }).slice(0, 10);
+    // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
+    make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items for VIP jobs in that hour.', 'COUNT(vip) BY created_hour; drilldown: COUNT(vip) BY service_item', (() => {
+      const GREEN = '#22c55e';
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
+      const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
+
+      // Aggregate VIP hour counts and hour→item maps across all chain hotels
+      const chainVipHour: Record<number, number> = {};
+      const chainVipHourItem: Record<number, Record<string, number>> = {};
+      for (const e of entries) {
+        const hourMap = e.summary.jo_vip_hour_map ?? {};
+        const hourItemMap = e.summary.jo_vip_hour_item_map ?? {};
+        for (const [hStr, cnt] of Object.entries(hourMap)) {
+          const h = Number(hStr);
+          chainVipHour[h] = (chainVipHour[h] ?? 0) + cnt;
+        }
+        for (const [hStr, itemMap] of Object.entries(hourItemMap)) {
+          const h = Number(hStr);
+          if (!chainVipHourItem[h]) chainVipHourItem[h] = {};
+          for (const [itm, cnt] of Object.entries(itemMap)) {
+            chainVipHourItem[h][itm] = (chainVipHourItem[h][itm] ?? 0) + cnt;
+          }
+        }
+      }
+
       return {
         chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
-        yAxis: { min: 0, title: { text: 'P90 Resolution (min)' } },
-        series: [{ type: 'column', name: 'P90 Resolution (min)',
-          data: entries.map((e) => {
-            const p90Map = e.summary.jo_cat_res_p90 ?? {};
-            const vals = Object.values(p90Map).filter((v) => v > 0);
-            return { y: vals.length > 0 ? r1(vals.reduce((s, v) => s + v, 0) / vals.length) : 0, drilldown: `cjo22:${e.hotel_code}` };
-          }),
+        xAxis: { categories: hourLabels },
+        yAxis: { min: 0, title: { text: 'VIP Jobs' } },
+        series: [{ type: 'column', name: 'VIP Jobs', color: GREEN,
+          data: hours24.map((h) => ({ y: chainVipHour[h] ?? 0, drilldown: `cjo22h:${h}` })),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
-          series: entries.map((e) => {
-            const p90Map = e.summary.jo_cat_res_p90 ?? {};
-            const cats = allCats.filter((c) => (p90Map[c] ?? 0) > 0);
+          series: hours24.map((h) => {
+            const itemMap = chainVipHourItem[h] ?? {};
+            const topItems = Object.entries(itemMap).sort((a, b) => b[1] - a[1]).slice(0, 15);
             return {
-              id: `cjo22:${e.hotel_code}`,
-              name: `${e.hotel_code} — P90 by Category`,
-              type: 'column',
+              id: `cjo22h:${h}`,
+              name: `${String(h).padStart(2, '0')}:00 — VIP by Service Item`,
+              type: 'column', color: GREEN,
               dataLabels: { enabled: true },
-              data: cats.map((c) => [c, r1(p90Map[c] ?? 0)]),
+              data: topItems.map(([itm, cnt]) => [itm, cnt]),
             };
           }),
         },

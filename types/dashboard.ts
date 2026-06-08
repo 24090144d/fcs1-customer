@@ -89,6 +89,8 @@ export interface HotelSummary {
   jo_sla_cat_map?: Record<string, number>;   // category → SLA-compliant completed count
   jo_sla_cat_total?: Record<string, number>; // category → total completed count
   jo_cat_res_p90?: Record<string, number>;   // category → P90 resolution minutes
+  jo_vip_hour_map?: Record<string, number>;  // hour → VIP job count
+  jo_vip_hour_item_map?: Record<string, Record<string, number>>; // hour → item → VIP count
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

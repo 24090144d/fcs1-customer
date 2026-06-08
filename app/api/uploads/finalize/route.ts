@@ -1324,6 +1324,9 @@ interface JoKpiAcc {
   escalatedDurMap:   Record<string, number>;
   slaCatMap:         Record<string, number>;
   slaCatTotal:       Record<string, number>;
+  // ── VIP 24-hour distribution (cjo-22) ────────────────────────────────────
+  vipHourCount:     Record<number, number>;
+  vipHourItemCount: Record<number, Record<string, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1368,6 +1371,8 @@ function newJoKpiAcc(): JoKpiAcc {
     escalatedDurMap: {},
     slaCatMap: {},
     slaCatTotal: {},
+    vipHourCount: {},
+    vipHourItemCount: {},
   };
 }
 
@@ -1513,6 +1518,19 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
         if (!acc.hourEscDelayBuckets[createdHour]) acc.hourEscDelayBuckets[createdHour] = {};
         acc.hourEscDelayBuckets[createdHour][bkt] = (acc.hourEscDelayBuckets[createdHour][bkt] ?? 0) + 1;
         acc.escalatedDurMap[bkt] = (acc.escalatedDurMap[bkt] ?? 0) + 1;
+      }
+    }
+  }
+  // ── VIP 24-hour accumulation (cjo-22) ─────────────────────────────────────
+  if (isVip(rr)) {
+    const createdAt2 = toStr(rr.created_datetime);
+    if (createdAt2) {
+      const d2 = new Date(createdAt2);
+      if (!isNaN(d2.getTime())) {
+        const h = d2.getHours();
+        acc.vipHourCount[h] = (acc.vipHourCount[h] ?? 0) + 1;
+        if (!acc.vipHourItemCount[h]) acc.vipHourItemCount[h] = {};
+        acc.vipHourItemCount[h][item] = (acc.vipHourItemCount[h][item] ?? 0) + 1;
       }
     }
   }
@@ -2233,7 +2251,14 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
-    // P90 resolution per category (for cjo-22 cross-hotel drilldown)
+    // VIP 24-hour maps (for cjo-22)
+    generatedJson.summary.jo_vip_hour_map = Object.fromEntries(
+      Object.entries(joKpiAcc.vipHourCount).map(([h, v]) => [h, v]),
+    );
+    generatedJson.summary.jo_vip_hour_item_map = Object.fromEntries(
+      Object.entries(joKpiAcc.vipHourItemCount).map(([h, m]) => [h, { ...m }]),
+    );
+    // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
       Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [
         cat,

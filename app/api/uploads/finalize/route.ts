@@ -1327,6 +1327,8 @@ interface JoKpiAcc {
   // ── VIP 24-hour distribution (cjo-22) ────────────────────────────────────
   vipHourCount:     Record<number, number>;
   vipHourItemCount: Record<number, Record<string, number>>;
+  // ── All-jobs 24-hour × service-item (cjo-22) ─────────────────────────────
+  hourItemCount:    Record<number, Record<string, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1373,6 +1375,7 @@ function newJoKpiAcc(): JoKpiAcc {
     slaCatTotal: {},
     vipHourCount: {},
     vipHourItemCount: {},
+    hourItemCount: {},
   };
 }
 
@@ -1473,6 +1476,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
   const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getHours(); })() : null;
   if (createdHour !== null) {
     acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
+    // track service item count per hour for cjo-22
+    if (!acc.hourItemCount[createdHour]) acc.hourItemCount[createdHour] = {};
+    acc.hourItemCount[createdHour][item] = (acc.hourItemCount[createdHour][item] ?? 0) + 1;
 
     // jo-23: completed jobs per hour + completion duration drilldown
     if (completedFlag) {
@@ -2251,7 +2257,11 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
-    // VIP 24-hour maps (for cjo-22)
+    // All-jobs 24-hour × service-item map (for cjo-22)
+    generatedJson.summary.jo_hour_item_map = Object.fromEntries(
+      Object.entries(joKpiAcc.hourItemCount).map(([h, m]) => [h, { ...m }]),
+    );
+    // VIP 24-hour maps (kept for future use)
     generatedJson.summary.jo_vip_hour_map = Object.fromEntries(
       Object.entries(joKpiAcc.vipHourCount).map(([h, v]) => [h, v]),
     );

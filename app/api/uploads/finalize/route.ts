@@ -76,6 +76,16 @@ function isVip(rr: Record<string, unknown>): boolean {
   return true;
 }
 
+/** Difference between two ISO timestamp strings in whole minutes (null if either is missing/invalid). */
+function isoToMinutesDiff(from: string | null | undefined, to: string | null | undefined): number | null {
+  if (!from || !to) return null;
+  const a = new Date(from);
+  const b = new Date(to);
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  const mins = (b.getTime() - a.getTime()) / 60_000;
+  return mins >= 0 ? Math.round(mins) : null; // negative = data error, store null
+}
+
 /** True when delay is null / empty / all-zeros (e.g. "00:00") */
 function isOntime(rr: Record<string, unknown>): boolean {
   const s = (String(rr.delay_duration ?? '')).trim();
@@ -2043,6 +2053,7 @@ export async function POST(req: NextRequest) {
           actual_duration:       parseDurationMinutes(toStr(rr.total_minute_between_created_to_completed)),
           is_ontime:             isOntime(rr),
           is_complete:           toStr(rr.job_status) === 'Completed',
+          respond_time:          isoToMinutesDiff(toIso(rr.created_datetime), toIso(rr.acknowledged_datetime)),
           // Keep full JO source row in normalized_row for compatibility
           // with DBs that haven't applied 002_jo_schema_alignment.sql yet.
           normalized_row:        rr,

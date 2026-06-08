@@ -408,7 +408,8 @@ export function validateJoRow(
         const s = (d.delay_duration ?? '').trim();
         return !s || s === '0' || /^[0:]+$/.test(s);
       })(),
-      is_complete: d.job_status === 'Completed',
+      is_complete:  d.job_status === 'Completed',
+      respond_time: null, // computed in finalize route from acknowledged_datetime - created_datetime
     },
     errors: [],
   };

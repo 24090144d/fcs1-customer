@@ -271,6 +271,7 @@ CREATE TABLE public.jo_records (
     actual_duration numeric,
     is_ontime boolean,
     is_complete boolean,
+    respond_time numeric,
     normalized_row jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,

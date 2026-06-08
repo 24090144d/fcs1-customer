@@ -128,6 +128,7 @@ export interface JoRow {
   actual_duration:       number | null;
   is_ontime:             boolean;
   is_complete:           boolean;
+  respond_time:          number | null;
 }
 
 /** Maintenance Orders CSV row — mirrors the 34 source MO/PM upload columns */

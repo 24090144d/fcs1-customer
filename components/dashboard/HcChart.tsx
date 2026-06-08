@@ -388,7 +388,7 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
     // Keep a single visible title source (card header) to avoid duplicate naming.
     merged.title = { ...((merged.title ?? {}) as Highcharts.TitleOptions), text: undefined };
     const withLabelRules = applyLabelRules(merged, tokens.chart.text, tokens.chart.palette);
-    const forceDistinctIds = new Set(['him06', 'him22', 'him26', 'him28', 'him29', 'him33', 'him37']);
+    const forceDistinctIds = new Set(['im-06', 'im-22', 'im-26', 'im-28', 'im-29', 'im-33', 'im-37']);
     return applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id, tokens.chart.palette);
   }, [theme, def.options, overrideOptions, tokens, def.id]);
 

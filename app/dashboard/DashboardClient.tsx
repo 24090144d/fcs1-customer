@@ -2607,7 +2607,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
                 dark={dark}
                 overrideOptions={override}
                 fullPeriod={fullPeriod}
-                index={nextChartIndex()}
+                codeLabel={def.id}
               />
                 );
               })()
@@ -3994,10 +3994,9 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           <section>
             <SectionHead label={'Corp Comparison Top 10'} dark={dark} />
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {corpImTopCharts.map((def, idx) => {
+              {corpImTopCharts.map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
-                const uiIndex = idx + 1;
-                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
               <CorpImPerformanceTable
                 entries={activeChainEntries}
@@ -4014,7 +4013,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
               {corpJoCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
-                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
+                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
               <CorpJoPerformanceTable
                 entries={activeChainEntries}
@@ -4031,8 +4030,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
               {localizedCharts.map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
-                const uiIndex = builderIndexFromId(def.id) ?? nextChartIndex();
-                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
             </div>
           </section>
@@ -4045,8 +4043,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {imHotelExecutiveCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      const uiIndex = nextChartIndex();
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4055,8 +4052,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {imHotelOverTimeCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      const uiIndex = nextChartIndex();
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4065,8 +4061,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {imHotelDrilldownCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      const uiIndex = nextChartIndex();
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4075,8 +4070,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {imHotelOperationAnalysisCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      const uiIndex = nextChartIndex();
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={uiIndex} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4088,7 +4082,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {reorderedEac.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4097,7 +4091,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {reorderedOperational.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
+                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
                   </div>
                 </section>
@@ -4116,9 +4110,9 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 </p>
               )}
               <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {comparisonCharts.map((def, i) => {
+                {comparisonCharts.map((def) => {
                   const { override, fullPeriod } = chartOpts(def);
-                  return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
+                  return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                 })}
               </div>
             </section>
@@ -4133,7 +4127,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                     def={hourlyChart}
                     dark={dark}
                     fullPeriod={false}
-                    index={nextChartIndex()}
+                    codeLabel={hourlyChart.id}
                   />
                 </div>
               </section>
@@ -4143,9 +4137,9 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
               <section>
                 <SectionHead label={t('dashboard_ui.performance_gauges', 'Performance Gauges')} dark={dark} />
                 <div className="chart-grid mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {gaugeCharts.map((def, i) => {
+                  {gaugeCharts.map((def) => {
                     const { override, fullPeriod } = chartOpts(def);
-                    return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} index={nextChartIndex()} />;
+                    return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                   })}
                 </div>
               </section>

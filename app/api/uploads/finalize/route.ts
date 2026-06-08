@@ -72,6 +72,7 @@ function isVip(rr: Record<string, unknown>): boolean {
   const code = String(raw).trim();
   if (!code) return false;
   if (code === '-') return false;
+  if (code === '0') return false;
   return true;
 }
 
@@ -2031,6 +2032,8 @@ export async function POST(req: NextRequest) {
           acknowledged_datetime: toIso(rr.acknowledged_datetime),
           completed_datetime:    toIso(rr.completed_datetime),
           delay_duration:        toStr(rr.delay_duration),
+          vip_code:              toStr(rr.vip_code),
+          is_vip:                isVip(rr),
           // Keep full JO source row in normalized_row for compatibility
           // with DBs that haven't applied 002_jo_schema_alignment.sql yet.
           normalized_row:        rr,

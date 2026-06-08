@@ -123,6 +123,8 @@ export interface JoRow {
   attachment:            string | null;
   reassigned_job:        string | null;
   escalation_group:      string | null;
+  vip_code:              string | null;
+  is_vip:                boolean;
 }
 
 /** Maintenance Orders CSV row — mirrors the 34 source MO/PM upload columns */

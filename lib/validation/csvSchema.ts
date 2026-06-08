@@ -135,6 +135,7 @@ export const JoRowSchema = z.object({
   attachment:            optStr,
   reassigned_job:        optStr,
   escalation_group:      optStr,
+  vip_code:              optStr,
 });
 
 // ── MO Zod schema ─────────────────────────────────────────────────────────────
@@ -197,6 +198,7 @@ const JO_KEY_ALIASES: Record<string, string> = {
   created_date_time: 'created_datetime',
   job_acknowledged_date_time: 'acknowledged_datetime',
   job_completed_date_time: 'completed_datetime',
+  vip: 'vip_code',   // CSV header "VIP" → canonical field "vip_code"
 };
 
 const MO_KEY_ALIASES: Record<string, string> = {
@@ -380,6 +382,11 @@ export function validateJoRow(
       attachment:            d.attachment            ?? null,
       reassigned_job:        d.reassigned_job        ?? null,
       escalation_group:      d.escalation_group      ?? null,
+      vip_code:              d.vip_code              ?? null,
+      is_vip: (() => {
+        const code = (d.vip_code ?? '').trim();
+        return code !== '' && code !== '-' && code !== '0';
+      })(),
     },
     errors: [],
   };

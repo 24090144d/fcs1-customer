@@ -266,6 +266,8 @@ CREATE TABLE public.jo_records (
     attachment text,
     reassigned_job text,
     escalation_group text,
+    vip_code text,
+    is_vip boolean,
     normalized_row jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,

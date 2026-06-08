@@ -1411,6 +1411,41 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
+    // cjo-22: Resolution P90 by Hotel → Service Category drilldown
+    make('cjo-22', 'Resolution P90 by Hotel → Service Category', 'P90 resolution time shows worst-case completion behavior per hotel. Click a hotel bar to drill into P90 by service category.', 'P90(resolution_min) BY hotel_code; drilldown: P90 BY service_category', (() => {
+      const allCats = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.jo_cat_res_p90 ?? {})))).sort((a, b) => {
+        const aMax = Math.max(...entries.map((e) => e.summary.jo_cat_res_p90?.[a] ?? 0));
+        const bMax = Math.max(...entries.map((e) => e.summary.jo_cat_res_p90?.[b] ?? 0));
+        return bMax - aMax;
+      }).slice(0, 10);
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'P90 Resolution (min)' } },
+        series: [{ type: 'column', name: 'P90 Resolution (min)',
+          data: entries.map((e) => {
+            const p90Map = e.summary.jo_cat_res_p90 ?? {};
+            const vals = Object.values(p90Map).filter((v) => v > 0);
+            return { y: vals.length > 0 ? r1(vals.reduce((s, v) => s + v, 0) / vals.length) : 0, drilldown: `cjo22:${e.hotel_code}` };
+          }),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const p90Map = e.summary.jo_cat_res_p90 ?? {};
+            const cats = allCats.filter((c) => (p90Map[c] ?? 0) > 0);
+            return {
+              id: `cjo22:${e.hotel_code}`,
+              name: `${e.hotel_code} — P90 by Category`,
+              type: 'column',
+              dataLabels: { enabled: true },
+              data: cats.map((c) => [c, r1(p90Map[c] ?? 0)]),
+            };
+          }),
+        },
+      };
+    })()),
     // ── 24-Hour bar-drilldown charts: corp level (cjo-23..cjo-26) ─────────────
     ...(() => {
       const GREEN = '#22c55e';

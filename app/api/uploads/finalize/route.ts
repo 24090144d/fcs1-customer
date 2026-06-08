@@ -2233,6 +2233,13 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
+    // P90 resolution per category (for cjo-22 cross-hotel drilldown)
+    generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
+      Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [
+        cat,
+        percentile(Object.values(itemMap).flat(), 90) ?? 0,
+      ]),
+    );
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';

@@ -125,6 +125,9 @@ export interface JoRow {
   escalation_group:      string | null;
   vip_code:              string | null;
   is_vip:                boolean;
+  actual_duration:       number | null;
+  is_ontime:             boolean;
+  is_complete:           boolean;
 }
 
 /** Maintenance Orders CSV row — mirrors the 34 source MO/PM upload columns */

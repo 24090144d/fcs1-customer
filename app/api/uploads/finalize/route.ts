@@ -76,6 +76,12 @@ function isVip(rr: Record<string, unknown>): boolean {
   return true;
 }
 
+/** True when delay is null / empty / all-zeros (e.g. "00:00") */
+function isOntime(rr: Record<string, unknown>): boolean {
+  const s = (String(rr.delay_duration ?? '')).trim();
+  return !s || s === '0' || /^[0:]+$/.test(s);
+}
+
 function findField(rr: Record<string, unknown>, ...fields: string[]): string | null {
   for (const f of fields) {
     const v = rr[f];
@@ -2034,6 +2040,9 @@ export async function POST(req: NextRequest) {
           delay_duration:        toStr(rr.delay_duration),
           vip_code:              toStr(rr.vip_code),
           is_vip:                isVip(rr),
+          actual_duration:       parseDurationMinutes(toStr(rr.total_hour_between_created_to_completed)),
+          is_ontime:             isOntime(rr),
+          is_complete:           toStr(rr.job_status) === 'Completed',
           // Keep full JO source row in normalized_row for compatibility
           // with DBs that haven't applied 002_jo_schema_alignment.sql yet.
           normalized_row:        rr,

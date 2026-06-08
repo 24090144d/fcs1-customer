@@ -387,6 +387,25 @@ export function validateJoRow(
         const code = (d.vip_code ?? '').trim();
         return code !== '' && code !== '-' && code !== '0';
       })(),
+      // Derived: parse "HH:MM" (or plain number) → total minutes
+      actual_duration: (() => {
+        const raw = (d.total_hour_between_created_to_completed ?? '').trim();
+        if (!raw) return null;
+        const parts = raw.split(':');
+        if (parts.length >= 2) {
+          const h = parseInt(parts[0], 10) || 0;
+          const m = parseInt(parts[1], 10) || 0;
+          return h * 60 + m;
+        }
+        const n = parseFloat(raw);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      })(),
+      // On-time: delay is null / empty / all-zeros (e.g. '00:00')
+      is_ontime: (() => {
+        const s = (d.delay_duration ?? '').trim();
+        return !s || s === '0' || /^[0:]+$/.test(s);
+      })(),
+      is_complete: d.job_status === 'Completed',
     },
     errors: [],
   };

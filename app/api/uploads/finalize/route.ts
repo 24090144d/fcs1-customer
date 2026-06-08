@@ -132,7 +132,7 @@ function mapJoSeverity(rr: Record<string, unknown>): string {
     return 'Low';
   }
   const totalMin = parseDurationMinutes(
-    findField(rr, 'total_hour_between_created_to_completed', 'execution_duration', 'total_act_between_acknowledged_to_completed'),
+    findField(rr, 'total_minute_between_created_to_completed', 'execution_duration', 'total_act_between_acknowledged_to_completed'),
   );
   if (totalMin !== null) {
     if (totalMin >= 240) return 'Critical';
@@ -2040,7 +2040,7 @@ export async function POST(req: NextRequest) {
           delay_duration:        toStr(rr.delay_duration),
           vip_code:              toStr(rr.vip_code),
           is_vip:                isVip(rr),
-          actual_duration:       parseDurationMinutes(toStr(rr.total_hour_between_created_to_completed)),
+          actual_duration:       parseDurationMinutes(toStr(rr.total_minute_between_created_to_completed)),
           is_ontime:             isOntime(rr),
           is_complete:           toStr(rr.job_status) === 'Completed',
           // Keep full JO source row in normalized_row for compatibility

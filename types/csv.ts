@@ -117,7 +117,7 @@ export interface JoRow {
   acknowledged_by_user:  string | null;
   completed_by_department: string | null;
   completed_by_user:     string | null;
-  total_hour_between_created_to_completed: string | null;
+  total_minute_between_created_to_completed: string | null;
   total_act_between_acknowledged_to_completed: string | null;
   comments:              string | null;
   attachment:            string | null;

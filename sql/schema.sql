@@ -260,7 +260,7 @@ CREATE TABLE public.jo_records (
     acknowledged_by_user text,
     completed_by_department text,
     completed_by_user text,
-    total_hour_between_created_to_completed text,
+    total_minute_between_created_to_completed text,
     total_act_between_acknowledged_to_completed text,
     comments text,
     attachment text,

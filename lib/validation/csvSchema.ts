@@ -129,7 +129,7 @@ export const JoRowSchema = z.object({
   acknowledged_by_user:  optStr,
   completed_by_department: optStr,
   completed_by_user:     optStr,
-  total_hour_between_created_to_completed: optStr,
+  total_minute_between_created_to_completed: optStr,
   total_act_between_acknowledged_to_completed: optStr,
   comments:              optStr,
   attachment:            optStr,
@@ -199,6 +199,9 @@ const JO_KEY_ALIASES: Record<string, string> = {
   job_acknowledged_date_time: 'acknowledged_datetime',
   job_completed_date_time: 'completed_datetime',
   vip: 'vip_code',   // CSV header "VIP" → canonical field "vip_code"
+  // Excel column "Total Hour Between Created to Completed" was a typo;
+  // canonical key → renamed field
+  total_hour_between_created_to_completed: 'total_minute_between_created_to_completed',
 };
 
 const MO_KEY_ALIASES: Record<string, string> = {
@@ -376,7 +379,7 @@ export function validateJoRow(
       acknowledged_by_user:  d.acknowledged_by_user  ?? null,
       completed_by_department: d.completed_by_department ?? null,
       completed_by_user:     d.completed_by_user     ?? null,
-      total_hour_between_created_to_completed: d.total_hour_between_created_to_completed ?? null,
+      total_minute_between_created_to_completed: d.total_minute_between_created_to_completed ?? null,
       total_act_between_acknowledged_to_completed: d.total_act_between_acknowledged_to_completed ?? null,
       comments:              d.comments              ?? null,
       attachment:            d.attachment            ?? null,
@@ -389,7 +392,7 @@ export function validateJoRow(
       })(),
       // Derived: parse "HH:MM" (or plain number) → total minutes
       actual_duration: (() => {
-        const raw = (d.total_hour_between_created_to_completed ?? '').trim();
+        const raw = (d.total_minute_between_created_to_completed ?? '').trim();
         if (!raw) return null;
         const parts = raw.split(':');
         if (parts.length >= 2) {

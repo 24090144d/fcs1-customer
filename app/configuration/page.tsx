@@ -1301,34 +1301,43 @@ export default function ConfigurationPage() {
             </p>
           </header>
 
-          {/* Tab bar */}
-          <div
-            className="flex items-end gap-0 mb-6 overflow-x-auto"
-            style={{ borderBottom: `2px solid ${pal.panelBorder}` }}
-          >
-            {TABS.map(({ key, label, Icon }) => {
-              const isActive = activeTab === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setTab(key)}
-                  className="inline-flex items-center gap-1.5 px-4 py-3 font-mono uppercase whitespace-nowrap transition-colors"
-                  style={{
-                    fontSize: '0.65rem',
-                    letterSpacing: '0.08em',
-                    color: isActive ? pal.accent : pal.muted,
-                    background: isActive ? `${pal.accent}12` : 'transparent',
-                    borderBottom: isActive ? `3px solid ${pal.accent}` : '3px solid transparent',
-                    marginBottom: -3,
-                    borderRadius: '3px 3px 0 0',
-                  }}
-                >
-                  <Icon size={12} />
-                  {label}
-                </button>
-              );
-            })}
+          {/* Tab bar — outer wrapper holds the bottom rule; inner div scrolls.
+               Active indicator is an absolute span INSIDE the button so it
+               is never clipped by overflow-x:auto (which also clips y). */}
+          <div className="relative mb-6">
+            <div
+              className="absolute bottom-0 left-0 right-0"
+              style={{ height: '2px', background: pal.panelBorder }}
+            />
+            <div className="flex items-end gap-0 overflow-x-auto">
+              {TABS.map(({ key, label, Icon }) => {
+                const isActive = activeTab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setTab(key)}
+                    className="relative inline-flex items-center gap-1.5 px-4 py-3 font-mono uppercase whitespace-nowrap transition-colors"
+                    style={{
+                      fontSize: '0.65rem',
+                      letterSpacing: '0.08em',
+                      color: isActive ? pal.accent : pal.muted,
+                      background: isActive ? `${pal.accent}12` : 'transparent',
+                      borderRadius: '3px 3px 0 0',
+                    }}
+                  >
+                    {isActive && (
+                      <span
+                        className="absolute bottom-0 left-0 right-0 pointer-events-none"
+                        style={{ height: '3px', background: pal.accent, zIndex: 2 }}
+                      />
+                    )}
+                    <Icon size={12} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* ── System tab ─────────────────────────────────────────────── */}

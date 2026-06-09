@@ -1,0 +1,9 @@
+# Vercel ignore — exclude files not needed for Next.js build
+*.zip
+docs/
+scripts/
+data/
+*.md
+color_palettes.md
+*.log
+*.tsbuildinfo

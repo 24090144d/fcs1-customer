@@ -620,6 +620,7 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
       setSuccessMsg(body.message ?? 'Reset completed.');
       setPassword('');
       setStep('done');
+      window.dispatchEvent(new CustomEvent('fcs1:nav-refresh'));
       if (module === 'ALL') {
         window.setTimeout(() => { window.location.href = '/onboarding'; }, 1400);
       }
@@ -947,6 +948,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
       setSuccess(body.message ?? 'Hotel reset completed.');
       setPassword(''); setJobs([]); setTables([]);
       setStep('done');
+      window.dispatchEvent(new CustomEvent('fcs1:nav-refresh'));
     } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Reset failed.'); setStep('preview'); }
   }
 

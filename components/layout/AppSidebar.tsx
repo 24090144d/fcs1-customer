@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings, Sparkles } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
 import { APP_VERSION } from '@/lib/version';
 import { useI18n } from './I18nProvider';
@@ -116,8 +116,8 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
     return () => obs.disconnect();
   }, []);
 
-  useEffect(() => {
-    fetch('/api/nav/dashboards')
+  const fetchNav = useCallback(() => {
+    fetch('/api/nav/dashboards?t=' + Date.now())
       .then(r => r.json())
       .then(d => {
         const loaded: NavChain[] = d.chains ?? [];
@@ -135,7 +135,16 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
         });
       })
       .catch(() => {});
-  }, [pathname, currentHotel, currentModule]);
+  }, [currentHotel, currentModule]);
+
+  useEffect(() => { fetchNav(); }, [pathname, fetchNav]);
+
+  // Re-fetch nav whenever a DB reset fires this event (stays on /configuration,
+  // so pathname doesn't change — the event is the only trigger).
+  useEffect(() => {
+    window.addEventListener('fcs1:nav-refresh', fetchNav);
+    return () => window.removeEventListener('fcs1:nav-refresh', fetchNav);
+  }, [fetchNav]);
 
   useEffect(() => {
     fetch(`/api/ai/charts/list?user_id=${encodeURIComponent(userId)}`)

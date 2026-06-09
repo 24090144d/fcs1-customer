@@ -717,7 +717,7 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
               fontSize:          '0.76rem',
               '--tw-ring-color': pal.accent,
             } as React.CSSProperties}
-            placeholder="Reset password  (today yymmdd)"
+            placeholder="Reset password"
             disabled={busy}
           />
           <button

@@ -858,6 +858,421 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Reset by Hotel panel (System tab)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetHotelStep   = 'idle' | 'loading' | 'ready' | 'previewing' | 'preview' | 'executing' | 'done';
+
+interface OrgModuleStat  { module_code: string; job_count: number; total_rows: number; }
+interface OrgEntry       { id: string; organization_code: string; organization_name: string; modules: OrgModuleStat[]; }
+interface UploadJobEntry {
+  id: string; module_code: string; status: string; total_rows: number; created_at: string;
+  hotel_code: string | null; hotel_name: string | null; source_name: string | null;
+  date_range_min: string | null; date_range_max: string | null;
+}
+interface HotelTableStat { table_name: string; label: string; row_count: number; }
+
+const HOTEL_MODULES: { key: ResetHotelModule; label: string; color: string }[] = [
+  { key: 'ALL', label: 'ALL', color: '#C55A10' },
+  { key: 'JO',  label: 'JO',  color: '#2563EB' },
+  { key: 'MO',  label: 'MO',  color: '#059669' },
+  { key: 'CO',  label: 'CO',  color: '#7C3AED' },
+  { key: 'IM',  label: 'IM',  color: '#B45309' },
+];
+
+function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
+  const [step, setStep]           = useState<ResetHotelStep>('idle');
+  const [password, setPassword]   = useState('');
+  const [showPwd, setShowPwd]     = useState(false);
+  const [module, setModule]       = useState<ResetHotelModule>('ALL');
+  const [orgs, setOrgs]           = useState<OrgEntry[]>([]);
+  const [selectedOrg, setSelected]= useState('');
+  const [uploadJobs, setJobs]     = useState<UploadJobEntry[]>([]);
+  const [tables, setTables]       = useState<HotelTableStat[]>([]);
+  const [errorMsg, setErrorMsg]   = useState('');
+  const [successMsg, setSuccess]  = useState('');
+
+  function resetToReady() {
+    setStep('ready'); setJobs([]); setTables([]); setErrorMsg(''); setSuccess('');
+  }
+
+  async function loadOrgs() {
+    const pw = password.trim();
+    if (!pw) { setErrorMsg('Password is required.'); return; }
+    setStep('loading'); setErrorMsg('');
+    try {
+      const res  = await fetch(`/api/admin/reset-by-hotel?password=${encodeURIComponent(pw)}`);
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; organizations?: OrgEntry[] };
+      if (!res.ok || !body.ok) {
+        setErrorMsg(body.error ?? 'Failed to load hotels — check password.');
+        setStep('idle'); return;
+      }
+      setOrgs(body.organizations ?? []);
+      if ((body.organizations ?? []).length > 0) setSelected(body.organizations![0].id);
+      setStep('ready');
+    } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Load failed.'); setStep('idle'); }
+  }
+
+  async function runPreview() {
+    if (!selectedOrg) { setErrorMsg('Select a hotel first.'); return; }
+    setStep('previewing'); setErrorMsg('');
+    try {
+      const res  = await fetch('/api/admin/reset-by-hotel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password.trim(), organization_id: selectedOrg, module, action: 'preview' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; error?: string; upload_jobs?: UploadJobEntry[]; tables?: HotelTableStat[];
+      };
+      if (!res.ok || !body.ok) {
+        setErrorMsg(body.error ?? 'Preview failed.'); setStep('ready'); return;
+      }
+      setJobs(body.upload_jobs ?? []); setTables(body.tables ?? []);
+      setStep('preview');
+    } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Preview failed.'); setStep('ready'); }
+  }
+
+  async function runExecute() {
+    setStep('executing'); setErrorMsg('');
+    try {
+      const res  = await fetch('/api/admin/reset-by-hotel', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password.trim(), organization_id: selectedOrg, module, action: 'execute' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
+      if (!res.ok || !body.ok) {
+        setErrorMsg(body.error ?? 'Reset failed.'); setStep('preview'); return;
+      }
+      setSuccess(body.message ?? 'Hotel reset completed.');
+      setPassword(''); setJobs([]); setTables([]);
+      setStep('done');
+    } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Reset failed.'); setStep('preview'); }
+  }
+
+  const busy          = step === 'loading' || step === 'previewing' || step === 'executing';
+  const selectedOrgEntry = orgs.find((o) => o.id === selectedOrg);
+  const selectedModMeta  = HOTEL_MODULES.find((m) => m.key === module)!;
+  const totalDeleteRows  = tables.reduce((s, t) => s + t.row_count, 0);
+
+  return (
+    <section
+      className="max-w-3xl p-5 mt-6"
+      style={{ background: pal.panelBg, border: `1px solid ${pal.panelBorder}`, borderRadius: 6 }}
+    >
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div
+          className="mt-0.5 h-9 w-9 shrink-0 grid place-items-center"
+          style={{ border: `1px solid ${pal.danger}66`, color: pal.danger, background: '#241914' }}
+        >
+          <Database size={17} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-serif text-xl font-semibold" style={{ color: pal.text }}>
+            Reset by Hotel
+          </h2>
+          <p className="mt-1 text-sm leading-6" style={{ color: pal.muted }}>
+            Select a hotel and module to preview all uploaded data before deleting. Rows are removed
+            by upload job — schema and other hotels are untouched.
+          </p>
+        </div>
+      </div>
+
+      {/* Step 1 — password + load */}
+      <div className="mt-5">
+        <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: pal.muted }}>
+          Step 1 — authenticate
+        </p>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type={showPwd ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); if (step !== 'idle' && step !== 'loading') resetToReady(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && step === 'idle') void loadOrgs(); }}
+              className="w-full px-3 py-2 pr-8 font-mono outline-none focus:ring-1"
+              style={{
+                border: `1px solid ${pal.panelBorder}`, background: pal.inputBg, color: pal.text,
+                fontSize: '0.76rem', '--tw-ring-color': pal.accent,
+              } as React.CSSProperties}
+              placeholder="Reset password  (today yymmdd)"
+              disabled={busy}
+            />
+            <button
+              type="button" tabIndex={-1} onClick={() => setShowPwd((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+              style={{ color: pal.muted }}
+            >
+              {showPwd ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+          <button
+            type="button" onClick={() => void loadOrgs()} disabled={busy || step === 'ready'}
+            className="inline-flex items-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-50"
+            style={{ background: pal.accent, color: pal.accentFg, fontSize: '0.68rem', letterSpacing: '0.08em' }}
+          >
+            <Database size={12} className={step === 'loading' ? 'animate-pulse' : ''} />
+            {step === 'loading' ? 'Loading…' : step === 'ready' || step === 'preview' || step === 'previewing' || step === 'executing' || step === 'done' ? 'Loaded ✓' : 'Load Hotels'}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {errorMsg && (
+        <div className="mt-3 flex items-start gap-2 px-3 py-2"
+          style={{ border: `1px solid ${pal.danger}55`, background: `${pal.danger}12`, color: pal.danger }}>
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Step 2 — select hotel + module */}
+      {(step === 'ready' || step === 'previewing' || step === 'preview' || step === 'executing' || step === 'done') && (
+        <div className="mt-5">
+          <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: pal.muted }}>
+            Step 2 — select hotel &amp; module
+          </p>
+
+          {/* Hotel selector */}
+          <div className="mb-3">
+            <label className="block mb-1 font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>Hotel / Organization</label>
+            {orgs.length === 0 ? (
+              <p className="font-mono" style={{ fontSize: '0.68rem', color: pal.muted }}>No organizations found.</p>
+            ) : (
+              <div className="grid gap-2">
+                {orgs.map((org) => {
+                  const active = selectedOrg === org.id;
+                  const hasData = org.modules.some((m) => m.job_count > 0);
+                  return (
+                    <button
+                      key={org.id} type="button"
+                      disabled={busy}
+                      onClick={() => { setSelected(org.id); if (step === 'preview') resetToReady(); }}
+                      className="w-full text-left px-3 py-2.5 transition-opacity hover:opacity-90 disabled:opacity-50"
+                      style={{
+                        border: `1px solid ${active ? pal.danger : pal.panelBorder}`,
+                        background: active ? `${pal.danger}10` : pal.rowOdd,
+                        borderRadius: 4,
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold" style={{ fontSize: '0.72rem', color: active ? pal.danger : pal.text }}>
+                          {org.organization_code}
+                        </span>
+                        <span className="font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
+                          {org.organization_name}
+                        </span>
+                      </div>
+                      {/* Per-module row counts */}
+                      {hasData && (
+                        <div className="flex gap-3 mt-1.5">
+                          {org.modules.filter((m) => m.job_count > 0).map((m) => (
+                            <span key={m.module_code} className="font-mono" style={{ fontSize: '0.58rem', color: pal.muted }}>
+                              <span style={{ color: HOTEL_MODULES.find((hm) => hm.key === m.module_code)?.color ?? pal.accent }}>
+                                {m.module_code}
+                              </span>
+                              {' '}{m.job_count} job{m.job_count !== 1 ? 's' : ''} · {m.total_rows.toLocaleString()} rows
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {!hasData && (
+                        <p className="mt-1 font-mono" style={{ fontSize: '0.58rem', color: pal.muted }}>No upload data</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Module chips */}
+          <label className="block mb-2 font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>Module scope</label>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {HOTEL_MODULES.map(({ key, label, color }) => {
+              const active = module === key;
+              return (
+                <button
+                  key={key} type="button" disabled={busy}
+                  onClick={() => { setModule(key); if (step === 'preview') resetToReady(); }}
+                  className="px-3 py-1 font-mono transition-opacity hover:opacity-85 disabled:opacity-50"
+                  style={{
+                    fontSize: '0.68rem', letterSpacing: '0.08em',
+                    border: `1px solid ${active ? color : pal.panelBorder}`,
+                    background: active ? `${color}22` : 'transparent',
+                    color: active ? color : pal.muted,
+                    fontWeight: active ? 700 : 400,
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Preview button */}
+          {(step === 'ready' || step === 'previewing') && (
+            <button
+              type="button" onClick={() => void runPreview()} disabled={busy || !selectedOrg}
+              className="inline-flex items-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-50"
+              style={{ background: pal.panelBorder, color: pal.text, fontSize: '0.68rem', letterSpacing: '0.08em', border: `1px solid ${pal.panelBorder}` }}
+            >
+              <Database size={12} className={step === 'previewing' ? 'animate-pulse' : ''} />
+              {step === 'previewing' ? 'Loading preview…' : 'Preview Data'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 3 — preview: upload history + table stats */}
+      {(step === 'preview' || step === 'executing') && (
+        <div className="mt-5">
+          <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: selectedModMeta.color }}>
+            Step 3 — upload history ({selectedOrgEntry?.organization_code} · {module})
+          </p>
+
+          {/* Upload jobs history table */}
+          {uploadJobs.length === 0 ? (
+            <p className="font-mono mb-3" style={{ fontSize: '0.68rem', color: pal.muted }}>
+              No upload jobs found for this hotel / module combination.
+            </p>
+          ) : (
+            <div className="mb-4 overflow-x-auto">
+              <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 480 }}>
+                <thead>
+                  <tr style={{ background: pal.headerBg }}>
+                    {['Hotel', 'Module', 'Source / Date Range', 'Rows', 'Status', 'Uploaded'].map((h) => (
+                      <th key={h} className="text-left px-3 py-1.5 font-mono uppercase whitespace-nowrap"
+                        style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: pal.muted }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {uploadJobs.map((job, i) => (
+                    <tr key={job.id} style={{ background: i % 2 === 0 ? pal.rowEven : pal.rowOdd }}>
+                      <td className="px-3 py-1.5 font-mono font-bold whitespace-nowrap"
+                        style={{ fontSize: '0.68rem', color: selectedModMeta.color }}>
+                        {job.hotel_code ?? selectedOrgEntry?.organization_code ?? '—'}
+                        {job.hotel_name && (
+                          <span className="ml-1 font-normal" style={{ color: pal.muted, fontSize: '0.58rem' }}>
+                            {job.hotel_name}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono whitespace-nowrap"
+                        style={{ fontSize: '0.68rem', color: pal.muted }}>
+                        {job.module_code}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono" style={{ fontSize: '0.62rem', color: pal.muted }}>
+                        {job.source_name ?? '—'}
+                        {job.date_range_min && (
+                          <span className="block" style={{ fontSize: '0.58rem' }}>
+                            {job.date_range_min} → {job.date_range_max}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-right whitespace-nowrap"
+                        style={{ fontSize: '0.68rem', color: job.total_rows > 0 ? pal.danger : pal.muted }}>
+                        {job.total_rows.toLocaleString()}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono whitespace-nowrap"
+                        style={{ fontSize: '0.62rem', color: job.status === 'completed' ? pal.accent : pal.muted }}>
+                        {job.status}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono whitespace-nowrap"
+                        style={{ fontSize: '0.62rem', color: pal.muted }}>
+                        {job.created_at ? new Date(job.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Table-level stats */}
+          {tables.length > 0 && (
+            <>
+              <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: pal.muted }}>
+                Rows to be deleted
+              </p>
+              <table className="w-full mb-3" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: pal.headerBg }}>
+                    {['Table', 'Rows'].map((h) => (
+                      <th key={h} className="text-left px-3 py-1.5 font-mono uppercase"
+                        style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: pal.muted }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tables.map((tbl, i) => (
+                    <tr key={tbl.table_name} style={{ background: i % 2 === 0 ? pal.rowEven : pal.rowOdd }}>
+                      <td className="px-3 py-1.5 font-mono" style={{ fontSize: '0.69rem', color: pal.text }}>
+                        {tbl.label}
+                        <span style={{ color: pal.muted, marginLeft: 6, fontSize: '0.58rem' }}>({tbl.table_name})</span>
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-right"
+                        style={{ fontSize: '0.69rem', color: tbl.row_count > 0 ? pal.danger : pal.muted }}>
+                        {tbl.row_count.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: pal.headerBg, borderTop: `1px solid ${pal.panelBorder}` }}>
+                    <td className="px-3 py-1.5 font-mono uppercase"
+                      style={{ fontSize: '0.6rem', letterSpacing: '0.07em', color: pal.muted }}>Total</td>
+                    <td className="px-3 py-1.5 font-mono text-right font-bold"
+                      style={{ fontSize: '0.69rem', color: totalDeleteRows > 0 ? pal.danger : pal.muted }}>
+                      {totalDeleteRows.toLocaleString()}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* Confirm + back */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button" onClick={() => void runExecute()} disabled={step === 'executing'}
+              className="inline-flex items-center gap-2 px-5 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-60"
+              style={{ background: pal.danger, color: '#FAF7F2', fontSize: '0.68rem', letterSpacing: '0.08em' }}
+            >
+              <RotateCcw size={13} className={step === 'executing' ? 'animate-spin' : ''} />
+              {step === 'executing' ? 'Resetting…' : `Confirm Reset`}
+            </button>
+            <button
+              type="button" onClick={resetToReady} disabled={busy}
+              className="px-3 py-2 font-mono uppercase transition-opacity hover:opacity-75 disabled:opacity-40"
+              style={{ border: `1px solid ${pal.panelBorder}`, color: pal.muted, fontSize: '0.62rem', letterSpacing: '0.06em' }}
+            >
+              ← Back
+            </button>
+            <p className="font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
+              Only this hotel&apos;s {module === 'ALL' ? 'data' : `${module} data`} will be removed.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Success */}
+      {step === 'done' && (
+        <div className="mt-4 flex items-start gap-2 px-3 py-2"
+          style={{ border: `1px solid ${pal.accent}55`, background: `${pal.accent}14`, color: pal.accent }}>
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+          <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>{successMsg}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -929,7 +1344,10 @@ export default function ConfigurationPage() {
 
           {/* ── System tab ─────────────────────────────────────────────── */}
           {activeTab === 'system' && (
-            <ResetPanel pal={pal} t={t} />
+            <>
+              <ResetPanel pal={pal} t={t} />
+              <ResetByHotelPanel pal={pal} t={t} />
+            </>
           )}
 
           {/* ── Module tabs (JO / MO / CO / IM) ────────────────────────── */}

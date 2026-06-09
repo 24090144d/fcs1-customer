@@ -1381,9 +1381,39 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-11', 'Total Quantity by Hotel', 'Compares requested quantity load across hotels.', 'SUM(quantity) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Total Quantity', data: totalQuantity }],
     }),
-    make('cjo-12', 'Jobs Trend by Week across Hotels', 'Weekly JO volume split by hotel.', 'COUNT(*) BY created_week, hotel_code', {
-      chart: { type: 'line' }, xAxis: { categories: weeks }, series: entries.map((e) => ({ type: 'line', name: e.hotel_code, data: weeks.map((wk) => e.summary.week_map?.[wk] ?? 0) })),
-    }),
+    // cjo-12: Delayed Status by Hotel → 24-Hour Delayed Job Distribution
+    make('cjo-12', 'Delayed Status by Hotel → 24-Hour Delayed Job Distribution', 'Delayed job count (delay_duration > 0) per hotel. Click a hotel bar to see its 24-hour delayed job distribution.', 'COUNT(delay > 0) BY hotel_code; drilldown: COUNT(*) BY created_hour', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
+      const delayedPerHotel = entries.map((e) => {
+        const hm = e.summary.jo_hour_delayed_map ?? {};
+        return Object.values(hm).reduce((s, v) => s + (v as number), 0);
+      });
+      return {
+        chart: { type: 'bar' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Delayed Jobs' } },
+        series: [{
+          type: 'bar', name: 'Delayed Jobs', color: GREEN,
+          data: entries.map((e, i) => ({ name: e.hotel_code, y: delayedPerHotel[i], drilldown: `cjo12:${e.hotel_code}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { bar: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const hm = e.summary.jo_hour_delayed_map ?? {};
+            return {
+              id: `cjo12:${e.hotel_code}`,
+              name: `${e.hotel_code} — Delayed by Hour`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: (hm[String(h)] ?? 0) as number })),
+            };
+          }),
+        },
+      };
+    })()),
     make('cjo-13', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
       chart: { type: 'line' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'line', name: 'Completion %', data: weeklyCompletion }],
     }),

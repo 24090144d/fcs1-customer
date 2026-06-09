@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.29** (as of 2026-06-09) |
+| Version | **v1.0.30** (as of 2026-06-09) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.30** | 2026-06-09 | Reset by Hotel fix: hotel list → dropdown (WP–Wynn Palace, WM–Wynn Macau) from dashboard meta; API uses hotel_code not org_id; password placeholder hint removed from both panels |
 | **v1.0.29** | 2026-06-09 | Config tab bar: py-2.5 → py-3 (+4px height), active indicator 2px → 3px border, marginBottom -2 → -3 |
 | **v1.0.28** | 2026-06-09 | Reset by Hotel — new panel: Load Hotels (password-gated), select org + module, preview upload history table + per-table row counts, confirm deletes by upload_job_id + VACUUM ANALYZE |
 | **v1.0.27** | 2026-06-09 | Reset Database enhanced — per-module scope (ALL/JO/MO/CO/IM), two-step preview with row-count + disk-size summary, TRUNCATE + VACUUM ANALYZE, password eye-toggle, yymmdd hint |

@@ -864,8 +864,8 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
 type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
 type ResetHotelStep   = 'idle' | 'loading' | 'ready' | 'previewing' | 'preview' | 'executing' | 'done';
 
-interface OrgModuleStat  { module_code: string; job_count: number; total_rows: number; }
-interface OrgEntry       { id: string; organization_code: string; organization_name: string; modules: OrgModuleStat[]; }
+interface HotelModuleStat { module_code: string; job_count: number; total_rows: number; }
+interface HotelEntry     { hotel_code: string; hotel_name: string | null; modules: HotelModuleStat[]; }
 interface UploadJobEntry {
   id: string; module_code: string; status: string; total_rows: number; created_at: string;
   hotel_code: string | null; hotel_name: string | null; source_name: string | null;
@@ -886,41 +886,41 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
   const [password, setPassword]   = useState('');
   const [showPwd, setShowPwd]     = useState(false);
   const [module, setModule]       = useState<ResetHotelModule>('ALL');
-  const [orgs, setOrgs]           = useState<OrgEntry[]>([]);
-  const [selectedOrg, setSelected]= useState('');
-  const [uploadJobs, setJobs]     = useState<UploadJobEntry[]>([]);
-  const [tables, setTables]       = useState<HotelTableStat[]>([]);
-  const [errorMsg, setErrorMsg]   = useState('');
-  const [successMsg, setSuccess]  = useState('');
+  const [hotels, setHotels]         = useState<HotelEntry[]>([]);
+  const [selectedHotel, setSelected]= useState('');
+  const [uploadJobs, setJobs]       = useState<UploadJobEntry[]>([]);
+  const [tables, setTables]         = useState<HotelTableStat[]>([]);
+  const [errorMsg, setErrorMsg]     = useState('');
+  const [successMsg, setSuccess]    = useState('');
 
   function resetToReady() {
     setStep('ready'); setJobs([]); setTables([]); setErrorMsg(''); setSuccess('');
   }
 
-  async function loadOrgs() {
+  async function loadHotels() {
     const pw = password.trim();
     if (!pw) { setErrorMsg('Password is required.'); return; }
     setStep('loading'); setErrorMsg('');
     try {
       const res  = await fetch(`/api/admin/reset-by-hotel?password=${encodeURIComponent(pw)}`);
-      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; organizations?: OrgEntry[] };
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; hotels?: HotelEntry[] };
       if (!res.ok || !body.ok) {
         setErrorMsg(body.error ?? 'Failed to load hotels — check password.');
         setStep('idle'); return;
       }
-      setOrgs(body.organizations ?? []);
-      if ((body.organizations ?? []).length > 0) setSelected(body.organizations![0].id);
+      setHotels(body.hotels ?? []);
+      if ((body.hotels ?? []).length > 0) setSelected(body.hotels![0].hotel_code);
       setStep('ready');
     } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Load failed.'); setStep('idle'); }
   }
 
   async function runPreview() {
-    if (!selectedOrg) { setErrorMsg('Select a hotel first.'); return; }
+    if (!selectedHotel) { setErrorMsg('Select a hotel first.'); return; }
     setStep('previewing'); setErrorMsg('');
     try {
       const res  = await fetch('/api/admin/reset-by-hotel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password.trim(), organization_id: selectedOrg, module, action: 'preview' }),
+        body: JSON.stringify({ password: password.trim(), hotel_code: selectedHotel, module, action: 'preview' }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean; error?: string; upload_jobs?: UploadJobEntry[]; tables?: HotelTableStat[];
@@ -938,7 +938,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
     try {
       const res  = await fetch('/api/admin/reset-by-hotel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password.trim(), organization_id: selectedOrg, module, action: 'execute' }),
+        body: JSON.stringify({ password: password.trim(), hotel_code: selectedHotel, module, action: 'execute' }),
       });
       const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
       if (!res.ok || !body.ok) {
@@ -950,8 +950,8 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
     } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Reset failed.'); setStep('preview'); }
   }
 
-  const busy          = step === 'loading' || step === 'previewing' || step === 'executing';
-  const selectedOrgEntry = orgs.find((o) => o.id === selectedOrg);
+  const busy             = step === 'loading' || step === 'previewing' || step === 'executing';
+  const selectedEntry    = hotels.find((h) => h.hotel_code === selectedHotel);
   const selectedModMeta  = HOTEL_MODULES.find((m) => m.key === module)!;
   const totalDeleteRows  = tables.reduce((s, t) => s + t.row_count, 0);
 
@@ -990,13 +990,13 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
               type={showPwd ? 'text' : 'password'}
               value={password}
               onChange={(e) => { setPassword(e.target.value); if (step !== 'idle' && step !== 'loading') resetToReady(); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && step === 'idle') void loadOrgs(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && step === 'idle') void loadHotels(); }}
               className="w-full px-3 py-2 pr-8 font-mono outline-none focus:ring-1"
               style={{
                 border: `1px solid ${pal.panelBorder}`, background: pal.inputBg, color: pal.text,
                 fontSize: '0.76rem', '--tw-ring-color': pal.accent,
               } as React.CSSProperties}
-              placeholder="Reset password  (today yymmdd)"
+              placeholder="Reset password"
               disabled={busy}
             />
             <button
@@ -1008,7 +1008,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
             </button>
           </div>
           <button
-            type="button" onClick={() => void loadOrgs()} disabled={busy || step === 'ready'}
+            type="button" onClick={() => void loadHotels()} disabled={busy || step === 'ready'}
             className="inline-flex items-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-50"
             style={{ background: pal.accent, color: pal.accentFg, fontSize: '0.68rem', letterSpacing: '0.08em' }}
           >
@@ -1034,56 +1034,43 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
             Step 2 — select hotel &amp; module
           </p>
 
-          {/* Hotel selector */}
+          {/* Hotel selector — dropdown */}
           <div className="mb-3">
-            <label className="block mb-1 font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>Hotel / Organization</label>
-            {orgs.length === 0 ? (
-              <p className="font-mono" style={{ fontSize: '0.68rem', color: pal.muted }}>No organizations found.</p>
+            <label className="block mb-1 font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>Hotel</label>
+            {hotels.length === 0 ? (
+              <p className="font-mono" style={{ fontSize: '0.68rem', color: pal.muted }}>No hotel data found.</p>
             ) : (
-              <div className="grid gap-2">
-                {orgs.map((org) => {
-                  const active = selectedOrg === org.id;
-                  const hasData = org.modules.some((m) => m.job_count > 0);
-                  return (
-                    <button
-                      key={org.id} type="button"
-                      disabled={busy}
-                      onClick={() => { setSelected(org.id); if (step === 'preview') resetToReady(); }}
-                      className="w-full text-left px-3 py-2.5 transition-opacity hover:opacity-90 disabled:opacity-50"
-                      style={{
-                        border: `1px solid ${active ? pal.danger : pal.panelBorder}`,
-                        background: active ? `${pal.danger}10` : pal.rowOdd,
-                        borderRadius: 4,
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono font-bold" style={{ fontSize: '0.72rem', color: active ? pal.danger : pal.text }}>
-                          {org.organization_code}
+              <>
+                <select
+                  value={selectedHotel}
+                  onChange={(e) => { setSelected(e.target.value); if (step === 'preview') resetToReady(); }}
+                  disabled={busy}
+                  className="w-full px-3 py-2 font-mono outline-none focus:ring-1"
+                  style={{
+                    border: `1px solid ${pal.panelBorder}`, background: pal.inputBg, color: pal.text,
+                    fontSize: '0.74rem', '--tw-ring-color': pal.accent,
+                  } as React.CSSProperties}
+                >
+                  {hotels.map((h) => (
+                    <option key={h.hotel_code} value={h.hotel_code}>
+                      {h.hotel_code}{h.hotel_name ? ` — ${h.hotel_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {/* Show module data for selected hotel */}
+                {selectedEntry && selectedEntry.modules.some((m) => m.job_count > 0) && (
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    {selectedEntry.modules.filter((m) => m.job_count > 0).map((m) => (
+                      <span key={m.module_code} className="font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
+                        <span style={{ color: HOTEL_MODULES.find((hm) => hm.key === m.module_code)?.color ?? pal.accent }}>
+                          {m.module_code}
                         </span>
-                        <span className="font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
-                          {org.organization_name}
-                        </span>
-                      </div>
-                      {/* Per-module row counts */}
-                      {hasData && (
-                        <div className="flex gap-3 mt-1.5">
-                          {org.modules.filter((m) => m.job_count > 0).map((m) => (
-                            <span key={m.module_code} className="font-mono" style={{ fontSize: '0.58rem', color: pal.muted }}>
-                              <span style={{ color: HOTEL_MODULES.find((hm) => hm.key === m.module_code)?.color ?? pal.accent }}>
-                                {m.module_code}
-                              </span>
-                              {' '}{m.job_count} job{m.job_count !== 1 ? 's' : ''} · {m.total_rows.toLocaleString()} rows
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {!hasData && (
-                        <p className="mt-1 font-mono" style={{ fontSize: '0.58rem', color: pal.muted }}>No upload data</p>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                        {' '}{m.job_count} job{m.job_count !== 1 ? 's' : ''} · {m.total_rows.toLocaleString()} rows
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1114,7 +1101,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
           {/* Preview button */}
           {(step === 'ready' || step === 'previewing') && (
             <button
-              type="button" onClick={() => void runPreview()} disabled={busy || !selectedOrg}
+              type="button" onClick={() => void runPreview()} disabled={busy || !selectedHotel}
               className="inline-flex items-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-50"
               style={{ background: pal.panelBorder, color: pal.text, fontSize: '0.68rem', letterSpacing: '0.08em', border: `1px solid ${pal.panelBorder}` }}
             >
@@ -1129,7 +1116,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
       {(step === 'preview' || step === 'executing') && (
         <div className="mt-5">
           <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: selectedModMeta.color }}>
-            Step 3 — upload history ({selectedOrgEntry?.organization_code} · {module})
+            Step 3 — upload history ({selectedEntry?.hotel_code}{selectedEntry?.hotel_name ? ` · ${selectedEntry.hotel_name}` : ''} · {module})
           </p>
 
           {/* Upload jobs history table */}
@@ -1155,7 +1142,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
                     <tr key={job.id} style={{ background: i % 2 === 0 ? pal.rowEven : pal.rowOdd }}>
                       <td className="px-3 py-1.5 font-mono font-bold whitespace-nowrap"
                         style={{ fontSize: '0.68rem', color: selectedModMeta.color }}>
-                        {job.hotel_code ?? selectedOrgEntry?.organization_code ?? '—'}
+                        {job.hotel_code ?? selectedEntry?.hotel_code ?? '—'}
                         {job.hotel_name && (
                           <span className="ml-1 font-normal" style={{ color: pal.muted, fontSize: '0.58rem' }}>
                             {job.hotel_name}

@@ -364,7 +364,9 @@ function buildCorpKpis(template: ImDashboardJson, summary: HotelSummary): ImDash
   const closureRate = total > 0 ? (completed / total) * 100 : 0;
   const backlogRate = total > 0 ? (pending / total) * 100 : 0;
   const timeoutRate = backlogRate;
-  const escalationRate = total > 0 ? ((summary.status_map['Escalated'] ?? 0) / total) * 100 : 0;
+  // For JO: kpi_05 (Escalation Rate) maps to cancelled/total; status_map['Escalated'] is never
+  // populated in JO data so use cancelled directly — same formula as recomputeJoKpis.
+  const escalationRate = total > 0 ? (cancelled / total) * 100 : 0;
   const reassignmentRate = total > 0 ? (summary.repeat_count / total) * 100 : 0;
   const avgSeverity = total > 0 ? (summary.severity_sum / total) : 0;
   const vipShare = total > 0 ? (summary.vip_total / total) * 100 : 0;
@@ -373,8 +375,8 @@ function buildCorpKpis(template: ImDashboardJson, summary: HotelSummary): ImDash
     if (k.id === 'kpi_01') return { ...k, value: total };
     if (k.id === 'kpi_02') return { ...k, value: Number(closureRate.toFixed(1)) };
     if (k.id === 'kpi_03') return { ...k, value: Number(backlogRate.toFixed(1)) };
-    if (k.id === 'kpi_04') return { ...k, value: pending };
-    if (k.id === 'kpi_05') return { ...k, value: cancelled };
+    if (k.id === 'kpi_04') return { ...k, value: Number(timeoutRate.toFixed(1)) };   // % not raw count
+    if (k.id === 'kpi_05') return { ...k, value: Number(escalationRate.toFixed(1)) }; // % not raw count
     if (k.id === 'kpi_06') return { ...k, value: Number(vipShare.toFixed(1)) };
     if (k.id === 'kpi_07') return { ...k, value: k.value === null ? null : k.value };
     if (k.id === 'kpi_08') return { ...k, value: Number(reassignmentRate.toFixed(2)) };
@@ -394,6 +396,53 @@ function sumChainKpiValue(entries: ChainEntry[], id: string): number {
     const num = Number(raw ?? 0);
     return sum + (Number.isFinite(num) ? num : 0);
   }, 0);
+}
+
+/**
+ * Corp JO KPIs — aggregate each hotel's already-correct JO KPI values with the
+ * proper weighting. Rate KPIs of the form X/total are weighted by total; SLA
+ * Compliance and resolution time (defined over completed jobs) are weighted by
+ * completed. This avoids the IM-semantics bug in buildCorpKpis, which filled
+ * JO's kpi_03 (SLA Compliance) slot with IM's Open Backlog Rate (pending/total).
+ *
+ * The template is itself a JO dashboard, so labels/units/benchmarks are already
+ * JO-correct — only the numeric values are overridden.
+ */
+function buildCorpJoKpis(template: ImDashboardJson, entries: ChainEntry[]): ImDashboardJson['kpis'] {
+  const totalSum = entries.reduce((s, e) => s + (e.summary.total ?? 0), 0);
+  const kpiVal = (e: ChainEntry, id: string): number | null => {
+    const v = e.kpis?.find((k) => k.id === id)?.value;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  // Weighted average of per-hotel KPI values; weight selector returns the denominator.
+  const wAvg = (id: string, weight: (e: ChainEntry) => number): number => {
+    let num = 0;
+    let den = 0;
+    for (const e of entries) {
+      const v = kpiVal(e, id);
+      const w = weight(e);
+      if (v !== null && w > 0) { num += v * w; den += w; }
+    }
+    return den > 0 ? num / den : 0;
+  };
+  const byTotal = (e: ChainEntry) => e.summary.total ?? 0;
+  const byCompleted = (e: ChainEntry) => e.summary.completed ?? 0;
+
+  return template.kpis.map((k) => {
+    switch (k.id) {
+      case 'kpi_01': return { ...k, value: totalSum };                                        // Total Job Orders
+      case 'kpi_02': return { ...k, value: Number(wAvg('kpi_02', byTotal).toFixed(1)) };       // Completion Rate
+      case 'kpi_03': return { ...k, value: Number(wAvg('kpi_03', byCompleted).toFixed(1)) };   // SLA Compliance
+      case 'kpi_04': return { ...k, value: Number(wAvg('kpi_04', byTotal).toFixed(1)) };       // Timeout Rate
+      case 'kpi_05': return { ...k, value: Number(wAvg('kpi_05', byTotal).toFixed(1)) };       // Escalation Rate
+      case 'kpi_06': return { ...k, value: Number(wAvg('kpi_06', byTotal).toFixed(1)) };       // Reassignment Rate
+      case 'kpi_07': return { ...k, value: Number(wAvg('kpi_07', byTotal).toFixed(2)) };       // Avg Response (min)
+      case 'kpi_08': return { ...k, value: Number(wAvg('kpi_08', byTotal).toFixed(2)) };       // P90 Response (approx)
+      case 'kpi_09': return { ...k, value: Number(wAvg('kpi_09', byCompleted).toFixed(2)) };   // Avg Resolution (min)
+      case 'kpi_10': return { ...k, value: Math.round(sumChainKpiValue(entries, 'kpi_10')), unit: 'qty', fmt: 'integer' };
+      default: return k;
+    }
+  });
 }
 
 async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Promise<{ data: DashboardJson | null; chainEntries: ChainEntry[] }> {
@@ -785,11 +834,7 @@ async function fetchCorpDashboard(chainCode?: string, moduleCode?: string): Prom
         generated_at: new Date().toISOString(),
       },
       kpis: moduleCode?.toLowerCase() === 'jo'
-        ? buildCorpKpis(imTemplate, summary).map((k) => (
-            k.id === 'kpi_10'
-              ? { ...k, value: Math.round(sumChainKpiValue(chainEntries, 'kpi_10')), unit: 'qty', fmt: 'integer' }
-              : k
-          ))
+        ? buildCorpJoKpis(imTemplate, chainEntries)
         : buildCorpKpis(imTemplate, summary),
       raw_daily: rawDaily,
       summary: enrichedSummary,

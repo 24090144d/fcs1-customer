@@ -1633,30 +1633,31 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       });
 
-      // cjo-28: Escalation Group → 24-Hour distribution
-      const chainEscGroupHour: Record<string, Record<number, number>> = {};
+      // cjo-28: Overdue Jobs by Item Category → 24-Hour distribution
+      // (escalation_group is empty in this data; group overdue jobs by item category instead)
+      const chainOverdueCatHour: Record<string, Record<number, number>> = {};
       for (const e of entries) {
-        const m = e.summary.jo_escgroup_hour_map ?? {};
-        for (const [g, hm] of Object.entries(m)) {
-          if (!chainEscGroupHour[g]) chainEscGroupHour[g] = {};
-          for (const [h, v] of Object.entries(hm)) chainEscGroupHour[g][+h] = (chainEscGroupHour[g][+h] ?? 0) + v;
+        const m = e.summary.jo_overdue_cat_hour_map ?? {};
+        for (const [c, hm] of Object.entries(m)) {
+          if (!chainOverdueCatHour[c]) chainOverdueCatHour[c] = {};
+          for (const [h, v] of Object.entries(hm)) chainOverdueCatHour[c][+h] = (chainOverdueCatHour[c][+h] ?? 0) + v;
         }
       }
-      const cjo28 = make('cjo-28', 'Escalation Group → 24-Hour Jobs Distribution', 'Escalated job count by escalation group across the chain. Click a group bar to see its 24-hour distribution.', 'COUNT(*) BY escalation_group; drilldown: COUNT(*) BY created_hour', {
+      const cjo28 = make('cjo-28', 'Overdue Jobs by Item Category → 24-Hour Jobs Distribution', 'Overdue job count (delay > 0) by service item category across the chain. Click a category bar to see its 24-hour distribution.', 'COUNT(delay > 0) BY service_item_category; drilldown: COUNT(*) BY created_hour', {
         chart: { type: 'column' },
         xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Jobs' } },
-        series: [{ type: 'column', name: 'Jobs', color: GREEN,
-          data: Object.entries(chainEscGroupHour)
-            .map(([g, hm]) => ({ name: g, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo28:${g}` }))
+        yAxis: { min: 0, title: { text: 'Overdue Jobs' } },
+        series: [{ type: 'column', name: 'Overdue Jobs', color: GREEN,
+          data: Object.entries(chainOverdueCatHour)
+            .map(([c, hm]) => ({ name: c, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo28:${c}` }))
             .sort((a, b) => b.y - a.y),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
-          series: Object.entries(chainEscGroupHour).map(([g, hm]) => ({
-            id: `cjo28:${g}`,
-            name: `${g} — 24-Hour Distribution`,
+          series: Object.entries(chainOverdueCatHour).map(([c, hm]) => ({
+            id: `cjo28:${c}`,
+            name: `${c} — 24-Hour Distribution`,
             type: 'column', color: ORANGE,
             dataLabels: { enabled: true },
             data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[h] ?? 0 })),
@@ -2813,24 +2814,6 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-1.5 font-mono uppercase transition-opacity hover:opacity-80"
-            style={{ fontSize: '0.68rem', letterSpacing: '0.08em', border: `1px solid ${themeTokens.accentAlt}55`, background: inputBg, color: themeTokens.accentAlt }}
-            aria-label="Export PDF"
-          >
-            <Printer size={12} /> {t('dashboard_ui.export_pdf', 'Export PDF').toUpperCase()}
-          </button>
-          <button
-            type="button"
-            onClick={() => document.documentElement.classList.toggle('dark')}
-            className="h-8 w-8 grid place-items-center transition-opacity hover:opacity-80"
-            style={{ border: `1px solid ${inputBd}`, background: inputBg, color: inputText }}
-            aria-label="Toggle dark mode"
-          >
-            {dark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
         </div>
       </div>
 
@@ -4030,10 +4013,89 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   const footerBd    = themeTokens.dashboard.footerBorder;
   const naText      = themeTokens.dashboard.naText;
 
+  // ── Hotel-level jo-27/jo-28: computed client-side from summary ────────────
+  // These charts are pre-built by the finalize route for NEW uploads, but
+  // existing DB rows were created before that code landed. We compute them
+  // here from data.summary so they appear even for legacy rows.
+  const hotelJo2728Charts = useMemo<ChartDef[]>(() => {
+    if (!isJo || isCorp) return [];
+    const TEAL   = '#0F766E';
+    const ORANGE = '#C2410C';
+    const hours24 = Array.from({ length: 24 }, (_, i) => i);
+    const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    const sum = data.summary as HotelSummary;
+    const out: ChartDef[] = [];
+
+    // jo-27 — only if not already in data.charts (new finalize already includes it)
+    if (!data.charts.some((c) => c.id === 'jo-27')) {
+      const sm = sum.jo_status_hour_map ?? {};
+      out.push({
+        id: 'jo-27', filterable: false,
+        title: t('chart_titles_jo.jo-27', 'Job Status → 24-Hour Jobs Distribution'),
+        note: t('chart_notes_jo.jo-27', 'Job count by status. Click a status bar to see its 24-hour distribution.'),
+        formula: 'COUNT(*) BY job_status; drilldown: COUNT(*) BY HOUR(created_datetime)',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Jobs' } },
+          series: [{ type: 'column', name: 'Jobs', color: TEAL,
+            data: Object.entries(sm)
+              .map(([s, hm]) => ({ name: s, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo27h:${s}` }))
+              .sort((a, b) => b.y - a.y),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: Object.entries(sm).map(([s, hm]) => ({
+              id: `jo27h:${s}`,
+              name: `${s} — 24-Hour Distribution`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: hours24.map((h) => ({ name: hl(h), y: (hm as Record<string, number>)[String(h)] ?? 0 })),
+            })),
+          },
+        },
+      });
+    }
+
+    // jo-28 — overdue jobs by item category (escalation_group is empty in this data)
+    if (!data.charts.some((c) => c.id === 'jo-28')) {
+      const om = sum.jo_overdue_cat_hour_map ?? {};
+      out.push({
+        id: 'jo-28', filterable: false,
+        title: t('chart_titles_jo.jo-28', 'Overdue Jobs by Item Category → 24-Hour Jobs Distribution'),
+        note: t('chart_notes_jo.jo-28', 'Overdue job count (delay > 0) by service item category. Click a category bar to see its 24-hour distribution.'),
+        formula: 'COUNT(delay > 0) BY service_item_category; drilldown: COUNT(*) BY HOUR(created_datetime)',
+        options: {
+          chart: { type: 'column' },
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Overdue Jobs' } },
+          series: [{ type: 'column', name: 'Overdue Jobs', color: TEAL,
+            data: Object.entries(om)
+              .map(([c, hm]) => ({ name: c, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo28h:${c}` }))
+              .sort((a, b) => b.y - a.y),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: Object.entries(om).map(([c, hm]) => ({
+              id: `jo28h:${c}`,
+              name: `${c} — 24-Hour Distribution`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: hours24.map((h) => ({ name: hl(h), y: (hm as Record<string, number>)[String(h)] ?? 0 })),
+            })),
+          },
+        },
+      });
+    }
+    return out;
+  }, [isJo, isCorp, data.summary, data.charts, t]);
+
   // Partition core charts
   const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
   const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
-  const operationalCharts = isJo ? localizedCharts : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
+  const operationalCharts = isJo ? [...localizedCharts, ...hotelJo2728Charts] : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
   const comparisonCharts = isJo ? [] : localizedCharts.filter(c => {
     if (isCorp && CORP_IM_TOP_IDS.has(c.id)) return false;
     return IM_COMPARISON_IDS.has(c.id);
@@ -4200,21 +4262,6 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
             </div>
           )}
 
-          <button
-            type="button" onClick={() => window.print()}
-            className="flex items-center gap-1.5 font-mono px-3 py-1.5 transition-opacity hover:opacity-75"
-            style={{ fontSize: '0.68rem', letterSpacing: '0.06em', color: orange, border: `1px solid ${orange}33` }}
-          >
-            <Printer size={12} /> {t('dashboard_ui.export_pdf', 'Export PDF').toUpperCase()}
-          </button>
-          <button
-            type="button" onClick={() => document.documentElement.classList.toggle('dark')}
-            className="p-1.5 transition-opacity hover:opacity-75"
-            style={{ color: metaSub, border: `1px solid ${toolbarBd}` }}
-            aria-label={t('dashboard_ui.toggle_dark_mode', 'Toggle dark mode')}
-          >
-            {dark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
         </div>
       </div>
 

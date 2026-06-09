@@ -1348,8 +1348,10 @@ interface JoKpiAcc {
   hourItemCount:    Record<number, Record<string, number>>;
   // ── jo-27: job status → hour → count ─────────────────────────────────────
   statusHourMap:    Record<string, Record<number, number>>;
-  // ── jo-28: escalation group → hour → count ───────────────────────────────
+  // ── jo-28 (legacy): escalation group → hour → count ──────────────────────
   escGroupHourMap:  Record<string, Record<number, number>>;
+  // ── jo-28: overdue (delay > 0) item category → hour → count ──────────────
+  overdueCatHourMap: Record<string, Record<number, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1399,6 +1401,7 @@ function newJoKpiAcc(): JoKpiAcc {
     hourItemCount: {},
     statusHourMap: {},
     escGroupHourMap: {},
+    overdueCatHourMap: {},
   };
 }
 
@@ -1557,11 +1560,17 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
     if (!acc.statusHourMap[status]) acc.statusHourMap[status] = {};
     acc.statusHourMap[status][createdHour] = (acc.statusHourMap[status][createdHour] ?? 0) + 1;
 
-    // jo-28: escalation group → hour (non-empty escalation_group only)
+    // jo-28 (legacy): escalation group → hour (escalation_group is empty in current data)
     const escGroupRaw = (toStr(rr.escalation_group) ?? '').trim();
     if (escGroupRaw) {
       if (!acc.escGroupHourMap[escGroupRaw]) acc.escGroupHourMap[escGroupRaw] = {};
       acc.escGroupHourMap[escGroupRaw][createdHour] = (acc.escGroupHourMap[escGroupRaw][createdHour] ?? 0) + 1;
+    }
+
+    // jo-28: overdue jobs (delay > 0) → item category → hour
+    if (delayMin !== null && delayMin > 0) {
+      if (!acc.overdueCatHourMap[category]) acc.overdueCatHourMap[category] = {};
+      acc.overdueCatHourMap[category][createdHour] = (acc.overdueCatHourMap[category][createdHour] ?? 0) + 1;
     }
   }
   // ── VIP 24-hour accumulation (cjo-22) ─────────────────────────────────────
@@ -1884,27 +1893,27 @@ function buildJo24HourCharts(jo: JoKpiAcc): ChartDef[] {
     },
   };
 
-  // jo-28: Escalation Group → 24-Hour distribution
+  // jo-28: Overdue Jobs by Item Category → 24-Hour distribution
   const jo28: ChartDef = {
     id: 'jo-28', filterable: false,
-    title: 'Escalation Group → 24-Hour Jobs Distribution',
-    note: 'Escalated job count by escalation group. Click a group bar to see its 24-hour distribution.',
-    formula: 'COUNT(*) BY escalation_group; drilldown: COUNT(*) BY HOUR(created_datetime)',
+    title: 'Overdue Jobs by Item Category → 24-Hour Jobs Distribution',
+    note: 'Overdue job count (delay > 0) by service item category. Click a category bar to see its 24-hour distribution.',
+    formula: 'COUNT(delay > 0) BY service_item_category; drilldown: COUNT(*) BY HOUR(created_datetime)',
     options: {
       chart: { type: 'column' },
       xAxis: { type: 'category' },
-      yAxis: { min: 0, title: { text: 'Jobs' } },
-      series: [{ type: 'column', name: 'Jobs', color: TEAL,
-        data: Object.entries(jo.escGroupHourMap)
-          .map(([g, hm]) => ({ name: g, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo28:${g}` }))
+      yAxis: { min: 0, title: { text: 'Overdue Jobs' } },
+      series: [{ type: 'column', name: 'Overdue Jobs', color: TEAL,
+        data: Object.entries(jo.overdueCatHourMap)
+          .map(([c, hm]) => ({ name: c, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `jo28:${c}` }))
           .sort((a, b) => b.y - a.y),
         dataLabels: { enabled: true },
       }],
       plotOptions: { column: { dataLabels: { enabled: true } } },
       drilldown: {
-        series: Object.entries(jo.escGroupHourMap).map(([g, hm]) => ({
-          id: `jo28:${g}`,
-          name: `${g} — 24-Hour Distribution`,
+        series: Object.entries(jo.overdueCatHourMap).map(([c, hm]) => ({
+          id: `jo28:${c}`,
+          name: `${c} — 24-Hour Distribution`,
           type: 'column', color: ORANGE,
           dataLabels: { enabled: true },
           data: hours24.map((h) => ({ name: hourLabels[h], y: hm[h] ?? 0 })),
@@ -2385,8 +2394,9 @@ export async function POST(req: NextRequest) {
     // jo-27/jo-28: status/escgroup → hour maps
     const s2m = (m: Record<string, Record<number, number>>) =>
       Object.fromEntries(Object.entries(m).map(([k, hm]) => [k, Object.fromEntries(Object.entries(hm).map(([h, v]) => [h, v]))]));
-    generatedJson.summary.jo_status_hour_map   = s2m(joKpiAcc.statusHourMap);
-    generatedJson.summary.jo_escgroup_hour_map = s2m(joKpiAcc.escGroupHourMap);
+    generatedJson.summary.jo_status_hour_map      = s2m(joKpiAcc.statusHourMap);
+    generatedJson.summary.jo_escgroup_hour_map    = s2m(joKpiAcc.escGroupHourMap);
+    generatedJson.summary.jo_overdue_cat_hour_map = s2m(joKpiAcc.overdueCatHourMap);
     // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
       Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [

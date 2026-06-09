@@ -104,8 +104,10 @@ export interface HotelSummary {
   jo_hour_sla_cat_comp_map?:   Record<string, Record<string, number>>;        // hour → cat → compliant count
   // jo-27/cjo-27: job status → hour → count
   jo_status_hour_map?:   Record<string, Record<string, number>>;
-  // jo-28/cjo-28: escalation group → hour → count
+  // jo-28/cjo-28 (legacy): escalation group → hour → count (field empty in current data)
   jo_escgroup_hour_map?: Record<string, Record<string, number>>;
+  // jo-28/cjo-28: overdue jobs (delay > 0) → item category → hour → count
+  jo_overdue_cat_hour_map?: Record<string, Record<string, number>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

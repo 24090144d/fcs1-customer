@@ -83,7 +83,8 @@ function computeHourMaps(rows) {
   const hourSlaCatTotal    = {};
   const hourSlaCatComp     = {};
   const statusHourMap      = {};   // jo-27: status → hour → count
-  const escGroupHourMap    = {};   // jo-28: escalation_group → hour → count
+  const escGroupHourMap    = {};   // jo-28 (legacy): escalation_group → hour → count
+  const overdueCatHourMap  = {};   // jo-28: overdue-job item category → hour → count (delay > 0)
 
   for (const row of rows) {
     const status       = row.job_status ?? '';
@@ -151,11 +152,17 @@ function computeHourMaps(rows) {
     if (!statusHourMap[statusKey]) statusHourMap[statusKey] = {};
     statusHourMap[statusKey][h] = (statusHourMap[statusKey][h] ?? 0) + 1;
 
-    // jo-28: escalation group → hour (non-empty only)
+    // jo-28 (legacy): escalation group → hour (non-empty only; field is empty in current data)
     const escGroupKey = (escGroup ?? '').toString().trim();
     if (escGroupKey) {
       if (!escGroupHourMap[escGroupKey]) escGroupHourMap[escGroupKey] = {};
       escGroupHourMap[escGroupKey][h] = (escGroupHourMap[escGroupKey][h] ?? 0) + 1;
+    }
+
+    // jo-28: overdue jobs (delay > 0) → item category → hour
+    if (delayMin !== null && delayMin > 0) {
+      if (!overdueCatHourMap[category]) overdueCatHourMap[category] = {};
+      overdueCatHourMap[category][h] = (overdueCatHourMap[category][h] ?? 0) + 1;
     }
   }
 
@@ -171,6 +178,7 @@ function computeHourMaps(rows) {
     jo_hour_sla_cat_comp_map:   hourSlaCatComp,
     jo_status_hour_map:         statusHourMap,
     jo_escgroup_hour_map:       escGroupHourMap,
+    jo_overdue_cat_hour_map:    overdueCatHourMap,
   };
 }
 

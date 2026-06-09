@@ -612,9 +612,9 @@
     "cjo-25": "🟢 24-Hour Escalated Jobs → Overdue Duration Distribution",
     "cjo-26": "🟢 24-Hour Jobs Distribution → Top Item Category",
     "jo-27": "🟣 Job Status → 24-Hour Jobs Distribution",
-    "jo-28": "🟣 Escalation Group → 24-Hour Jobs Distribution",
+    "jo-28": "🟣 Overdue Jobs by Item Category → 24-Hour Jobs Distribution",
     "cjo-27": "🟢 Job Status → 24-Hour Jobs Distribution",
-    "cjo-28": "🟢 Escalation Group → 24-Hour Jobs Distribution"
+    "cjo-28": "🟢 Overdue Jobs by Item Category → 24-Hour Jobs Distribution"
   },
   "chart_notes_jo": {
     "hjo01": "Animated cumulative weekly donut race showing long-run share shifts by service category. Impact: sustained cumulative dominance reveals structural demand pressure points. Resolution: rebalance capacity plans, inventory, and preventive actions toward categories with persistent cumulative growth.",
@@ -714,9 +714,9 @@
     "cjo-25": "Escalated job volume by hour of day across the chain. Click a bar to see the overdue duration range (mins) distribution for that hour.",
     "cjo-26": "Total job volume by hour of day across the chain. Click a bar to see the top service item categories for that hour.",
     "jo-27": "Job count by status. Click a status bar to drill into its 24-hour distribution.",
-    "jo-28": "Job count by escalation group. Click a group bar to drill into its 24-hour distribution.",
+    "jo-28": "Overdue job count (delay > 0) by service item category. Click a category bar to drill into its 24-hour distribution.",
     "cjo-27": "Job count by status across the chain. Click a status bar to drill into its 24-hour distribution.",
-    "cjo-28": "Job count by escalation group across the chain. Click a group bar to drill into its 24-hour distribution."
+    "cjo-28": "Overdue job count (delay > 0) by service item category across the chain. Click a category bar to drill into its 24-hour distribution."
   },
   "chart_titles_co": {
     "co-01": "🟣 Cleaning Status -> Room Type",

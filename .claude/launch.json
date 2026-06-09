@@ -2,16 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Next.js Dev",
+      "name": "fcs1-customer (dev)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "port": 3010,
+      "autoPort": false
     },
     {
-      "name": "Next.js Production",
+      "name": "fcs1-customer (start)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],
-      "port": 3000
+      "port": 3010,
+      "autoPort": false
     }
   ]
 }

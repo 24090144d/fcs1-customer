@@ -1324,14 +1324,14 @@ export default function ConfigurationPage() {
                   key={key}
                   type="button"
                   onClick={() => setTab(key)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 font-mono uppercase whitespace-nowrap transition-colors"
+                  className="inline-flex items-center gap-1.5 px-4 py-3 font-mono uppercase whitespace-nowrap transition-colors"
                   style={{
                     fontSize: '0.65rem',
                     letterSpacing: '0.08em',
                     color: isActive ? pal.accent : pal.muted,
                     background: isActive ? `${pal.accent}12` : 'transparent',
-                    borderBottom: isActive ? `2px solid ${pal.accent}` : '2px solid transparent',
-                    marginBottom: -2,
+                    borderBottom: isActive ? `3px solid ${pal.accent}` : '3px solid transparent',
+                    marginBottom: -3,
                     borderRadius: '3px 3px 0 0',
                   }}
                 >

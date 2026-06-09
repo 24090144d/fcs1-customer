@@ -1386,26 +1386,65 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       const GREEN  = '#0F766E';
       const ORANGE = '#C2410C';
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
-      const delayedPerHotel = entries.map((e) => {
-        const hm = e.summary.jo_hour_delayed_map ?? {};
-        return Object.values(hm).reduce((s, v) => s + (v as number), 0);
-      });
+      // derive per-hotel hour→count from jo_overdue_cat_hour_map (available in stored summaries)
+      const getDelayHourMap = (e: typeof entries[0]): Record<string, number> => {
+        const catMap = e.summary.jo_overdue_cat_hour_map ?? {};
+        const result: Record<string, number> = {};
+        for (const hm of Object.values(catMap)) {
+          for (const [h, v] of Object.entries(hm)) {
+            result[h] = (result[h] ?? 0) + (v as number);
+          }
+        }
+        return result;
+      };
+      const delayedPerHotel = entries.map((e) => Object.values(getDelayHourMap(e)).reduce((s, v) => s + v, 0));
       return {
-        chart: { type: 'bar' },
+        chart: { type: 'column' },
         xAxis: { categories: hotelCodes },
         yAxis: { min: 0, title: { text: 'Delayed Jobs' } },
         series: [{
-          type: 'bar', name: 'Delayed Jobs', color: GREEN,
+          type: 'column', name: 'Delayed Jobs', color: GREEN,
           data: entries.map((e, i) => ({ name: e.hotel_code, y: delayedPerHotel[i], drilldown: `cjo12:${e.hotel_code}` })),
           dataLabels: { enabled: true },
         }],
-        plotOptions: { bar: { dataLabels: { enabled: true } } },
+        plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
           series: entries.map((e) => {
-            const hm = e.summary.jo_hour_delayed_map ?? {};
+            const hm = getDelayHourMap(e);
             return {
               id: `cjo12:${e.hotel_code}`,
               name: `${e.hotel_code} — Delayed by Hour`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[String(h)] ?? 0 })),
+            };
+          }),
+        },
+      };
+    })()),
+    make('cjo-13', 'Completed Status by Hotel → 24-Hour Completed Job Distribution', 'Completed job count per hotel. Click a bar to see its 24-hour completed job distribution.', '', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
+      const compPerHotel = entries.map((e) => {
+        const hm = e.summary.jo_hour_comp_map ?? {};
+        return Object.values(hm).reduce((s, v) => s + (v as number), 0);
+      });
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Completed Jobs' } },
+        series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
+          data: entries.map((e, i) => ({ name: e.hotel_code, y: compPerHotel[i], drilldown: `cjo13:${e.hotel_code}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const hm = e.summary.jo_hour_comp_map ?? {};
+            return {
+              id: `cjo13:${e.hotel_code}`,
+              name: `${e.hotel_code} — Completed by Hour`,
               type: 'column', color: ORANGE,
               dataLabels: { enabled: true },
               data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: (hm[String(h)] ?? 0) as number })),
@@ -1414,12 +1453,47 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       };
     })()),
-    make('cjo-13', 'Completion Trend by Week across Chain', 'Chain-level weekly completion trend.', 'completed_jobs / total_jobs * 100 BY created_week', {
-      chart: { type: 'line' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Completion %' } }, series: [{ type: 'line', name: 'Completion %', data: weeklyCompletion }],
-    }),
-    make('cjo-14', 'Timeout Trend by Week across Chain', 'Chain-level weekly timeout trend.', 'timeout_jobs / total_jobs * 100 BY created_week', {
-      chart: { type: 'column' }, xAxis: { categories: weeks }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: weeklyTimeout }],
-    }),
+    make('cjo-14', 'Timeout Status by Hotel → 24-Hour Timeout Job Distribution', 'Timeout job count per hotel. Click a bar to see its 24-hour timeout job distribution.', '', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
+      // derive per-hotel hour→count from jo_status_hour_map (timeout statuses)
+      const getTimeoutHourMap = (e: typeof entries[0]): Record<string, number> => {
+        const sm = e.summary.jo_status_hour_map ?? {};
+        const result: Record<string, number> = {};
+        for (const [status, hm] of Object.entries(sm)) {
+          if (status.toLowerCase().includes('timeout')) {
+            for (const [h, v] of Object.entries(hm)) {
+              result[h] = (result[h] ?? 0) + (v as number);
+            }
+          }
+        }
+        return result;
+      };
+      const timeoutPerHotel = entries.map((e) => Object.values(getTimeoutHourMap(e)).reduce((s, v) => s + v, 0));
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Timeout Jobs' } },
+        series: [{ type: 'column', name: 'Timeout Jobs', color: GREEN,
+          data: entries.map((e, i) => ({ name: e.hotel_code, y: timeoutPerHotel[i], drilldown: `cjo14:${e.hotel_code}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const hm = getTimeoutHourMap(e);
+            return {
+              id: `cjo14:${e.hotel_code}`,
+              name: `${e.hotel_code} — Timeout by Hour`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[String(h)] ?? 0 })),
+            };
+          }),
+        },
+      };
+    })()),
     make('cjo-15', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: statusKeys.map((status) => ({ type: 'column', name: status, data: entries.map((e) => e.summary.status_map?.[status] ?? 0) })),
     }),

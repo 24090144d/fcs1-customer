@@ -110,6 +110,8 @@ export interface HotelSummary {
   jo_overdue_cat_hour_map?: Record<string, Record<string, number>>;
   // cjo-12: delayed jobs (delay > 0) → hour → count (per hotel, for 24-h drilldown)
   jo_hour_delayed_map?:     Record<string, number>;
+  // cjo-14: timeout jobs → hour → count (per hotel, for 24-h drilldown)
+  jo_hour_timeout_map?:     Record<string, number>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

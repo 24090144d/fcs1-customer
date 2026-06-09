@@ -1354,6 +1354,8 @@ interface JoKpiAcc {
   overdueCatHourMap: Record<string, Record<number, number>>;
   // ── cjo-12: delayed jobs (delay > 0) → hour → count ──────────────────────
   hourDelayed: Record<number, number>;
+  // ── cjo-14: timeout jobs → hour → count ───────────────────────────────────
+  hourTimeout: Record<number, number>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1405,6 +1407,7 @@ function newJoKpiAcc(): JoKpiAcc {
     escGroupHourMap: {},
     overdueCatHourMap: {},
     hourDelayed: {},
+    hourTimeout: {},
   };
 }
 
@@ -1579,6 +1582,11 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
     // cjo-12: delayed jobs (delay > 0) → hour (per-hotel for corp drilldown)
     if (delayMin !== null && delayMin > 0) {
       acc.hourDelayed[createdHour] = (acc.hourDelayed[createdHour] ?? 0) + 1;
+    }
+
+    // cjo-14: timeout jobs → hour (per-hotel for corp drilldown)
+    if (timeoutFlag) {
+      acc.hourTimeout[createdHour] = (acc.hourTimeout[createdHour] ?? 0) + 1;
     }
   }
   // ── VIP 24-hour accumulation (cjo-22) ─────────────────────────────────────
@@ -2406,6 +2414,7 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escgroup_hour_map    = s2m(joKpiAcc.escGroupHourMap);
     generatedJson.summary.jo_overdue_cat_hour_map = s2m(joKpiAcc.overdueCatHourMap);
     generatedJson.summary.jo_hour_delayed_map     = h2s(joKpiAcc.hourDelayed);
+    generatedJson.summary.jo_hour_timeout_map     = h2s(joKpiAcc.hourTimeout);
     // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
       Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [

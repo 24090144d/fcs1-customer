@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.26** (as of 2026-06-09) |
+| Version | **v1.0.27** (as of 2026-06-09) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.27** | 2026-06-09 | Reset Database enhanced — per-module scope (ALL/JO/MO/CO/IM), two-step preview with row-count + disk-size summary, TRUNCATE + VACUUM ANALYZE, password eye-toggle, yymmdd hint |
 | **v1.0.26** | 2026-06-09 | Corp JO KPIs fixed (buildCorpJoKpis — weighted avg of hotel JO values); jo-28/cjo-28 redesigned to Overdue Jobs by Item Category → 24-hour drilldown; hotel jo-27/jo-28 client-side injection; duplicate EXPORT PDF + dark-mode buttons removed from MO/IM/JO inline toolbars |
 | **v1.0.25** | 2026-06-08 | BV config panel for all modules; `lib/dash-config-defs.ts` added to git; cco_chart_14 → Top Attendant Credit treemap; cco_chart_21 manual click-to-treemap (← Back button); emoji prefixes for JO/MO/IM i18n; chart_bv_jo/mo/im sections in all 4 lang files |
 | v1.0.24 | 2026-06-07 | CO tables restored; version bump after merge conflict |

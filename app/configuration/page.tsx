@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   ChevronDown,
   Database,
+  Eye,
+  EyeOff,
   RotateCcw,
   BarChart2,
   Wrench,
@@ -520,59 +522,129 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
 // Reset Database panel (System tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetStatus = 'idle' | 'running' | 'success' | 'error';
+type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetStep   = 'form' | 'previewing' | 'preview' | 'executing' | 'done';
+
+interface TableStat {
+  table_name: string;
+  label: string;
+  row_count: number;
+  size: string;
+  size_bytes: number;
+}
 
 interface ResetPanelProps {
   pal: Palette;
   t: (path: string, fallback?: string) => string;
 }
 
+const RESET_MODULES: { key: ResetModule; label: string; color: string }[] = [
+  { key: 'ALL', label: 'ALL',  color: '#C55A10' },
+  { key: 'JO',  label: 'JO',  color: '#2563EB' },
+  { key: 'MO',  label: 'MO',  color: '#059669' },
+  { key: 'CO',  label: 'CO',  color: '#7C3AED' },
+  { key: 'IM',  label: 'IM',  color: '#B45309' },
+];
+
 function ResetPanel({ pal, t }: ResetPanelProps) {
-  const [password, setPassword] = useState('');
-  const [status, setStatus]     = useState<ResetStatus>('idle');
-  const [message, setMessage]   = useState('');
+  const [module, setModule]         = useState<ResetModule>('ALL');
+  const [password, setPassword]     = useState('');
+  const [showPwd, setShowPwd]       = useState(false);
+  const [step, setStep]             = useState<ResetStep>('form');
+  const [preview, setPreview]       = useState<TableStat[]>([]);
+  const [errorMsg, setErrorMsg]     = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  async function resetDatabase() {
+  function resetForm() {
+    setStep('form');
+    setPreview([]);
+    setErrorMsg('');
+    setSuccessMsg('');
+  }
+
+  function handleModuleChange(m: ResetModule) {
+    setModule(m);
+    resetForm();
+  }
+
+  function handlePasswordChange(v: string) {
+    setPassword(v);
+    if (step !== 'previewing' && step !== 'executing') resetForm();
+  }
+
+  async function runPreview() {
     const trimmed = password.trim();
-    if (!trimmed) {
-      setStatus('error');
-      setMessage(t('configuration.reset_password_empty', 'Password is required.'));
-      return;
-    }
-    const confirmed = window.confirm(
-      `${t('configuration.reset_confirm_title', 'Reset Database?')}\n\n${t('configuration.reset_confirm_body', 'This will truncate all uploaded data and keep the schema. Continue?')}`,
-    );
-    if (!confirmed) return;
-
-    setStatus('running');
-    setMessage(t('configuration.reset_running', 'Resetting database...'));
+    if (!trimmed) { setErrorMsg('Password is required.'); return; }
+    setStep('previewing');
+    setErrorMsg('');
     try {
-      const res = await fetch('/api/admin/reset-database', {
-        method: 'POST',
+      const res  = await fetch('/api/admin/reset-database', {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: trimmed }),
+        body:    JSON.stringify({ password: trimmed, module, action: 'preview' }),
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-      if (!res.ok) {
-        setStatus('error');
-        setMessage(body.error ?? t('configuration.reset_failed', 'Reset failed.'));
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; error?: string; tables?: TableStat[];
+      };
+      if (!res.ok || !body.ok) {
+        setErrorMsg(body.error ?? 'Preview failed — check password.');
+        setStep('form');
         return;
       }
-      setStatus('success');
-      setPassword('');
-      setMessage(body.message ?? t('configuration.reset_success', 'Database reset completed.'));
-      window.setTimeout(() => { window.location.href = '/onboarding'; }, 900);
-    } catch (error) {
-      setStatus('error');
-      setMessage(error instanceof Error ? error.message : t('configuration.reset_failed', 'Reset failed.'));
+      setPreview(body.tables ?? []);
+      setStep('preview');
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Preview failed.');
+      setStep('form');
     }
   }
+
+  async function runExecute() {
+    const trimmed = password.trim();
+    setStep('executing');
+    setErrorMsg('');
+    try {
+      const res  = await fetch('/api/admin/reset-database', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ password: trimmed, module, action: 'execute' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; error?: string; message?: string;
+      };
+      if (!res.ok || !body.ok) {
+        setErrorMsg(body.error ?? 'Reset failed.');
+        setStep('preview');
+        return;
+      }
+      setSuccessMsg(body.message ?? 'Reset completed.');
+      setPassword('');
+      setStep('done');
+      if (module === 'ALL') {
+        window.setTimeout(() => { window.location.href = '/onboarding'; }, 1400);
+      }
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Reset failed.');
+      setStep('preview');
+    }
+  }
+
+  const busy         = step === 'previewing' || step === 'executing';
+  const totalRows    = preview.reduce((s, r) => s + r.row_count, 0);
+  const totalBytes   = preview.reduce((s, r) => s + r.size_bytes, 0);
+  const fmtBytes     = (b: number) =>
+    b >= 1_048_576 ? `${(b / 1_048_576).toFixed(1)} MB`
+    : b >= 1024    ? `${(b / 1024).toFixed(0)} kB`
+    : `${b} B`;
+
+  const selectedMeta = RESET_MODULES.find((m) => m.key === module)!;
 
   return (
     <section
       className="max-w-3xl p-5"
       style={{ background: pal.panelBg, border: `1px solid ${pal.panelBorder}`, borderRadius: 6 }}
     >
+      {/* Header */}
       <div className="flex items-start gap-3">
         <div
           className="mt-0.5 h-9 w-9 shrink-0 grid place-items-center"
@@ -587,60 +659,197 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
           <p className="mt-1 text-sm leading-6" style={{ color: pal.muted }}>
             {t(
               'configuration.reset_description',
-              'Truncate uploaded records and generated dashboard data while keeping the current database schema.',
+              'Truncate uploaded records and generated dashboard data while keeping the current database schema. Tables are vacuumed after truncation to reclaim disk space.',
             )}
           </p>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-            if (status !== 'running') { setStatus('idle'); setMessage(''); }
-          }}
-          onKeyDown={(e) => { if (e.key === 'Enter') void resetDatabase(); }}
-          className="w-full px-3 py-2 font-mono outline-none focus:ring-1"
-          style={{
-            border: `1px solid ${pal.panelBorder}`,
-            background: pal.inputBg,
-            color: pal.text,
-            fontSize: '0.76rem',
-            '--tw-ring-color': pal.accent,
-          } as React.CSSProperties}
-          placeholder={t('configuration.reset_password_placeholder', 'Reset password')}
-          disabled={status === 'running'}
-        />
-        <button
-          type="button"
-          onClick={() => void resetDatabase()}
-          disabled={status === 'running'}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-60"
-          style={{ background: pal.danger, color: '#FAF7F2', fontSize: '0.68rem', letterSpacing: '0.08em' }}
-        >
-          <RotateCcw size={13} className={status === 'running' ? 'animate-spin' : ''} />
-          {status === 'running'
-            ? t('configuration.reset_running_button', 'Resetting')
-            : t('configuration.reset_button', 'Reset')}
-        </button>
+      {/* Module selector */}
+      <div className="mt-5">
+        <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: pal.muted }}>
+          Reset scope
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {RESET_MODULES.map(({ key, label, color }) => {
+            const active = module === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                disabled={busy}
+                onClick={() => handleModuleChange(key)}
+                className="px-3 py-1 font-mono transition-opacity hover:opacity-85 disabled:opacity-50"
+                style={{
+                  fontSize:        '0.68rem',
+                  letterSpacing:   '0.08em',
+                  border:          `1px solid ${active ? color : pal.panelBorder}`,
+                  background:      active ? `${color}22` : 'transparent',
+                  color:           active ? color : pal.muted,
+                  fontWeight:      active ? 700 : 400,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
+          {module === 'ALL'
+            ? 'Clears all module tables + shared tables (organizations, upload jobs, files, settings)'
+            : `Clears only ${module} records, staging rows, and dashboard cache`}
+        </p>
       </div>
 
-      {message && (
+      {/* Password row */}
+      <div className="mt-4 flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type={showPwd ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => handlePasswordChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && step === 'form') void runPreview(); }}
+            className="w-full px-3 py-2 pr-8 font-mono outline-none focus:ring-1"
+            style={{
+              border:            `1px solid ${pal.panelBorder}`,
+              background:        pal.inputBg,
+              color:             pal.text,
+              fontSize:          '0.76rem',
+              '--tw-ring-color': pal.accent,
+            } as React.CSSProperties}
+            placeholder="Reset password  (today yymmdd)"
+            disabled={busy}
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setShowPwd((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-80"
+            style={{ color: pal.muted }}
+          >
+            {showPwd ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+        </div>
+
+        {(step === 'form' || step === 'previewing') && (
+          <button
+            type="button"
+            onClick={() => void runPreview()}
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-60"
+            style={{ background: pal.accent, color: pal.accentFg, fontSize: '0.68rem', letterSpacing: '0.08em' }}
+          >
+            <Database size={12} className={step === 'previewing' ? 'animate-pulse' : ''} />
+            {step === 'previewing' ? 'Loading…' : 'Preview'}
+          </button>
+        )}
+
+        {(step === 'preview' || step === 'executing') && (
+          <button
+            type="button"
+            onClick={() => resetForm()}
+            disabled={busy}
+            className="px-3 py-2 font-mono uppercase transition-opacity hover:opacity-75 disabled:opacity-40"
+            style={{ border: `1px solid ${pal.panelBorder}`, color: pal.muted, fontSize: '0.62rem', letterSpacing: '0.06em' }}
+          >
+            ← Back
+          </button>
+        )}
+      </div>
+
+      {/* Error message */}
+      {errorMsg && (
+        <div
+          className="mt-3 flex items-start gap-2 px-3 py-2"
+          style={{ border: `1px solid ${pal.danger}55`, background: `${pal.danger}12`, color: pal.danger }}
+        >
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Preview summary table */}
+      {(step === 'preview' || step === 'executing') && preview.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: selectedMeta.color }}>
+            ⚠ Reset summary — {module} scope — {preview.length} table{preview.length !== 1 ? 's' : ''}
+          </p>
+          <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: pal.headerBg }}>
+                {['Table', 'Rows', 'Size'].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-3 py-1.5 font-mono uppercase"
+                    style={{ fontSize: '0.58rem', letterSpacing: '0.08em', color: pal.muted }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.map((r, i) => (
+                <tr
+                  key={r.table_name}
+                  style={{ background: i % 2 === 0 ? pal.rowEven : pal.rowOdd }}
+                >
+                  <td className="px-3 py-1.5 font-mono" style={{ fontSize: '0.69rem', color: pal.text }}>
+                    {r.label}
+                    <span style={{ color: pal.muted, marginLeft: 6, fontSize: '0.58rem' }}>({r.table_name})</span>
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-right" style={{ fontSize: '0.69rem', color: r.row_count > 0 ? pal.danger : pal.muted }}>
+                    {r.row_count.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-right" style={{ fontSize: '0.69rem', color: pal.muted }}>
+                    {r.size}
+                  </td>
+                </tr>
+              ))}
+              {/* Totals row */}
+              <tr style={{ background: pal.headerBg, borderTop: `1px solid ${pal.panelBorder}` }}>
+                <td className="px-3 py-1.5 font-mono uppercase" style={{ fontSize: '0.6rem', letterSpacing: '0.07em', color: pal.muted }}>
+                  Total
+                </td>
+                <td className="px-3 py-1.5 font-mono text-right font-bold" style={{ fontSize: '0.69rem', color: totalRows > 0 ? pal.danger : pal.muted }}>
+                  {totalRows.toLocaleString()}
+                </td>
+                <td className="px-3 py-1.5 font-mono text-right" style={{ fontSize: '0.69rem', color: pal.muted }}>
+                  {fmtBytes(totalBytes)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* Confirm button */}
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void runExecute()}
+              disabled={step === 'executing'}
+              className="inline-flex items-center gap-2 px-5 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-60"
+              style={{ background: selectedMeta.color, color: '#FAF7F2', fontSize: '0.68rem', letterSpacing: '0.08em' }}
+            >
+              <RotateCcw size={13} className={step === 'executing' ? 'animate-spin' : ''} />
+              {step === 'executing' ? 'Resetting…' : `Confirm Reset ${module}`}
+            </button>
+            <p className="font-mono" style={{ fontSize: '0.6rem', color: pal.muted }}>
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Success */}
+      {step === 'done' && (
         <div
           className="mt-4 flex items-start gap-2 px-3 py-2"
-          style={{
-            border: `1px solid ${status === 'success' ? pal.accent : pal.danger}55`,
-            background: status === 'success' ? `${pal.accent}14` : `${pal.danger}12`,
-            color: status === 'success' ? pal.accent : pal.danger,
-          }}
+          style={{ border: `1px solid ${pal.accent}55`, background: `${pal.accent}14`, color: pal.accent }}
         >
-          {status === 'success'
-            ? <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
-            : <AlertTriangle size={14} className="mt-0.5 shrink-0" />}
+          <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
           <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>
-            {message}
+            {successMsg}
+            {module === 'ALL' && ' Redirecting to onboarding…'}
           </p>
         </div>
       )}

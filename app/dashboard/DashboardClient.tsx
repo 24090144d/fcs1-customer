@@ -1367,9 +1367,37 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    make('cjo-07', 'Reassignment Rate by Hotel', 'Reassignment comparison for triage quality.', 'reassigned_jobs / total_jobs * 100 BY hotel_code', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Reassignment %' } }, series: [{ type: 'column', name: 'Reassignment %', data: reassignmentRate }],
-    }),
+    // cjo-07: Total Jobs by Hotel → Top Service Items drilldown
+    make('cjo-07', 'Top Service Items by Hotel', 'Total job volume per hotel. Click a hotel bar to see its top service items.', 'COUNT(*) BY hotel_code; drilldown: TOP 10 item BY hotel_code', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const TOP_N  = 10;
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: hotelCodes },
+        yAxis: { min: 0, title: { text: 'Total Jobs' } },
+        series: [{
+          type: 'column', name: 'Total Jobs', color: GREEN,
+          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo07:${e.hotel_code}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: entries.map((e) => {
+            const items = Object.entries(e.summary.item_map ?? {})
+              .sort(([, a], [, b]) => (b as number) - (a as number))
+              .slice(0, TOP_N);
+            return {
+              id: `cjo07:${e.hotel_code}`,
+              name: `${e.hotel_code} — Top Service Items`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: items.map(([name, y]) => ({ name, y: y as number })),
+            };
+          }),
+        },
+      };
+    })()),
     make('cjo-08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
     }),
@@ -4171,6 +4199,12 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       return { override: gaugeOverride, fullPeriod: false };
     }
     if (isImHotelCustomChart) return { fullPeriod: false };
+    // Injected jo-11 options are already date-filtered in the useMemo when
+    // jo_item_date_map exists; without the map it can only show all-time data.
+    if (isJo && !isCorp && def.id === 'jo-11') {
+      const hasIdm = !!(data.summary as HotelSummary).jo_item_date_map;
+      return { fullPeriod: filtered && !hasIdm };
+    }
     if (!effectiveFd) return { fullPeriod: filtered };
     const override = buildFilteredOptions(def, effectiveFd);
     return override ? { override, fullPeriod: false } : { fullPeriod: true };
@@ -4267,13 +4301,92 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         },
       });
     }
+
+    // jo-11 — always inject (replaces stored plain-bar); drilldown = daily trend when jo_item_date_map is present, else dept breakdown
+    const idm = sum.jo_item_date_map;
+    const dateFilterOn = filtered && !!dateFrom && !!dateTo;
+    const dateInRange = (d: string) => !dateFilterOn || (d >= dateFrom && d <= dateTo);
+    // When the date map exists, item totals respect the applied date filter;
+    // otherwise fall back to all-time item_map (no per-date data available).
+    const topItems: Array<[string, number]> = idm
+      ? Object.entries(idm)
+          .map(([item, dm]): [string, number] => [
+            item,
+            Object.entries(dm).reduce((a, [d, c]) => a + (dateInRange(d) ? c : 0), 0),
+          ])
+          .filter(([, v]) => v > 0)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 10)
+      : Object.entries(sum.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
+    if (topItems.length > 0) {
+      // Build item→dept map by inverting dept_item_map (fallback drilldown)
+      const itemDeptMap: Record<string, Record<string, number>> = {};
+      for (const [dept, items] of Object.entries(sum.dept_item_map ?? {})) {
+        for (const [item, cnt] of Object.entries(items as Record<string, number>)) {
+          if (!itemDeptMap[item]) itemDeptMap[item] = {};
+          itemDeptMap[item][dept] = (itemDeptMap[item][dept] ?? 0) + cnt;
+        }
+      }
+      const allDates = idm
+        ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm[k] ?? {}).filter(dateInRange)))).sort()
+        : [];
+      out.push({
+        id: 'jo-11', filterable: !!idm,
+        title: t('chart_titles_jo.jo-11', 'Top Service Items → Daily Trend'),
+        note: t('chart_notes_jo.jo-11', 'Ranks the most requested service items. Click an item bar to see its daily job count trend.'),
+        formula: 'COUNT(*) by service_item; drilldown: COUNT(*) by created_date',
+        options: {
+          chart: { type: 'bar' },
+          // type:'category' lets drilldown replace axis labels with date names instead of inheriting item names
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Total Jobs' } },
+          series: [{
+            type: 'bar', name: 'Total Jobs', color: TEAL,
+            data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: `jo11d:${k}` })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { bar: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: topItems.map(([k]) => {
+              if (idm && allDates.length > 0) {
+                return {
+                  id: `jo11d:${k}`,
+                  name: `${k} — Daily Trend`,
+                  type: 'bar', color: ORANGE,
+                  dataLabels: { enabled: true },
+                  data: allDates.map((date) => ({ name: date, y: idm[k]?.[date] ?? 0 })),
+                };
+              }
+              const deptData = Object.entries(itemDeptMap[k] ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
+              return {
+                id: `jo11d:${k}`,
+                name: `${k} — By Department`,
+                type: 'bar', color: ORANGE,
+                dataLabels: { enabled: true },
+                data: deptData.map(([dept, cnt]) => ({ name: dept, y: cnt })),
+              };
+            }),
+          },
+        },
+      });
+    }
+
     return out;
-  }, [isJo, isCorp, data.summary, data.charts, t]);
+  }, [isJo, isCorp, data.summary, data.charts, filtered, dateFrom, dateTo, t]);
 
   // Partition core charts
   const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
   const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
-  const operationalCharts = isJo ? [...localizedCharts, ...hotelJo2728Charts] : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
+  const injectedJoById = new Map(hotelJo2728Charts.map((c) => [c.id, c]));
+  const storedJoIds = new Set(localizedCharts.map((c) => c.id));
+  const operationalCharts = isJo
+    ? [
+        // Injected charts replace their stored counterpart in place (keeps jo-11 between jo-10 and jo-12)
+        ...localizedCharts.map((c) => injectedJoById.get(c.id) ?? c),
+        // Charts that only exist client-side (e.g. jo-27/jo-28 on legacy rows) go at the end
+        ...hotelJo2728Charts.filter((c) => !storedJoIds.has(c.id)),
+      ]
+    : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
   const comparisonCharts = isJo ? [] : localizedCharts.filter(c => {
     if (isCorp && CORP_IM_TOP_IDS.has(c.id)) return false;
     return IM_COMPARISON_IDS.has(c.id);

@@ -112,6 +112,8 @@ export interface HotelSummary {
   jo_hour_delayed_map?:     Record<string, number>;
   // cjo-14: timeout jobs → hour → count (per hotel, for 24-h drilldown)
   jo_hour_timeout_map?:     Record<string, number>;
+  // jo-11: service item → date (YYYY-MM-DD) → count
+  jo_item_date_map?:        Record<string, Record<string, number>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

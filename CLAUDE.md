@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.60** (as of 2026-06-12) |
+| Version | **v1.0.67** (as of 2026-06-13) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,13 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.67** | 2026-06-13 | jo-11 primary xAxis → `type:'category'` (was `categories:[...]`): drilldown now replaces axis labels with date point names so Y axis shows dates correctly |
+| **v1.0.66** | 2026-06-13 | jo-11 drilldown type → `bar` (horizontal): dates on Y axis, job count on X axis — "Daily Job Orders" |
+| **v1.0.65** | 2026-06-13 | jo-11 in-place ordering + date filter: injected charts replace stored counterpart at original position (`injectedJoById` Map instead of filter+append); jo-11 item totals + drilldown dates respect applied date range when `jo_item_date_map` present (falls back to all-time `item_map` otherwise); `chartOpts` jo-11 special-case suppresses FULL PERIOD badge when map present; `scripts/backfill_jo_item_date_map.mjs` backfills the map into stored `jo_dashboard_json` from `jo_records` (run against local DB for all 7 hotels) |
+| **v1.0.64** | 2026-06-13 | jo-11 always injected client-side: removed `if (idm)` guard; drilldown = daily trend when `jo_item_date_map` present, else dept breakdown from inverted `dept_item_map` — works immediately without re-upload |
+| **v1.0.63** | 2026-06-13 | jo-11 client-side injection: `jo_item_date_map` added to `HotelSummary` type + stored in finalize summary; `DashboardClient` replaces stored jo-11 with drilldown when `jo_item_date_map` present; `injectedJoIds` dedup prevents duplicate chart rendering |
+| **v1.0.62** | 2026-06-13 | jo-11 redesigned: "Top 10 Service Item Volume" → bar-drilldown "Top Service Items → Daily Trend"; primary = top 10 items by count, drilldown = daily job counts (x-axis by date); new `itemDateMap` accumulator in finalize route |
+| **v1.0.61** | 2026-06-13 | cjo-07 redesigned: Reassignment Rate by Hotel → bar-drilldown "Top Service Items by Hotel" (primary: total jobs per hotel; drilldown: top 10 service items from `item_map`) |
 | **v1.0.60** | 2026-06-12 | MO hotel KPI list trimmed from 12 → 10 to match hotel dashboard (`mo_unique_assets`/`mo_daily_average` removed); order aligned with dashboard (severity_index pos 5, guest_related pos 6) |
 | **v1.0.59** | 2026-06-12 | MO corp KPI label fix: `dash-config-defs.ts` corp MO KPI `labelPath`/`notePath` corrected from `hmo_kpi_labels`/`hmo_kpi_notes` → `cmo_kpi_labels`/`cmo_kpi_notes`; config panel Corp KPI Group now shows "Total Work Orders" etc. instead of raw ids |
 | **v1.0.58** | 2026-06-12 | IM corp KPI order: `corp_kpi_09` (Total Incident Volume) moved to position 1 → `cim_kpi_01`; `corp_kpi_01` (Corporate Risk Score) moves to position 9 → `cim_kpi_09` |

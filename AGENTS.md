@@ -9,7 +9,7 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.60** (released 2026-06-12) |
+| Version | **v1.0.67** (released 2026-06-13) |
 | Branch | `main` |
 | Previous version | v1.0.42 |
 
@@ -38,6 +38,13 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.67** | 2026-06-13 | jo-11 primary xAxis `type:'category'` fix — drilldown dates replace item names on Y axis correctly |
+| **v1.0.66** | 2026-06-13 | jo-11 drilldown changed to `bar` type — dates on Y axis, count on X axis; label updated to "Daily Job Orders" |
+| **v1.0.65** | 2026-06-13 | jo-11 in-place ordering (injected charts replace stored counterpart at original slot) + date-filter support via `jo_item_date_map` (all-time fallback when map absent); FULL PERIOD badge suppressed for jo-11 when map present; `scripts/backfill_jo_item_date_map.mjs` backfills legacy rows from `jo_records` |
+| **v1.0.64** | 2026-06-13 | jo-11 always injected: removed `if (idm)` guard; drilldown = daily trend when `jo_item_date_map` present, else dept breakdown from inverted `dept_item_map` — works without re-upload |
+| **v1.0.63** | 2026-06-13 | jo-11 client-side injection: `jo_item_date_map` in `HotelSummary` + finalize summary; replaces stored plain-bar jo-11 with drilldown when summary data present |
+| **v1.0.62** | 2026-06-13 | jo-11 redesigned: bar-drilldown "Top Service Items → Daily Trend"; new `itemDateMap` (item→date→count) accumulator in finalize route; takes effect on re-upload |
+| **v1.0.61** | 2026-06-13 | cjo-07 redesigned: "Reassignment Rate by Hotel" → bar-drilldown "Top Service Items by Hotel"; primary = total jobs per hotel, drilldown = top 10 `item_map` entries |
 | **v1.0.60** | 2026-06-12 | MO hotel KPI list trimmed 12 → 10 (removed `mo_unique_assets`/`mo_daily_average`); order aligned with hotel dashboard |
 | **v1.0.59** | 2026-06-12 | MO corp KPI label fix: `dash-config-defs.ts` corp MO `labelPath`/`notePath` corrected from `hmo_kpi_labels` → `cmo_kpi_labels`; Corp KPI Group now shows proper names |
 | **v1.0.58** | 2026-06-12 | IM corp KPI order: `corp_kpi_09` (Total Incident Volume) → position 1 (`cim_kpi_01`); `corp_kpi_01` (Corporate Risk Score) → position 9 (`cim_kpi_09`) |

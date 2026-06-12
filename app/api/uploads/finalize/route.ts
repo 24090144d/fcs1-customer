@@ -1356,6 +1356,8 @@ interface JoKpiAcc {
   hourDelayed: Record<number, number>;
   // ── cjo-14: timeout jobs → hour → count ───────────────────────────────────
   hourTimeout: Record<number, number>;
+  // ── jo-11: service item → date (YYYY-MM-DD) → count ──────────────────────
+  itemDateMap: Record<string, Record<string, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1408,6 +1410,7 @@ function newJoKpiAcc(): JoKpiAcc {
     overdueCatHourMap: {},
     hourDelayed: {},
     hourTimeout: {},
+    itemDateMap: {},
   };
 }
 
@@ -1485,6 +1488,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
       if (completedFlag) acc.weekStats[wk].completed++;
       if (timeoutFlag) acc.weekStats[wk].timeouts++;
       if (completedFlag && delayMin !== null && delayMin > 0) acc.weekStats[wk].slaBreaches++;
+      // jo-11: item → date (YYYY-MM-DD) → count
+      const dateKey = d.toISOString().slice(0, 10);
+      inc2(acc.itemDateMap, item, dateKey);
     }
   }
   if (createdAt && ackAt) {
@@ -1739,7 +1745,38 @@ function buildJoCharts(_acc: ImAcc, jo: JoKpiAcc): ChartDef[] {
     { id: 'jo-08', title: 'Timeout Trend', filterable: false, note: 'Weekly timeout volume trend to detect service interruptions early. Impact: timeout spikes reduce guest satisfaction and increase repeat contacts. Resolution: identify root-cause weeks, fix routing/escalation delays, and set alert thresholds for timeout spikes.', formula: 'SUM(timeout_flag) by created_week', options: { chart: { type: 'column' }, xAxis: { categories: weeks }, series: [{ name: 'Timeouts', data: weekTimeout }] } },
     { id: 'jo-09', title: 'Status vs Top 10 Departments', filterable: false, note: 'Vertical stacked view of status mix across the top 10 departments by volume. Impact: high open/pending share in specific departments signals queue congestion. Resolution: redistribute tickets, clear blockers, and set department-level WIP limits with daily review.', formula: 'COUNT(*) by department and status', options: { chart: { type: 'column' }, xAxis: { categories: top10Dept }, plotOptions: { column: { stacking: 'normal' } }, series: statuses.map((s) => ({ name: s, type: 'column', data: top10Dept.map((d) => jo.deptStatusMap[d]?.[s] ?? 0) })) } },
     { id: 'jo-10', title: 'Top 10 Service Category Volume', filterable: false, note: 'Shows demand (bars) and close rate (line) by top categories. Impact: high-volume/low-close categories are critical performance gaps. Resolution: assign category owners, create playbooks, and track close-rate recovery by category weekly.', formula: 'COUNT(*) and completed% by category', options: { chart: { type: 'column' }, xAxis: { categories: topCats }, yAxis: [{ title: { text: 'Jobs' } }, { title: { text: 'Close %' }, opposite: true, min: 0, max: 100 }], series: [{ name: 'Jobs', type: 'column', data: topCats.map((c) => jo.catTotal[c] ?? 0) }, { name: 'Close %', type: 'spline', yAxis: 1, data: catCloseRate }] } },
-    { id: 'jo-11', title: 'Top 10 Service Item Volume', filterable: false, note: 'Ranks the most requested service items. Impact: item concentration can create recurring operational strain. Resolution: bundle common tasks, automate repetitive steps, and pre-allocate resources for top items.', formula: 'COUNT(*) by service_item', options: { chart: { type: 'bar' }, xAxis: { categories: topItems.map(([k]) => k) }, series: [{ name: 'Jobs', data: topItems.map(([, v]) => v) }] } },
+    // jo-11: Top Service Items → Daily Trend drilldown
+    (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const allDates = Array.from(new Set(topItems.flatMap(([k]) => Object.keys(jo.itemDateMap[k] ?? {})))).sort();
+      return {
+        id: 'jo-11', title: 'Top Service Items → Daily Trend', filterable: false,
+        note: 'Ranks the most requested service items. Click an item bar to see its daily job count trend.',
+        formula: 'COUNT(*) by service_item; drilldown: COUNT(*) by created_date',
+        options: {
+          chart: { type: 'bar' },
+          xAxis: { categories: topItems.map(([k]) => k) },
+          yAxis: { min: 0, title: { text: 'Total Jobs' } },
+          series: [{
+            type: 'bar', name: 'Total Jobs', color: GREEN,
+            data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: `jo11:${k}` })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { bar: { dataLabels: { enabled: true } } },
+          drilldown: {
+            series: topItems.map(([k]) => ({
+              id: `jo11:${k}`,
+              name: k,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              xAxis: { type: 'category' },
+              data: allDates.map((date) => ({ name: date, y: jo.itemDateMap[k]?.[date] ?? 0 })),
+            })),
+          },
+        },
+      };
+    })(),
     { id: 'jo-12', title: 'Top 10 Assigned Department Volume', filterable: false, note: 'Shows departments receiving the highest assignment load. Impact: uneven load can cause response delays and burnout. Resolution: rebalance dispatch rules and cross-train teams to absorb peaks.', formula: 'COUNT(*) by assigned_department', options: { chart: { type: 'bar' }, xAxis: { categories: topAssigned.map(([k]) => k) }, series: [{ name: 'Jobs', data: topAssigned.map(([, v]) => v) }] } },
     { id: 'jo-13', title: 'Top 10 Created By Department Volume', filterable: false, note: 'Shows request-origin departments generating the most JOs. Impact: large demand sources may indicate upstream process gaps. Resolution: run preventive actions with source departments to reduce avoidable requests.', formula: 'COUNT(*) by created_by_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCreatedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCreatedBy.map(([, v]) => v) }] } },
     { id: 'jo-14', title: 'Top 10 Completed Department Volume', filterable: false, note: 'Shows departments completing the highest JO volume. Impact: low completion share versus assignment share may indicate execution bottlenecks. Resolution: compare assigned vs completed mix and remove completion blockers.', formula: 'COUNT(*) by completed_department', options: { chart: { type: 'bar' }, xAxis: { categories: topCompletedBy.map(([k]) => k) }, series: [{ name: 'Jobs', data: topCompletedBy.map(([, v]) => v) }] } },
@@ -2415,6 +2452,10 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_overdue_cat_hour_map = s2m(joKpiAcc.overdueCatHourMap);
     generatedJson.summary.jo_hour_delayed_map     = h2s(joKpiAcc.hourDelayed);
     generatedJson.summary.jo_hour_timeout_map     = h2s(joKpiAcc.hourTimeout);
+    // jo-11: item → date (YYYY-MM-DD) → count
+    generatedJson.summary.jo_item_date_map = Object.fromEntries(
+      Object.entries(joKpiAcc.itemDateMap).map(([item, dm]) => [item, { ...dm }]),
+    );
     // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(
       Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => [

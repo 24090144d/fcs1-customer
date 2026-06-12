@@ -10,6 +10,7 @@ import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
+import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then((m) => m.HcChart), { ssr: false });
 
@@ -3279,10 +3280,14 @@ export function CoDashboardView({
   data,
   rows,
   chainEntries = [],
+  myDash,
+  myDashEmbed,
 }: {
   data: CoDashboardJson;
   rows: CoRow[];
   chainEntries?: ChainEntry[];
+  myDash?: MyDashOverride;
+  myDashEmbed?: MyDashEmbed;
 }) {
   const { t } = useI18n();
   const { theme } = useTheme();
@@ -3363,8 +3368,8 @@ export function CoDashboardView({
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);
   }, []);
-  const visibleKpis   = useMemo(() => localizedKpis.filter(   (k) => dashConfig.kpis[k.id]   !== false), [localizedKpis,   dashConfig]);
-  const visibleCharts = useMemo(() => localizedCharts.filter( (c) => dashConfig.charts[c.id] !== false), [localizedCharts, dashConfig]);
+  const visibleKpis   = useMemo(() => applyMyDashFilter(localizedKpis,   myDash?.kpis,   (id) => dashConfig.kpis[id]   !== false), [localizedKpis,   dashConfig, myDash]);
+  const visibleCharts = useMemo(() => applyMyDashFilter(localizedCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [localizedCharts, dashConfig, myDash]);
 
   const hasFilteredData = scopedRows.length > 0;
   const dataQuality = useMemo(() => {
@@ -3423,6 +3428,38 @@ export function CoDashboardView({
       dateTo: formatDateInput(data.meta.date_range.max),
     });
   }, [data.meta.date_range.max, data.meta.date_range.min]);
+
+  // Embedded fragment mode — shared date range from the My Dashboard page.
+  const embedFrom = myDashEmbed?.range?.from;
+  const embedTo   = myDashEmbed?.range?.to;
+  useEffect(() => {
+    if (!embedFrom || !embedTo) return;
+    setFilters((current) => ({ ...current, dateFrom: embedFrom, dateTo: embedTo }));
+  }, [embedFrom, embedTo]);
+
+  // ── Embedded fragment mode (My Dashboard pooled grids) ────────────────────
+  if (myDashEmbed) {
+    if (myDashEmbed.part === 'kpis') {
+      return (
+        <>
+          {visibleKpis.map((kpi) => (
+            <CoKpiCard key={kpi.id} kpi={kpi} dark={dark} empty={!hasFilteredData} showDelta={false} />
+          ))}
+        </>
+      );
+    }
+    return (
+      <>
+        {visibleCharts.map((chart, index) => (
+          hasFilteredData ? (
+            <HcChart key={chart.id} def={chart} dark={dark} index={index + 1} codeLabel={chart.id} />
+          ) : (
+            <EmptyChartCard key={chart.id} title={chart.title} note={chart.note} formula={chart.formula} dark={dark} />
+          )
+        ))}
+      </>
+    );
+  }
 
   return (
     <div ref={containerRef} className="min-h-[calc(100vh-3.5rem)]" style={{ background: themeTokens.dashboard.bg, color: themeTokens.dashboard.metaTitle }}>
@@ -3657,7 +3694,7 @@ export function CoDashboardView({
         <section className="kpi-print-section">
           <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             {visibleKpis.map((kpi) => (
-              <CoKpiCard key={kpi.id} kpi={kpi} dark={dark} empty={!hasFilteredData} showDelta={!isCorp} />
+              <CoKpiCard key={kpi.id} kpi={kpi} dark={dark} empty={!hasFilteredData} showDelta={false} />
             ))}
           </div>
           {filteredCount !== totalRows && (

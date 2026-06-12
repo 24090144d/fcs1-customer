@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -13,10 +14,17 @@ import {
   Wrench,
   Sparkles,
   LineChart,
-  MoreHorizontal,
+  MessageSquare,
+  LayoutDashboard,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
+import { MyDashboardPanel } from '@/components/configuration/MyDashboardPanel';
+
+const PlaygroundClient = dynamic(
+  () => import('@/app/playground/PlaygroundClient'),
+  { ssr: false }
+);
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
@@ -31,12 +39,13 @@ import {
   loadModuleConfig,
   persistModuleConfig,
 } from '@/lib/dash-config-defs';
+import { kpiLevel } from '@/lib/my-dashboard-defs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types & constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Tab = 'system' | ModuleConfigKey | 'others';
+type Tab = 'system' | ModuleConfigKey | 'mydash' | 'builder';
 
 interface TabDef {
   key: Tab;
@@ -45,12 +54,13 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: 'system',  label: 'System',               Icon: Settings },
-  { key: 'jo',      label: 'Job Order',             Icon: BarChart2 },
-  { key: 'mo',      label: 'Maintenance Order',     Icon: Wrench },
-  { key: 'co',      label: 'Cleaning Order',        Icon: Sparkles },
-  { key: 'im',      label: 'Incident Management',   Icon: LineChart },
-  { key: 'others',  label: 'Others',                Icon: MoreHorizontal },
+  { key: 'system',  label: 'System',   Icon: Settings },
+  { key: 'jo',      label: 'JO',       Icon: BarChart2 },
+  { key: 'mo',      label: 'MO',       Icon: Wrench },
+  { key: 'co',      label: 'CO',       Icon: Sparkles },
+  { key: 'im',      label: 'IM',       Icon: LineChart },
+  { key: 'mydash',  label: 'My Dashboard', Icon: LayoutDashboard },
+  { key: 'builder', label: 'Builder',  Icon: MessageSquare },
 ];
 
 const MODULE_TABS: ModuleConfigKey[] = ['jo', 'mo', 'co', 'im'];
@@ -109,9 +119,12 @@ interface GroupPanelProps {
   /** Inner scroll-container height in px. Determines how many rows are visible.
    *  The outer animation wrapper is set to scrollHeight + 50. Defaults to 380. */
   scrollHeight?: number;
+  /** Optional display code override for the Code column — receives the item and
+   *  its 0-based index in the rendered list. Defaults to item.id. */
+  displayCodeOf?: (item: ConfigItem, index: number) => string;
 }
 
-function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLabel = 'Formula', defaultOpen = true, scrollHeight = 380 }: GroupPanelProps) {
+function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLabel = 'Formula', defaultOpen = true, scrollHeight = 380, displayCodeOf }: GroupPanelProps) {
   const isBV = formulaLabel !== 'Formula';
   const visibleCount = items.filter((item) => checked[item.id] !== false).length;
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -223,6 +236,7 @@ function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLab
           <tbody>
             {items.map((item, i) => {
               const isOn = checked[item.id] !== false;
+              const displayCode = displayCodeOf ? displayCodeOf(item, i) : item.id;
               const label    = t(item.labelPath, item.id);
               const note     = t(item.notePath, '—');
               const formula  = item.formulaPath ? t(item.formulaPath, '—') : '—';
@@ -256,7 +270,7 @@ function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLab
                     className="px-3 py-2 font-mono align-top"
                     style={{ color: pal.accent, fontSize: '0.66rem', wordBreak: 'break-all' }}
                   >
-                    {item.id}
+                    {displayCode}
                   </td>
 
                   {/* Name */}
@@ -368,8 +382,15 @@ function isCorpChart(id: string): boolean {
   return CORP_PREFIXES.some((p) => id.startsWith(p));
 }
 
+/** Position-based display code helpers — keep display consistent and sequential. */
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
 function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
   const def = MODULE_DEFS[mod];
+
+  // Split KPIs into hotel-level and corp-level groups
+  const hotelKpis = useMemo(() => def.kpis.filter((k) => kpiLevel(mod, k.id) !== 'corp'),  [def.kpis, mod]);
+  const corpKpis  = useMemo(() => def.kpis.filter((k) => kpiLevel(mod, k.id) !== 'hotel'), [def.kpis, mod]);
 
   // Split charts into hotel and corp groups
   const hotelCharts = useMemo(() => def.charts.filter((c) => !isCorpChart(c.id)), [def.charts]);
@@ -417,19 +438,22 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
 
   return (
     <div>
-      {/* 1 — KPI Group — collapsed by default */}
-      <GroupPanel
-        title="KPI Group"
-        items={def.kpis}
-        checked={draft.kpis}
-        onToggle={(id) => toggle('kpis', id)}
-        onAll={(v) => setSubset('kpis', def.kpis, v)}
-        pal={pal}
-        t={t}
-        defaultOpen={false}
-      />
+      {/* 1 — Hotel KPI Group */}
+      {hotelKpis.length > 0 && (
+        <GroupPanel
+          title="Hotel KPI Group"
+          items={hotelKpis}
+          checked={draft.kpis}
+          onToggle={(id) => toggle('kpis', id)}
+          onAll={(v) => setSubset('kpis', hotelKpis, v)}
+          pal={pal}
+          t={t}
+          defaultOpen={false}
+          displayCodeOf={(_item, i) => `${mod}_kpi_${pad2(i + 1)}`}
+        />
+      )}
 
-      {/* 2 — Hotel Charts Group — collapsed by default */}
+      {/* 2 — Hotel Charts Group */}
       {hotelCharts.length > 0 && (
         <GroupPanel
           title="Hotel Charts Group"
@@ -442,10 +466,26 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
           formulaLabel="Business Value"
           defaultOpen={false}
           scrollHeight={420}
+          displayCodeOf={(item) => item.id.replace(/-/g, '_')}
         />
       )}
 
-      {/* 3 — Corp Charts Group — expanded by default */}
+      {/* 3 — Corp KPI Group */}
+      {corpKpis.length > 0 && (
+        <GroupPanel
+          title="Corp KPI Group"
+          items={corpKpis}
+          checked={draft.kpis}
+          onToggle={(id) => toggle('kpis', id)}
+          onAll={(v) => setSubset('kpis', corpKpis, v)}
+          pal={pal}
+          t={t}
+          defaultOpen={false}
+          displayCodeOf={(_item, i) => `c${mod}_kpi_${pad2(i + 1)}`}
+        />
+      )}
+
+      {/* 4 — Corp Charts Group */}
       {corpCharts.length > 0 && (
         <GroupPanel
           title="Corp Charts Group"
@@ -458,6 +498,7 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
           formulaLabel="Business Value"
           defaultOpen={true}
           scrollHeight={420}
+          displayCodeOf={(item) => item.id.replace(/-/g, '_')}
         />
       )}
 
@@ -1284,111 +1325,115 @@ export default function ConfigurationPage() {
 
   return (
     <AppLayout breadcrumbs={[{ label: t('configuration.breadcrumb', 'Configuration') }]}>
-      <div className="grain min-h-full px-6 py-7" style={{ background: tokens.appBg }}>
-        <div className="max-w-7xl">
+      <div className="grain min-h-full" style={{ background: tokens.appBg }}>
 
-          {/* Page header */}
-          <header className="mb-5">
-            <h1 className="font-serif text-2xl font-bold leading-tight" style={{ color: pal.text }}>
-              {t('configuration.page_title', 'Configuration')}
-            </h1>
-            <p
-              className="mt-1 font-mono"
-              style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.05em' }}
-            >
-              {t('configuration.page_subtitle', 'System settings and administrative actions.')}
-              {' '}· {APP_VERSION}
-            </p>
-          </header>
+        {/* Page header + tab bar — always constrained */}
+        <div className="px-6 pt-7">
+          <div className="max-w-7xl">
 
-          {/* Tab bar — outer wrapper holds the bottom rule; inner div scrolls.
-               Active indicator is an absolute span INSIDE the button so it
-               is never clipped by overflow-x:auto (which also clips y). */}
-          <div className="relative mb-6">
-            <div
-              className="absolute bottom-0 left-0 right-0"
-              style={{ height: '2px', background: pal.panelBorder }}
-            />
-            <div className="flex items-end gap-0 overflow-x-auto">
-              {TABS.map(({ key, label, Icon }) => {
-                const isActive = activeTab === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setTab(key)}
-                    className="relative inline-flex items-center gap-1.5 px-4 py-3 font-mono uppercase whitespace-nowrap transition-colors"
-                    style={{
-                      fontSize: '0.65rem',
-                      letterSpacing: '0.08em',
-                      color: isActive ? pal.accent : pal.muted,
-                      background: isActive ? `${pal.accent}12` : 'transparent',
-                      borderRadius: '3px 3px 0 0',
-                    }}
+            {/* Page header */}
+            <header className="mb-5">
+              <h1 className="font-serif text-2xl font-bold leading-tight" style={{ color: pal.text }}>
+                {t('configuration.page_title', 'Configuration')}
+              </h1>
+              <p
+                className="mt-1 font-mono"
+                style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.05em' }}
+              >
+                {t('configuration.page_subtitle', 'System settings and administrative actions.')}
+                {' '}· {APP_VERSION}
+              </p>
+            </header>
+
+            {/* Tab bar — outer wrapper holds the bottom rule; inner div scrolls.
+                 Active indicator is an absolute span INSIDE the button so it
+                 is never clipped by overflow-x:auto (which also clips y). */}
+            <div className="relative mb-0">
+              <div
+                className="absolute bottom-0 left-0 right-0"
+                style={{ height: '2px', background: pal.panelBorder }}
+              />
+              <div className="flex items-end gap-0 overflow-x-auto">
+                {TABS.map(({ key, label, Icon }) => {
+                  const isActive = activeTab === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTab(key)}
+                      className="relative inline-flex items-center gap-1.5 px-4 py-3 font-mono uppercase whitespace-nowrap transition-colors"
+                      style={{
+                        fontSize: '0.65rem',
+                        letterSpacing: '0.08em',
+                        color: isActive ? pal.accent : pal.muted,
+                        background: isActive ? `${pal.accent}12` : 'transparent',
+                        borderRadius: '3px 3px 0 0',
+                      }}
+                    >
+                      {isActive && (
+                        <span
+                          className="absolute bottom-0 left-0 right-0 pointer-events-none"
+                          style={{ height: '3px', background: pal.accent, zIndex: 2 }}
+                        />
+                      )}
+                      <Icon size={12} />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Builder tab — full width, PlaygroundClient has its own padding ── */}
+        {activeTab === 'builder' && <PlaygroundClient />}
+
+        {/* ── All other tabs — constrained to max-w-7xl ────────────────────── */}
+        {activeTab !== 'builder' && (
+          <div className="px-6 py-6">
+            <div className="max-w-7xl">
+
+              {/* ── System tab ───────────────────────────────────────────── */}
+              {activeTab === 'system' && (
+                <>
+                  <ResetPanel pal={pal} t={t} />
+                  <ResetByHotelPanel pal={pal} t={t} />
+                </>
+              )}
+
+              {/* ── My Dashboard tab ─────────────────────────────────────── */}
+              {activeTab === 'mydash' && (
+                <MyDashboardPanel pal={pal} t={t} />
+              )}
+
+              {/* ── Module tabs (JO / MO / CO / IM) ─────────────────────── */}
+              {(MODULE_TABS as Tab[]).includes(activeTab) && (
+                <div>
+                  <p
+                    className="mb-5 font-mono"
+                    style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.04em' }}
                   >
-                    {isActive && (
-                      <span
-                        className="absolute bottom-0 left-0 right-0 pointer-events-none"
-                        style={{ height: '3px', background: pal.accent, zIndex: 2 }}
-                      />
-                    )}
-                    <Icon size={12} />
-                    {label}
-                  </button>
-                );
-              })}
+                    Configure which KPIs and charts are visible on the{' '}
+                    <span style={{ color: pal.accent }}>
+                      {TABS.find((tb) => tb.key === activeTab)?.label}
+                    </span>{' '}
+                    dashboard. Uncheck an item to hide it. Changes take effect after saving.
+                  </p>
+                  <ModuleConfigPanel
+                    key={activeTab}
+                    mod={activeTab as ModuleConfigKey}
+                    pal={pal}
+                    t={t}
+                  />
+                </div>
+              )}
+
             </div>
           </div>
+        )}
 
-          {/* ── System tab ─────────────────────────────────────────────── */}
-          {activeTab === 'system' && (
-            <>
-              <ResetPanel pal={pal} t={t} />
-              <ResetByHotelPanel pal={pal} t={t} />
-            </>
-          )}
-
-          {/* ── Module tabs (JO / MO / CO / IM) ────────────────────────── */}
-          {(MODULE_TABS as Tab[]).includes(activeTab) && (
-            <div>
-              {/* Section subtitle */}
-              <p
-                className="mb-5 font-mono"
-                style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.04em' }}
-              >
-                Configure which KPIs and charts are visible on the{' '}
-                <span style={{ color: pal.accent }}>
-                  {TABS.find((tb) => tb.key === activeTab)?.label}
-                </span>{' '}
-                dashboard. Uncheck an item to hide it. Changes take effect after saving.
-              </p>
-
-              <ModuleConfigPanel
-                key={activeTab}               // re-mount cleanly when tab changes
-                mod={activeTab as ModuleConfigKey}
-                pal={pal}
-                t={t}
-              />
-            </div>
-          )}
-
-          {/* ── Others tab ─────────────────────────────────────────────── */}
-          {activeTab === 'others' && (
-            <div
-              className="flex flex-col items-center justify-center py-20 text-center"
-              style={{ color: pal.muted }}
-            >
-              <MoreHorizontal size={32} style={{ opacity: 0.35, marginBottom: 12 }} />
-              <p className="font-serif text-lg font-semibold" style={{ color: pal.text }}>
-                Reserved for Future Use
-              </p>
-              <p className="mt-2 font-mono" style={{ fontSize: '0.70rem', letterSpacing: '0.04em' }}>
-                Additional configuration options will appear here in a future release.
-              </p>
-            </div>
-          )}
-
-        </div>
       </div>
     </AppLayout>
   );

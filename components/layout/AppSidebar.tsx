@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, MessageSquare, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings, Sparkles } from 'lucide-react';
+import { Upload, X, Pin, PinOff, ChevronRight, PanelLeftClose, PanelLeftOpen, Hourglass, Palette, Wrench, Check, PieChart, BarChart2, LineChart, Settings, Sparkles, LayoutDashboard, Globe } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NavChain } from '@/app/api/nav/dashboards/route';
+import { loadMyDashConfig, type MyDashScope } from '@/lib/my-dashboard-defs';
 import { APP_VERSION } from '@/lib/version';
 import { useI18n } from './I18nProvider';
 import { useTheme } from './ThemeProvider';
@@ -91,6 +92,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
   const [collapsed, setCollapsed] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const [hasPublishedBuilder, setHasPublishedBuilder] = useState(false);
+  const [myDashLinks, setMyDashLinks] = useState<{ scope: MyDashScope; chain: string; hotels: string[] }[]>([]);
   const { t: tr } = useI18n();
   const { theme, setTheme, options } = useTheme();
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -155,6 +157,27 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
       })
       .catch(() => {});
   }, [pathname, userId]);
+
+  // Published "My Dashboard" entries (localStorage, written by Configuration → My Dashboard)
+  useEffect(() => {
+    const reload = () => {
+      const links: { scope: MyDashScope; chain: string; hotels: string[] }[] = [];
+      for (const scope of ['hotel', 'corp'] as MyDashScope[]) {
+        const cfg = loadMyDashConfig(scope);
+        if (!cfg.published || !cfg.chain) continue;
+        // Always one entry per scope — hotel scope carries the full hotels[] list
+        links.push({ scope, chain: cfg.chain, hotels: scope === 'hotel' ? (cfg.hotels ?? []) : [] });
+      }
+      setMyDashLinks(links);
+    };
+    reload();
+    window.addEventListener('storage', reload);
+    window.addEventListener('fcs1:mydash-refresh', reload);
+    return () => {
+      window.removeEventListener('storage', reload);
+      window.removeEventListener('fcs1:mydash-refresh', reload);
+    };
+  }, []);
 
   useEffect(() => {
     setNavigating(false);
@@ -318,20 +341,48 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
           </div>
         </div>
 
+        {/* ── My Dashboard (published via Configuration → My Dashboard) ──── */}
+        {myDashLinks.length > 0 && (
+          <>
+            {!collapsed && <SectionLabel label={tr('sidebar.section_my_dashboard', 'My Dashboard')} T={t} />}
+            <nav className="px-1 shrink-0">
+              {myDashLinks.map(({ scope, chain, hotels }) => {
+                // Single hotel → pass it explicitly; multiple → let page default to first
+                const firstHotel = hotels.length === 1 ? hotels[0] : '';
+                const href = `/my-dashboard?scope=${scope}&chain=${encodeURIComponent(chain)}${firstHotel ? `&hotel=${encodeURIComponent(firstHotel)}` : ''}`;
+                const active = pathname === '/my-dashboard' && (searchParams.get('scope') ?? 'hotel') === scope;
+                const hotelSuffix = scope === 'hotel'
+                  ? (hotels.length === 1 ? ` · ${hotels[0]}` : hotels.length > 1 ? ` · ${hotels.length} hotels` : '')
+                  : '';
+                return (
+                  <NavItem
+                    key={`${scope}-${chain}`}
+                    href={href}
+                    active={active}
+                    onClose={onClose}
+                    onNavigateStart={() => setNavigating(true)}
+                    T={t}
+                    collapsed={collapsed}
+                  >
+                    {scope === 'corp'
+                      ? <Globe size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
+                      : <LayoutDashboard size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />}
+                    {!collapsed && (
+                      <span className="truncate">
+                        {scope === 'hotel' ? 'My Hotel' : 'My Corp'}
+                        <span style={{ opacity: 0.55 }}>{' · '}{chain}{hotelSuffix}</span>
+                      </span>
+                    )}
+                  </NavItem>
+                );
+              })}
+            </nav>
+          </>
+        )}
+
         {/* ── Workspace nav ──────────────────────────────────────────────── */}
         {!collapsed && <SectionLabel label={tr('sidebar.section_workspace', 'Workspace')} T={t} />}
         <nav className="px-1 shrink-0">
-          <NavItem
-            href="/playground"
-            active={pathname === '/playground'}
-            onClose={onClose}
-            onNavigateStart={() => setNavigating(true)}
-            T={t}
-            collapsed={collapsed}
-          >
-            <MessageSquare size={14} strokeWidth={pathname === '/playground' ? 2.5 : 2} className="shrink-0" />
-            {!collapsed && 'Dashboard Builder'}
-          </NavItem>
           <NavItem
             href="/onboarding"
             active={pathname === '/onboarding'}

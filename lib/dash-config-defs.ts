@@ -75,14 +75,14 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(
         [
           'mo_total_orders', 'mo_completion_rate', 'mo_open_rate', 'mo_cancelled_rate',
-          'mo_guest_related', 'mo_severity_index', 'mo_peak_category', 'mo_unique_categories',
-          'mo_unique_assets', 'mo_daily_average', 'mo_pending_cases', 'mo_category_span',
+          'mo_severity_index', 'mo_guest_related', 'mo_peak_category', 'mo_unique_categories',
+          'mo_pending_cases', 'mo_category_span',
         ],
         'hmo_kpi_labels',
         'hmo_kpi_notes',
       ),
       // Corp MO KPIs — actual dashboard IDs cmo_kpi_01..cmo_kpi_10
-      ...items(seq('cmo_kpi_', 1, 10), 'hmo_kpi_labels', 'hmo_kpi_notes'),
+      ...items(seq('cmo_kpi_', 1, 10), 'cmo_kpi_labels', 'cmo_kpi_notes'),
     ],
     charts: [
       // Hotel MO charts — actual dashboard IDs mo-01..mo-10
@@ -114,15 +114,19 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
   // ── Incident Management ─────────────────────────────────────────────────
   im: {
     kpis: [
-      // Hotel KPIs  hkpi_01 … hkpi_20
+      // Hotel KPIs — only the 10 KPIs actually rendered on the hotel IM dashboard
+      // (hkpi_01/04/05/11/13/16–20 are legacy or removed; omitting them keeps
+      //  the alias numbering sequential: hkpi_02→im_kpi_01 … hkpi_15→im_kpi_10)
       ...items(
-        seq('hkpi_', 1, 20),
+        ['hkpi_02', 'hkpi_03', 'hkpi_06', 'hkpi_07', 'hkpi_08',
+          'hkpi_09', 'hkpi_10', 'hkpi_12', 'hkpi_14', 'hkpi_15'],
         'hotel_im_kpi_labels',
         'hotel_im_kpi_notes',
         'hotel_im_kpi_formulas',
       ),
-      // Corp KPIs  corp_kpi_01 … corp_kpi_10 (prefixed to avoid collision)
-      ...seq('kpi_', 1, 10).map((id) => ({
+      // Corp KPIs — order determines cim_kpi_01..10 display codes.
+      // kpi_09 (Total Incident Volume) placed first per display preference.
+      ...['kpi_09', 'kpi_02', 'kpi_03', 'kpi_04', 'kpi_05', 'kpi_06', 'kpi_07', 'kpi_08', 'kpi_01', 'kpi_10'].map((id) => ({
         id: `corp_${id}`,
         labelPath: `corp_kpi_labels.${id}`,
         notePath: `corp_kpi_notes.${id}`,

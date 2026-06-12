@@ -13,6 +13,7 @@ import { getAppThemeTokens } from '@/lib/theme';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
+import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -2491,6 +2492,16 @@ function corpCoKpiNote(note: string, id: string): string {
   }
 }
 
+// Stored MO dashboard rows generated before the finalize-route rename still
+// carry chart_01..chart_10 ids — map them to the live mo-01..mo-10 ids so
+// config toggles and My Dashboard overrides match.
+function renameLegacyMoChartIds(defs: ChartDef[]): ChartDef[] {
+  return defs.map((d) => {
+    const m = d.id.match(/^chart_(0[1-9]|10)$/);
+    return m ? { ...d, id: `mo-${m[1]}` } : d;
+  });
+}
+
 function orderChartDefs(defs: ChartDef[], orderedIds: string[]): ChartDef[] {
   const rank = new Map(orderedIds.map((id, index) => [id, index]));
   return [...defs].sort((a, b) => {
@@ -2536,7 +2547,7 @@ function buildMaintenanceKpis(summary: HotelSummary, type: MaintenanceType): Kpi
   ]);
 }
 
-function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboardJson | CoDashboardJson; chainEntries?: ChainEntry[] }) {
+function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed }: { data: MoDashboardJson | CoDashboardJson; chainEntries?: ChainEntry[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
   const { t } = useI18n();
   const { theme: selectedTheme } = useTheme();
   const [dark, setDark] = useState(false);
@@ -2556,6 +2567,20 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);
   }, []);
+  const moVisKpis = <T extends { id: string }>(arr: T[]): T[] =>
+    applyMyDashFilter(arr, myDash?.kpis, (id) => moDashConfig.kpis[id] !== false);
+  const moVisCharts = <T extends { id: string }>(arr: T[]): T[] =>
+    applyMyDashFilter(arr, myDash?.charts, (id) => moDashConfig.charts[id] !== false);
+
+  // Embedded fragment mode — shared date range from the My Dashboard page.
+  const embedFrom = myDashEmbed?.range?.from;
+  const embedTo   = myDashEmbed?.range?.to;
+  useEffect(() => {
+    if (!embedFrom || !embedTo) return;
+    setDateFrom(embedFrom);
+    setDateTo(embedTo);
+    setFiltered(true);
+  }, [embedFrom, embedTo]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -2581,7 +2606,12 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   const isCo = data.meta.schema === 'co-v1';
   const isMo = maintenanceType === 'MO';
   const scopedCharts = useMemo(
-    () => orderChartDefs(data.charts_by_type?.[maintenanceType] ?? data.charts, HOTEL_MO_CHART_DISPLAY_ORDER).map((def) => {
+    () => orderChartDefs(
+      data.meta.schema === 'mo-v1'
+        ? renameLegacyMoChartIds(data.charts_by_type?.[maintenanceType] ?? data.charts)
+        : (data.charts_by_type?.[maintenanceType] ?? data.charts),
+      HOTEL_MO_CHART_DISPLAY_ORDER,
+    ).map((def) => {
       if (!isMo && !isCo) return def;
       const scope = moLocalizationScope(isCorp);
       const localized = {
@@ -2821,6 +2851,41 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
     return chartSequence;
   };
 
+  // ── Embedded fragment mode (My Dashboard pooled grids) ────────────────────
+  if (myDashEmbed) {
+    if (myDashEmbed.part === 'kpis') {
+      return (
+        <>
+          {moVisKpis(corpKpis ?? scopedKpis).map((kpi) => (
+            <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
+          ))}
+        </>
+      );
+    }
+    return (
+      <>
+        {moVisCharts(isCorp ? corpMoCharts : scopedCharts).map((def) => {
+          const { override, fullPeriod } = chartOpts(def);
+          return (
+            <HcChart
+              key={`${maintenanceType}-${def.id}`}
+              def={{
+                ...def,
+                title: def.title || `${maintenanceType} Chart`,
+                note: def.note || `${maintenanceType} scoped chart`,
+                formula: def.formula || `Source rows filtered by type = ${maintenanceType}`,
+              }}
+              dark={dark}
+              overrideOptions={override}
+              fullPeriod={fullPeriod}
+              codeLabel={def.id}
+            />
+          );
+        })}
+      </>
+    );
+  }
+
   return (
     <div className="grain transition-colors print:bg-white" style={{ background: bg, minHeight: '100vh' }} data-print-root>
       <div
@@ -2924,7 +2989,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
       <div className="px-6 py-5 space-y-8">
         <section>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
-            {(corpKpis ?? scopedKpis).filter((kpi) => moDashConfig.kpis[kpi.id] !== false).map((kpi) => (
+            {moVisKpis(corpKpis ?? scopedKpis).map((kpi) => (
               <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
             ))}
           </div>
@@ -2934,7 +2999,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
           {!isCorp && <SectionHead label={`${moduleDisplay} Charts`} dark={dark} />}
           {isCorp && <SectionHead label={corpBenchmarkChartsLabel} dark={dark} />}
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(isCorp ? corpMoCharts : scopedCharts).filter((def) => moDashConfig.charts[def.id] !== false).map((def) => (
+            {moVisCharts(isCorp ? corpMoCharts : scopedCharts).map((def) => (
               (() => {
                 const { override, fullPeriod } = chartOpts(def);
                 return (
@@ -2980,7 +3045,7 @@ function MaintenanceDashboardView({ data, chainEntries = [] }: { data: MoDashboa
   );
 }
 
-function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboardJson; chainEntries?: ChainEntry[] }) {
+function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed }: { data: ImDashboardJson; chainEntries?: ChainEntry[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
   const isJo = data.meta.schema === 'jo-v1';
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
   const isBuilder = data.meta.upload_job_id === 'builder-dashboard-im';
@@ -3012,6 +3077,20 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);
   }, [modKey]);
+  const stdVisKpis = <T extends { id: string }>(arr: T[]): T[] =>
+    applyMyDashFilter(arr, myDash?.kpis, (id) => stdDashConfig.kpis[id] !== false);
+  const stdVisCharts = <T extends { id: string }>(arr: T[]): T[] =>
+    applyMyDashFilter(arr, myDash?.charts, (id) => stdDashConfig.charts[id] !== false);
+
+  // Embedded fragment mode — shared date range from the My Dashboard page.
+  const embedFrom = myDashEmbed?.range?.from;
+  const embedTo   = myDashEmbed?.range?.to;
+  useEffect(() => {
+    if (!embedFrom || !embedTo) return;
+    setDateFrom(embedFrom);
+    setDateTo(embedTo);
+    setFiltered(true);
+  }, [embedFrom, embedTo]);
   const dashboardIdentity = useMemo(
     () => [
       data.meta.schema,
@@ -3419,11 +3498,6 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
       make('hkpi_12', 'Department Incident Distribution', r1(topDeptShare), 'pct1', 'Concentration in top department; high concentration implies bottleneck risk. Good <= 30%; Watch 30-45%; Bad > 45%.', 'Top Department Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 30, 45, 'Good <= 30%', 'Watch 30-45%', 'Bad > 45%')),
       make('hkpi_14', 'Repeat Incident Rate', r1(repeatRate), 'pct1', 'Repeat load share for longitudinal comparison with historical reporting baselines. Good <= 15%; Watch 15-25%; Bad > 25%.', 'Repeat Incident Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 15, 25, 'Good <= 15%', 'Watch 15-25%', 'Bad > 25%')),
       make('hkpi_15', 'Complaint Source Analysis', r1(topSourceShare), 'pct1', 'Top complaint-source concentration to prioritize channel-level fixes. Good <= 35%; Watch 35-50%; Bad > 50%.', 'Top Complaint Source Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 35, 50, 'Good <= 35%', 'Watch 35-50%', 'Bad > 50%')),
-      make('hkpi_16', 'Open Backlog Rate', r1(backlogRate), 'pct1', 'Open workload pressure currently unresolved. Good <= 5%; Watch 5-10%; Bad > 10%.', 'Pending Cases / Total Cases * 100', true, '', buildImBenchmark('lower', 5, 10, 'Good <= 5%', 'Watch 5-10%', 'Bad > 10%')),
-      make('hkpi_17', 'Pending Cases', pending, 'integer', 'Current unresolved queue size requiring active follow-up. Good: stable near 0; Bad: sustained growth over multiple days/weeks.', 'COUNT(Status = Pending)', true, 'cases', buildImBenchmark('neutral', null, null, '', '', '', 'Scale-dependent queue size; compare against the same hotel or prior periods.')),
-      make('hkpi_18', 'Peak Incident Time Analysis', peakHour, 'integer', 'Peak hourly load marker for shift planning and staffing. Good: balanced hourly pattern; Bad: sharp single-hour spikes without staffing alignment.', 'Peak Hour = ARGMAX(hourly_incident_count)', true, 'h', buildImBenchmark('neutral', null, null, '', '', '', 'Time-of-day concentration should be compared against prior periods and staffing plan.')),
-      make('hkpi_19', 'Avg First Response', avgFirstResponse === null ? null : r2(avgFirstResponse), 'decimal2', 'Average response latency from case creation to first investigation update. Good <= 30 min; Watch 31-60 min; Bad > 60 min.', 'AVG(first_investigation_timestamp - created_timestamp) in minutes', avgFirstResponse !== null, 'min', buildImBenchmark('lower', 30, 60, 'Good <= 30 min', 'Watch 31-60 min', 'Bad > 60 min')),
-      make('hkpi_20', 'Cancelled Cases', cancelled, 'integer', 'Volume of cancelled cases to monitor process leakage. Good <= 2%; Watch 2-5%; Bad > 5% of total incidents.', 'COUNT(Status = Cancelled)', true, 'cases', buildImBenchmark('lower', 2, 5, 'Good <= 2%', 'Watch 2-5%', 'Bad > 5%')),
     ];
   }, [isCorp, isJo, data.summary, data.charts, kpis, fd, deptScopedSummary]);
 
@@ -4245,6 +4319,26 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
     return chartSequence;
   };
 
+  // ── Embedded fragment mode (My Dashboard pooled grids) ────────────────────
+  if (myDashEmbed) {
+    if (myDashEmbed.part === 'kpis') {
+      return <>{stdVisKpis(localizedKpis).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}</>;
+    }
+    const embedDefs = isCorp
+      ? (isJo ? corpJoCharts : corpImTopCharts)
+      : isJo
+        ? [...reorderedEac, ...reorderedOperational]
+        : [...imHotelExecutiveCharts, ...imHotelOverTimeCharts, ...imHotelDrilldownCharts, ...imHotelOperationAnalysisCharts];
+    return (
+      <>
+        {stdVisCharts(embedDefs).map((def) => {
+          const { override, fullPeriod } = chartOpts(def);
+          return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+        })}
+      </>
+    );
+  }
+
   return (
     <div className="grain transition-colors print:bg-white" style={{ background: bg, minHeight: '100vh' }} data-print-root>
 
@@ -4386,7 +4480,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
         {/* ── KPIs ──────────────────────────────────────────────────────────── */}
         <section className="kpi-print-section">
           <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {localizedKpis.filter(k => stdDashConfig.kpis[k.id] !== false).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}
+            {stdVisKpis(localizedKpis).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}
           </div>
           {filtered && (
             <p className="mt-1 font-mono" style={{ fontSize: '0.6rem', color: naText }}>
@@ -4417,7 +4511,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
           <section>
             <SectionHead label={t('dashboard_ui.corp_jo_benchmark_charts', 'Corp JO Benchmark Charts')} dark={dark} />
             <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {corpJoCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+              {stdVisCharts(corpJoCharts).map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
@@ -4447,7 +4541,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Executive Charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelExecutiveCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(imHotelExecutiveCharts).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4456,7 +4550,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Over the time charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelOverTimeCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(imHotelOverTimeCharts).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4465,7 +4559,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Drilldown charts'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelDrilldownCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(imHotelDrilldownCharts).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4474,7 +4568,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={'Operation Analysis'} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {imHotelOperationAnalysisCharts.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(imHotelOperationAnalysisCharts).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4486,7 +4580,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={t('dashboard_ui.section_charts', 'Executive Analysis Charts')} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {reorderedEac.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(reorderedEac).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4495,7 +4589,7 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
                 <section>
                   <SectionHead label={t('dashboard_ui.operational_jo', 'Operational Detail — JO View')} dark={dark} />
                   <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {reorderedOperational.filter((def) => stdDashConfig.charts[def.id] !== false).map((def) => {
+                    {stdVisCharts(reorderedOperational).map((def) => {
                       const { override, fullPeriod } = chartOpts(def);
                       return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
                     })}
@@ -4610,14 +4704,44 @@ function StandardDashboardClient({ data, chainEntries = [] }: { data: ImDashboar
   );
 }
 
-export function DashboardClient({ data, chainEntries = [], coRows = [] }: { data: DashboardJson; chainEntries?: ChainEntry[]; coRows?: CoRow[] }) {
+export function DashboardClient({ data, chainEntries = [], coRows = [], myDash, myDashEmbed }: { data: DashboardJson | null; chainEntries?: ChainEntry[]; coRows?: CoRow[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
+  // CO: data may be null when no co_dashboard_json exists but co_records rows do.
+  // Build a minimal meta shell so CoDashboardView can compute KPIs/charts from rows.
+  if (!data) {
+    if (coRows.length > 0) {
+      // created_date may deserialize as a Date object — normalize to ISO day.
+      const toDay = (v: unknown): string | null => {
+        if (!v) return null;
+        const d = v instanceof Date ? v : new Date(String(v));
+        return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+      };
+      const dates = coRows.map((r) => toDay(r.created_date)).filter(Boolean).sort() as string[];
+      const shell: CoDashboardJson = {
+        meta: {
+          schema: 'co-v1',
+          upload_job_id: '', source_name: '',
+          hotel_code: coRows[0]?.hotel_code ?? '',
+          hotel_name: coRows[0]?.hotel_code ?? '',
+          chain_code: coRows[0]?.chain_code ?? '',
+          country_code: '',
+          total_records: coRows.length,
+          date_range: { min: dates[0] ?? null, max: dates[dates.length - 1] ?? null },
+          generated_at: new Date().toISOString(),
+        },
+        kpis: [], eac: [], charts: [], raw_daily: [],
+        summary: {} as HotelSummary,
+      };
+      return <CoDashboardView data={shell} rows={coRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
+    }
+    return null;
+  }
   const isCo = data.meta.schema === 'co-v1';
   const isMo = data.meta.schema === 'mo-v1';
   if (isCo) {
-    return <CoDashboardView data={data as CoDashboardJson} rows={coRows} chainEntries={chainEntries} />;
+    return <CoDashboardView data={data as CoDashboardJson} rows={coRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
   }
   if (isMo) {
-    return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} />;
+    return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
   }
-  return <StandardDashboardClient data={data as ImDashboardJson} chainEntries={chainEntries} />;
+  return <StandardDashboardClient data={data as ImDashboardJson} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
 }

@@ -9,9 +9,9 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.25** (released 2026-06-08, commit `bdaf91f`) |
+| Version | **v1.0.60** (released 2026-06-12) |
 | Branch | `main` |
-| Previous version | v1.0.24 (`fd87cde`) |
+| Previous version | v1.0.42 |
 
 ---
 
@@ -34,64 +34,63 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 ---
 
-## What Changed in v1.0.25
+## Recent Version History
 
-### New file tracked
-- **`lib/dash-config-defs.ts`** — was previously untracked (local only). Now committed.
-  Defines `MODULE_DEFS` with `ConfigItem` lists for KPIs and charts per module.
-  Each `ConfigItem` has `id`, `labelPath`, `notePath`, and optional `formulaPath`.
+| Version | Date | Summary |
+|---|---|---|
+| **v1.0.60** | 2026-06-12 | MO hotel KPI list trimmed 12 → 10 (removed `mo_unique_assets`/`mo_daily_average`); order aligned with hotel dashboard |
+| **v1.0.59** | 2026-06-12 | MO corp KPI label fix: `dash-config-defs.ts` corp MO `labelPath`/`notePath` corrected from `hmo_kpi_labels` → `cmo_kpi_labels`; Corp KPI Group now shows proper names |
+| **v1.0.58** | 2026-06-12 | IM corp KPI order: `corp_kpi_09` (Total Incident Volume) → position 1 (`cim_kpi_01`); `corp_kpi_01` (Corporate Risk Score) → position 9 (`cim_kpi_09`) |
+| **v1.0.57** | 2026-06-12 | Config panel JO/MO/CO/IM tabs: "KPI Group" → "Hotel KPI Group" + "Corp KPI Group"; `GroupPanel.displayCodeOf` prop adds sequential codes `{mod}_kpi_01..N` / `c{mod}_kpi_01..N`; charts show hyphen-normalized IDs `jo_01..N` |
+| **v1.0.56** | 2026-06-12 | My Dashboard config: corp picker shows `cjo_kpi_01..10` / `cmo_kpi_01..10` etc. (`kpiDisplayCode` scope-aware); chart codes normalised `cjo_01..28` (`chartDisplayCode`); display-only, stored keys unchanged |
+| **v1.0.55** | 2026-06-12 | IM KPI alias fix: `dash-config-defs.ts` hotel IM KPI list trimmed to 10 rendered ids; aliases sequential im_kpi_01–10 (hotel) / im_kpi_11–20 (corp); `IM_HOTEL_KPI_IDS` matches |
+| **v1.0.54** | 2026-06-12 | My Hotel/Corp date filter: "ALL" → "Reset"; Reset sets `applied = null` (no filter) and blank inputs |
+| **v1.0.53** | 2026-06-12 | My Hotel config multi-hotel: checkbox chips replace single dropdown; `hotels: string[]` in `MyDashboardConfig`; sidebar shows one link per hotel; legacy `hotel` string auto-migrates |
+| **v1.0.52** | 2026-06-12 | My Dashboard scope binding: My Hotel config requires Hotel selection; My Corp chain-only; sidebar link carries hotel; My Hotel defaults to blank date filter, CO unscoped |
+| **v1.0.51** | 2026-06-12 | My Hotel CO/MO data fixes: CO works without stored dashboard JSON (null-data shell from coRows); CO sub-property hotel-code fallback (prefix match); Date-object coercion for `created_date`; legacy MO `chart_NN` → `mo-NN` id rename at render |
+| **v1.0.50** | 2026-06-11 | My Hotel: hotel filter dropdown removed; `useRouter` / `router` dead code cleaned from `MyDashboardClient.tsx` |
+| **v1.0.49** | 2026-06-11 | Fix My Dashboard publish: persist moved out of `setCfg` updater (impure-updater side effect could be dropped by React, losing the publish) |
+| **v1.0.48** | 2026-06-11 | My Dashboard uniform KPI codes (`{mod}_kpi_NN` aliases for display + storage, auto-migration of saved configs, alias→native id resolution at render) |
+| **v1.0.47** | 2026-06-11 | My Corp pooled layout: shared date-range bar + single pooled KPI/chart grids (same as My Hotel); corp chart arrays wired into embed mode; per-module corp sections removed |
+| **v1.0.46** | 2026-06-11 | My Hotel pooled layout: shared date-range bar across modules, department filter removed, all KPIs/charts grouped into single grids via `MyDashEmbed` fragment mode in dashboard components |
+| **v1.0.45** | 2026-06-11 | My Dashboard feature: Configuration → My Dashboard tab (compose My Hotel/My Corp from JO/MO/CO/IM items, max 10 KPI + 20 charts, drag-n-drop, chain-bound, publish to sidebar); `/my-dashboard` page renders selections through real dashboard components via `myDash` override; dashboard fetchers moved to `lib/dashboard-fetch.ts` |
+| **v1.0.44** | 2026-06-11 | Dashboard Builder moved from sidebar to Configuration → Builder tab; sidebar link removed; `PlaygroundClient` rendered via `dynamic` import in `app/configuration/page.tsx` |
+| **v1.0.43** | 2026-06-09 | Dashboard Builder: CSV filename parsed as `[Chain]-[Hotel]-[HotelName]-[Module]-[Country]-[DataRange]`; grouped Chain › Module › Hotel; `sourceLabel()` helper formats as readable subtitle |
+| **v1.0.42** | 2026-06-09 | Dashboard Builder: Data Source uses original upload CSV filenames; new `/api/ai/charts/datasources` route; grouped Chain › Module; selecting source sets `activeOrgId` for data scoping |
+| **v1.0.41** | 2026-06-09 | Dashboard Builder: Data Source selector — loads hotel+module combos from nav API on mount; selected source auto-sets module, shows as chart subtitle in sample preview and generated charts |
+| **v1.0.40** | 2026-06-09 | Dashboard Builder: 3 preview themes — Vintage, Modern, Executive; theme toggle buttons in builder panel; `applyBuilderTheme` applies palette/font/axis colors; gauge/heatmap use per-theme colors |
+| **v1.0.39** | 2026-06-09 | Dashboard Builder: title/subtitle; field hint modals per module (JO/MO/CO/IM) + Chart Types pop-up |
+| **v1.0.38** | 2026-06-09 | Dashboard Builder: hotel/corp templates show chart type; sample preview on template select |
+| **v1.0.37** | 2026-06-09 | Dashboard Builder: 3-group templates (KPI/Hotel/Corp) per module; module toggle buttons; all chart IDs aligned with configuration panel |
+| **v1.0.36** | 2026-06-09 | cjo-13/cjo-14 redesign: vertical bar-drilldown Completed/Timeout Status by Hotel → 24-Hour distribution; new `jo_hour_timeout_map` accumulator in finalize route |
+| v1.0.35 | 2026-06-09 | cjo-12 redesign: vertical bar-drilldown Delayed Status by Hotel → 24-Hour Delayed Job Distribution; new `jo_hour_delayed_map` accumulator in finalize route |
+| v1.0.34 | 2026-06-09 | Fix config tab active indicator — overflow-x:auto clipped margin-bottom:-3px; replaced with absolute span (bottom:0, z:2) |
+| v1.0.33 | 2026-06-09 | Force-redeploy all customer Vercel projects (fcs1-hk/mo/cn/my/neon) after GitHub webhook stall |
+| v1.0.32 | 2026-06-09 | Sidebar auto-refreshes after any DB reset — `fcs1:nav-refresh` custom event dispatched on reset success |
+| v1.0.31 | 2026-06-09 | Remove leftover password hint from ResetPanel placeholder |
+| v1.0.30 | 2026-06-09 | Reset by Hotel fix: hotel list → dropdown from dashboard meta; API uses `hotel_code` not `org_id` |
+| v1.0.29 | 2026-06-09 | Config tab bar height/indicator size tweaks |
+| v1.0.28 | 2026-06-09 | Reset by Hotel — new panel with password gate, org+module select, upload history preview, VACUUM ANALYZE |
+| v1.0.27 | 2026-06-09 | Reset Database enhanced — per-module scope, two-step preview with row-count + disk-size, TRUNCATE + VACUUM |
+| v1.0.26 | 2026-06-09 | Corp JO KPIs fixed; jo-28/cjo-28 → Overdue Jobs by Category → 24-hour drilldown; duplicate toolbar buttons removed |
+| v1.0.25 | 2026-06-08 | BV config panel for all modules; `lib/dash-config-defs.ts` committed; cco_chart_14 → treemap; cco_chart_21 → manual click-to-treemap |
 
-### Configuration panel (`app/configuration/page.tsx`)
-- `formulaLabel="Business Value"` applied to **all** module tabs (previously only CO).
-- This switches the last column in the config table from raw SQL to BV badge + prose.
+---
 
-### i18n — all 4 language files updated
+## Key Patterns Established (v1.0.26+)
 
-**New sections added:**
-- `chart_bv_jo` — 40 entries (20 hotel JO + 20 corp JO ranked business value explanations)
-- `chart_bv_mo` — 22 entries (10 hotel MO + 12 corp MO)
-- `chart_bv_im` — 20 entries (top-20 IM hotel charts)
+### Bar-drilldown charts (JO corp: cjo-12, cjo-13, cjo-14)
+- Always use **vertical `column`** for both primary and drilldown series — never `bar` (horizontal)
+- Primary colour: `#0F766E` (green); drilldown colour: `#C2410C` (orange)
+- Highcharts `drilldown:` key on data points, matching `id` in `drilldown.series`
+- 24-hour x-axis on drilldown: `Array.from({ length: 24 }, (_, i) => i)` → `"HH:00"` labels
 
-**Emoji prefixes applied to `chart_titles_XX` sections:**
-- 🟣 = hotel-level chart (property scope)
-- 🟢 = corp-level chart (chain scope)
-- Applied to: `chart_titles_jo`, `chart_titles_mo`, `chart_titles_im`
-- `chart_notes_XX` and `chart_formulas_XX` sections remain emoji-free
-
-**Non-English fallback titles/notes added for:**
-- JO hotel charts (`jo_eac_01`–`jo_eac_04`, `jo_chart_01`–`jo_chart_18`) in zh-TW, zh-CN, ja
-- MO hotel + corp chart titles/notes in zh-TW, zh-CN, ja
-
-**cco_chart_14 title updated in all 4 files:**
-- EN: `🟢 Top Attendant Credit`
-- JA: `🟢 担当者別完了実績ランキング`
-- ZH-CN: `🟢 服务员完成业绩排行`
-- ZH-TW: `🟢 服務員完成業績排行`
-
-### `lib/dash-config-defs.ts` — formulaPath wiring
-- JO charts: `formulaPath` → `chart_bv_jo`
-- MO charts: `formulaPath` → `chart_bv_mo`
-- IM charts: `formulaPath` → `chart_bv_im`
-- CO charts: unchanged, still pointing to `chart_bv_co`
-
-### CO chart changes (`components/dashboard/CoDashboardView.tsx`)
-
-**cco_chart_14** ("Top Attendant Credit")
-- Was: 24-hour completion distribution column chart
-- Now: Treemap of top-20 attendants by completed cleaning order count
-- Data: `topEntries(groupCount(completedRows, r => r.attendant), 20).map(([name, value]) => ({ name, value }))`
-- Labels: `useHTML: true`, format `<b>{point.name}</b><br/>{point.value}`
-
-**cco_chart_21** ("24-Hour Cleaning → Attendant")
-- Was: column chart with `drilldown:` to `type: 'bar'` series (then attempted `type: 'treemap'` which crashed)
-- Now: column chart using `plotOptions.column.point.events.click` for manual drill
-- Click a bar → hides column series + axes, adds treemap of top-15 attendants for that hour via `chart.addSeries()`
-- Back button added via `chart.renderer.button('← Back', ...)` with `zIndex: 7`
-- No `drilldown:` key on series data — avoids the Highcharts drilldown module crash
-- Root cause of crash: Highcharts drilldown module calls `getTitlePosition` which fails when switching from cartesian (column) to treemap type
-
-### `components/dashboard/HcChart.tsx`
-- Added `treemap`, `sankey`, `xrange` module init (they were required but not guaranteed to initialise)
+### Stored-summary data fallback
+New accumulator fields added to `finalize/route.ts` won't appear in stored DB summaries until data is re-uploaded.
+Always identify an equivalent older field to derive the data from:
+- `jo_hour_delayed_map` (v1.0.35) → derive from `jo_overdue_cat_hour_map` by summing across categories
+- `jo_hour_timeout_map` (v1.0.36) → derive from `jo_status_hour_map` filtered by `status.includes('timeout')`
+- `jo_hour_comp_map` (existing) → used directly for cjo-13
 
 ---
 

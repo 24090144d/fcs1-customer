@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.69** (as of 2026-06-13) |
+| Version | **v1.0.70** (as of 2026-06-13) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.70** | 2026-06-13 | cjo-07 → bar-drilldown "Top Service Items → Daily Trend (Chain)": mirrors jo-11; merges `jo_item_date_map` across all hotels, top 10 items, drilldown = daily counts; jo-01↔jo-05 and jo-02↔jo-11 display-order swaps; i18n all 4 langs |
 | **v1.0.69** | 2026-06-13 | cjo-07 → treemap "Top Service Items (Chain)": aggregates `item_map` across all hotels, top 30 items, tile size = total jobs; i18n updated all 4 langs |
 | **v1.0.68** | 2026-06-13 | cjo-07 xAxis → `type:'category'`: drilldown X axis now shows service item names instead of inherited hotel codes |
 | **v1.0.67** | 2026-06-13 | jo-11 primary xAxis → `type:'category'` (was `categories:[...]`): drilldown now replaces axis labels with date point names so Y axis shows dates correctly |

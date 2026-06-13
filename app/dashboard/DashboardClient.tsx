@@ -1310,9 +1310,67 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
     }),
-    make('cjo-04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: timeoutRate }],
-    }),
+    // cjo-07: Top Service Items → Daily Trend (chain aggregate, mirrors jo-11)
+    make('cjo-07', '🟢 Top Service Items → Daily Trend (Chain)',
+      'Ranks the most requested service items across all chain hotels. Click an item bar to see its daily job count trend.',
+      'COUNT(*) by service_item (chain); drilldown: COUNT(*) by created_date', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      // Merge jo_item_date_map across all chain entries
+      const mergedIdm: Record<string, Record<string, number>> = {};
+      let hasIdm = false;
+      for (const e of entries) {
+        const idm = e.summary.jo_item_date_map as Record<string, Record<string, number>> | undefined;
+        if (idm) {
+          hasIdm = true;
+          for (const [item, dm] of Object.entries(idm)) {
+            if (!mergedIdm[item]) mergedIdm[item] = {};
+            for (const [date, cnt] of Object.entries(dm)) {
+              mergedIdm[item][date] = (mergedIdm[item][date] ?? 0) + cnt;
+            }
+          }
+        }
+      }
+      // Compute top-10 items; fall back to item_map when no date map available
+      const topItems: Array<[string, number]> = hasIdm
+        ? Object.entries(mergedIdm)
+            .map(([item, dm]): [string, number] => [item, Object.values(dm).reduce((a, c) => a + c, 0)])
+            .sort(([, a], [, b]) => b - a).slice(0, 10)
+        : (() => {
+            const m: Record<string, number> = {};
+            for (const e of entries) {
+              for (const [item, cnt] of Object.entries(e.summary.item_map ?? {})) {
+                m[item] = (m[item] ?? 0) + (cnt as number);
+              }
+            }
+            return Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, 10);
+          })();
+      const allDates = hasIdm
+        ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(mergedIdm[k] ?? {})))).sort()
+        : [];
+      return {
+        chart: { type: 'bar' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Total Jobs' } },
+        series: [{
+          type: 'bar', name: 'Total Jobs', color: GREEN,
+          data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: hasIdm ? `cjo07d:${k}` : undefined })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { bar: { dataLabels: { enabled: true } } },
+        ...(hasIdm && allDates.length > 0 ? {
+          drilldown: {
+            series: topItems.map(([k]) => ({
+              id: `cjo07d:${k}`,
+              name: `${k} — Daily Trend`,
+              type: 'bar', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: allDates.map((date) => ({ name: date, y: mergedIdm[k]?.[date] ?? 0 })),
+            })),
+          },
+        } : {}),
+      };
+    })()),
     make('cjo-05', 'Escalation Rate by Hotel', 'Escalation comparison for service stability review.', 'escalated_jobs / total_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Escalation %' } }, series: [{ type: 'column', name: 'Escalation %', data: escalationRate }],
     }),
@@ -1367,31 +1425,9 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    // cjo-07: Top Service Items across chain — treemap sized by total job volume
-    make('cjo-07', 'Top Service Items (Chain)', 'Service item volume aggregated across all hotels. Tile size = total jobs.', 'COUNT(*) BY service_item (all hotels)', (() => {
-      const TOP_N = 30;
-      // Merge item_map across all chain entries
-      const merged: Record<string, number> = {};
-      for (const e of entries) {
-        for (const [item, cnt] of Object.entries(e.summary.item_map ?? {})) {
-          merged[item] = (merged[item] ?? 0) + (cnt as number);
-        }
-      }
-      const topItems = Object.entries(merged).sort(([, a], [, b]) => b - a).slice(0, TOP_N);
-      return {
-        chart: { type: 'treemap' },
-        series: [{
-          type: 'treemap',
-          colorByPoint: true,
-          dataLabels: {
-            enabled: true,
-            useHTML: true,
-            format: '<span style="font-size:10px;text-align:center"><b>{point.name}</b><br/>{point.value}</span>',
-          },
-          data: topItems.map(([name, value]) => ({ name, value })),
-        }],
-      };
-    })()),
+    make('cjo-04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: timeoutRate }],
+    }),
     make('cjo-08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
     }),
@@ -4417,6 +4453,11 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     const _savedEac06 = reorderedEac[5];
     reorderedEac[5] = reorderedOperational[6];
     reorderedOperational[6] = _savedEac06;
+  }
+  // JO hotel: jo-01(eac[0]) ↔ jo-05(op[0])  and  jo-02(eac[1]) ↔ jo-11(op[6])
+  if (isJo && !isCorp && reorderedEac.length >= 2 && reorderedOperational.length >= 7) {
+    [reorderedEac[0], reorderedOperational[0]] = [reorderedOperational[0], reorderedEac[0]];
+    [reorderedEac[1], reorderedOperational[6]] = [reorderedOperational[6], reorderedEac[1]];
   }
 
   // Global chart sequence index across all groups (no reset between sections)

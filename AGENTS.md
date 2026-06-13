@@ -9,7 +9,7 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.69** (released 2026-06-13) |
+| Version | **v1.0.70** (released 2026-06-13) |
 | Branch | `main` |
 | Previous version | v1.0.42 |
 

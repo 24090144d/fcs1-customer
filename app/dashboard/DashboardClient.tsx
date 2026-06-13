@@ -1367,35 +1367,29 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    // cjo-07: Total Jobs by Hotel → Top Service Items drilldown
-    make('cjo-07', 'Top Service Items by Hotel', 'Total job volume per hotel. Click a hotel bar to see its top service items.', 'COUNT(*) BY hotel_code; drilldown: TOP 10 item BY hotel_code', (() => {
-      const GREEN  = '#0F766E';
-      const ORANGE = '#C2410C';
-      const TOP_N  = 10;
+    // cjo-07: Top Service Items across chain — treemap sized by total job volume
+    make('cjo-07', 'Top Service Items (Chain)', 'Service item volume aggregated across all hotels. Tile size = total jobs.', 'COUNT(*) BY service_item (all hotels)', (() => {
+      const TOP_N = 30;
+      // Merge item_map across all chain entries
+      const merged: Record<string, number> = {};
+      for (const e of entries) {
+        for (const [item, cnt] of Object.entries(e.summary.item_map ?? {})) {
+          merged[item] = (merged[item] ?? 0) + (cnt as number);
+        }
+      }
+      const topItems = Object.entries(merged).sort(([, a], [, b]) => b - a).slice(0, TOP_N);
       return {
-        chart: { type: 'column' },
-        xAxis: { categories: hotelCodes },
-        yAxis: { min: 0, title: { text: 'Total Jobs' } },
+        chart: { type: 'treemap' },
         series: [{
-          type: 'column', name: 'Total Jobs', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo07:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
+          type: 'treemap',
+          colorByPoint: true,
+          dataLabels: {
+            enabled: true,
+            useHTML: true,
+            format: '<span style="font-size:10px;text-align:center"><b>{point.name}</b><br/>{point.value}</span>',
+          },
+          data: topItems.map(([name, value]) => ({ name, value })),
         }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: entries.map((e) => {
-            const items = Object.entries(e.summary.item_map ?? {})
-              .sort(([, a], [, b]) => (b as number) - (a as number))
-              .slice(0, TOP_N);
-            return {
-              id: `cjo07:${e.hotel_code}`,
-              name: `${e.hotel_code} — Top Service Items`,
-              type: 'column', color: ORANGE,
-              dataLabels: { enabled: true },
-              data: items.map(([name, y]) => ({ name, y: y as number })),
-            };
-          }),
-        },
       };
     })()),
     make('cjo-08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {

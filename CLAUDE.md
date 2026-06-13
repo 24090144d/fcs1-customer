@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.67** (as of 2026-06-13) |
+| Version | **v1.0.69** (as of 2026-06-13) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,8 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.69** | 2026-06-13 | cjo-07 → treemap "Top Service Items (Chain)": aggregates `item_map` across all hotels, top 30 items, tile size = total jobs; i18n updated all 4 langs |
+| **v1.0.68** | 2026-06-13 | cjo-07 xAxis → `type:'category'`: drilldown X axis now shows service item names instead of inherited hotel codes |
 | **v1.0.67** | 2026-06-13 | jo-11 primary xAxis → `type:'category'` (was `categories:[...]`): drilldown now replaces axis labels with date point names so Y axis shows dates correctly |
 | **v1.0.66** | 2026-06-13 | jo-11 drilldown type → `bar` (horizontal): dates on Y axis, job count on X axis — "Daily Job Orders" |
 | **v1.0.65** | 2026-06-13 | jo-11 in-place ordering + date filter: injected charts replace stored counterpart at original position (`injectedJoById` Map instead of filter+append); jo-11 item totals + drilldown dates respect applied date range when `jo_item_date_map` present (falls back to all-time `item_map` otherwise); `chartOpts` jo-11 special-case suppresses FULL PERIOD badge when map present; `scripts/backfill_jo_item_date_map.mjs` backfills the map into stored `jo_dashboard_json` from `jo_records` (run against local DB for all 7 hotels) |

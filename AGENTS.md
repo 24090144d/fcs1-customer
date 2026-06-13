@@ -9,7 +9,7 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.67** (released 2026-06-13) |
+| Version | **v1.0.69** (released 2026-06-13) |
 | Branch | `main` |
 | Previous version | v1.0.42 |
 
@@ -38,6 +38,8 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.69** | 2026-06-13 | cjo-07 → treemap "Top Service Items (Chain)": aggregates item_map across all hotels, top 30 tiles, useHTML labels; i18n all 4 langs |
+| **v1.0.68** | 2026-06-13 | cjo-07 xAxis `type:'category'`: drilldown X axis shows top 10 service item names (was inheriting hotel codes) |
 | **v1.0.67** | 2026-06-13 | jo-11 primary xAxis `type:'category'` fix — drilldown dates replace item names on Y axis correctly |
 | **v1.0.66** | 2026-06-13 | jo-11 drilldown changed to `bar` type — dates on Y axis, count on X axis; label updated to "Daily Job Orders" |
 | **v1.0.65** | 2026-06-13 | jo-11 in-place ordering (injected charts replace stored counterpart at original slot) + date-filter support via `jo_item_date_map` (all-time fallback when map absent); FULL PERIOD badge suppressed for jo-11 when map present; `scripts/backfill_jo_item_date_map.mjs` backfills legacy rows from `jo_records` |

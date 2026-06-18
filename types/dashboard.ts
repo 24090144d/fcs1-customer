@@ -114,6 +114,12 @@ export interface HotelSummary {
   jo_hour_timeout_map?:     Record<string, number>;
   // jo-11: service item → date (YYYY-MM-DD) → count
   jo_item_date_map?:        Record<string, Record<string, number>>;
+  // im-03: incident item → date (YYYY-MM-DD) → count
+  im_item_date_map?:        Record<string, Record<string, number>>;
+  // incident item → avg resolution days
+  im_item_duration_map?:    Record<string, number>;
+  // cim-20: incident item → completed count (for completion rate line)
+  im_item_completed_map?:   Record<string, number>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

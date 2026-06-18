@@ -43,10 +43,10 @@ const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: st
   { code: 'cim-14', id: 'cim-14', title: 'Regional Risk Heatmap', note: 'Region matrix compares critical, VIP, SLA breach and trend intensity. Benchmark: Good when all risk cells trend down or stay green; Bad when >=2 metrics red in same region.', formula: 'Regional KPI = AVG(metric by hotel in region); Regional Risk = aggregate of weighted KPI intensities' },
   { code: 'cim-15', id: 'cim-15', title: 'Department Risk Heatmap', note: 'Shows department risk intensity by hotel to target governance actions. Benchmark: Good when top department risk <= 20% of hotel total; Bad > 35%.', formula: 'Department Risk Proxy = COUNT(cases) by hotel_code + department (or weighted severity where available)' },
   { code: 'cim-16', id: 'cim-16', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
-  { code: 'cim-17', id: 'cim-17', title: 'Open Critical Aging Dashboard', note: 'Highlights unresolved critical burden (aging proxy) by hotel for escalation governance. Benchmark: Good = 0 open critical aging; Bad when persistent > 3 cases.', formula: 'Open Critical Aging Proxy = MIN(critical_cases, pending_cases) by hotel (aging date fallback when explicit age not present)' },
+  { code: 'cim-17', id: 'cim-17', title: '🟣 Top Incident → Daily Trend (Chain)', note: 'Ranks the most reported incident items across all chain hotels. Click a bar to see its daily count trend.', formula: 'COUNT by incident_item_name (chain); drilldown: COUNT by created_date' },
   { code: 'cim-18', id: 'cim-18', title: 'Hotel x Department Matrix', note: 'Cross-hotel department matrix for fast benchmarking and imbalance detection. Benchmark: Good when cross-hotel variance is balanced; Bad when one department dominates across multiple hotels.', formula: 'Matrix Cell = COUNT(incident_case) GROUP BY hotel_code, department' },
   { code: 'cim-19', id: 'cim-19', title: 'Chain Weekly Incident Trend', note: 'Weekly chain-level incident trend with 4-week moving average for momentum and trajectory monitoring. Benchmark: Good when moving average is flat or declining; Bad when rising >10% WoW.', formula: 'Weekly Incidents = SUM(total) GROUP BY ISO_WEEK; Moving Avg = 4-week rolling average' },
-  { code: 'cim-20', id: 'cim-20', title: 'Chain SLA Breach Rate by Hotel', note: 'Ranks hotels by SLA breach rate to expose service delivery failures across the chain. Benchmark: Good <= 3%; Watch 3–5%; Bad > 5%.', formula: 'Breach Rate % = SLA_breach_cases / total_cases * 100 per hotel' },
+  { code: 'cim-20', id: 'cim-20', title: '🟣 Top Incident vs Completion Rate (Chain)', note: 'Top 10 incident items by volume (bars, left axis) with completion rate % per item (line, right axis). Shows both workload and resolution effectiveness.', formula: 'Bars: COUNT by incident_item_name (chain); Line: completed / total × 100% per item' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -733,23 +733,30 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     return hcOpts({
       chart: { type: 'column' },
       xAxis: { categories: codes },
-      yAxis: { min: 0, title: { text: 'Incidents' } },
-      plotOptions: { series: { stacking: 'normal' } },
+      yAxis: { min: 0, max: 100, title: { text: 'Share (%)' } },
+      plotOptions: { series: { stacking: 'normal', dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
       series: [
         {
           type: 'column',
           name: 'VIP',
-          data: entries.map((e) => e.summary.vip_total),
+          data: entries.map((e) => {
+            const total = e.summary.total || 0;
+            return total > 0 ? Math.round((e.summary.vip_total / total) * 1000) / 10 : 0;
+          }),
           color: '#0E7470',
         },
         {
           type: 'column',
           name: 'Non-VIP',
-          data: entries.map((e) => Math.max(e.summary.total - e.summary.vip_total, 0)),
+          data: entries.map((e) => {
+            const total = e.summary.total || 0;
+            const vip = e.summary.vip_total || 0;
+            return total > 0 ? Math.round(((total - vip) / total) * 1000) / 10 : 0;
+          }),
           color: '#C55A10',
         }
       ],
-      tooltip: { shared: true },
+      tooltip: { shared: true, pointFormat: '<span style="color:{series.color}">{series.name}</span>: <b>{point.y:.1f}%</b><br/>' },
     });
   }
 
@@ -1160,42 +1167,89 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   }
 
   if (id === 'cim-17') {
-    const criticalOpen = entries.map((e) => {
-      const critical = e.summary.severity_map?.Critical ?? 0;
-      const pending = e.summary.pending ?? 0;
-      return { hotel: e.hotel_code, count: Math.min(critical, pending) };
-    });
+    const GREEN  = '#0F766E';
+    const ORANGE = '#C2410C';
+    // Always aggregate totals from item_map across ALL hotels
+    const allItemTotals: Record<string, number> = {};
+    for (const e of entries) for (const [k, v] of Object.entries(e.summary.item_map ?? {})) allItemTotals[k] = (allItemTotals[k] ?? 0) + Number(v);
+    const topItems: Array<[string, number]> = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 10);
+    // Merge im_item_date_map from hotels that have it (for drilldown)
+    const mergedIdm: Record<string, Record<string, number>> = {};
+    let hasIdm = false;
+    for (const e of entries) {
+      const idm = e.summary.im_item_date_map;
+      if (idm) {
+        hasIdm = true;
+        for (const [item, dm] of Object.entries(idm)) {
+          if (!mergedIdm[item]) mergedIdm[item] = {};
+          for (const [date, cnt] of Object.entries(dm)) {
+            mergedIdm[item][date] = (mergedIdm[item][date] ?? 0) + cnt;
+          }
+        }
+      }
+    }
+    const allDates = hasIdm
+      ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(mergedIdm[k] ?? {})))).sort()
+      : [];
     return hcOpts({
       chart: { type: 'bar' },
-      xAxis: { categories: criticalOpen.map((r) => r.hotel) },
-      yAxis: { min: 0, title: { text: 'Open Critical (Aging proxy)' } },
-      series: [{ type: 'bar', name: 'Open Critical', data: criticalOpen.map((r) => r.count), color: '#C55A10' }],
+      xAxis: { type: 'category' },
+      yAxis: { min: 0, title: { text: 'Incidents' } },
+      series: [{
+        type: 'bar', name: 'Incidents', color: GREEN,
+        data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: hasIdm ? `cim17d:${k}` : undefined })),
+        dataLabels: { enabled: true },
+      }],
       plotOptions: { bar: { dataLabels: { enabled: true } } },
+      ...(hasIdm && allDates.length > 0 ? {
+        drilldown: {
+          series: topItems.map(([k]) => ({
+            id: `cim17d:${k}`,
+            name: `${k} — Daily Trend`,
+            type: 'bar', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: allDates.map((date) => ({ name: date, y: mergedIdm[k]?.[date] ?? 0 })),
+          })),
+        },
+      } : {}),
     });
   }
 
   if (id === 'cim-20') {
-    const target = 5;
-    const rows = entries.map((e) => {
-      const breach = Object.entries(e.summary.status_map ?? {}).filter(([k]) => /(breach|overdue|timeout|late|sla)/i.test(k)).reduce((s, [, v]) => s + v, 0);
-      const rate = safePct(breach, Math.max(e.summary.total, 1));
-      return { hotel: e.hotel_code, rate };
-    }).sort((a, b) => b.rate - a.rate);
-    const hasAnyBreach = rows.some((r) => r.rate > 0);
-    const finalRows = hasAnyBreach
-      ? rows
-      : entries
-          .map((e) => ({
-            hotel: e.hotel_code,
-            rate: safePct(e.summary.pending ?? 0, Math.max(e.summary.total, 1)),
-          }))
-          .sort((a, b) => b.rate - a.rate);
+    // Merge item totals and completed counts across all chain hotels
+    const allItemTotals: Record<string, number> = {};
+    const allItemCompleted: Record<string, number> = {};
+    for (const e of entries) {
+      for (const [k, v] of Object.entries(e.summary.item_map ?? {})) allItemTotals[k] = (allItemTotals[k] ?? 0) + Number(v);
+      for (const [k, v] of Object.entries(e.summary.im_item_completed_map ?? {})) allItemCompleted[k] = (allItemCompleted[k] ?? 0) + Number(v);
+    }
+    const topItems = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 10);
+    const hasCompleted = Object.keys(allItemCompleted).length > 0;
     return hcOpts({
-      chart: { type: 'bar' },
-      xAxis: { categories: finalRows.map((r) => r.hotel) },
-      yAxis: { min: 0, title: { text: 'SLA Breach Rate %' }, plotLines: [{ value: target, color: '#0E7470', width: 2, dashStyle: 'ShortDash', label: { text: `Target ${target}%` } }] },
-      series: [{ type: 'bar', name: hasAnyBreach ? 'Breach Rate %' : 'Pending Proxy %', data: finalRows.map((r) => r1(r.rate)), color: '#C55A10' }],
-      plotOptions: { bar: { minPointLength: 6, dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
+      chart: { type: 'column' },
+      xAxis: { type: 'category' },
+      yAxis: [
+        { min: 0, title: { text: 'Incidents' } },
+        { min: 0, max: 100, title: { text: 'Completion Rate (%)' }, opposite: true },
+      ],
+      series: [
+        {
+          type: 'column', name: 'Incidents', color: '#0F766E', yAxis: 0,
+          data: topItems.map(([k, v]) => ({ name: k, y: v })),
+          dataLabels: { enabled: true },
+        },
+        ...(hasCompleted ? [{
+          type: 'line' as const, name: 'Completion Rate (%)', color: '#C2410C', yAxis: 1,
+          data: topItems.map(([k, v]) => {
+            const comp = allItemCompleted[k] ?? 0;
+            return { name: k, y: Math.round((comp / v) * 1000) / 10 };
+          }),
+          dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+          marker: { enabled: true, radius: 4 },
+        }] : []),
+      ],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+      tooltip: { shared: true, pointFormat: '<span style="color:{series.color}">{series.name}</span>: <b>{point.y}</b><br/>' },
     });
   }
 
@@ -2920,9 +2974,21 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
         </>
       );
     }
+    const _source = isCorp ? corpMoCharts : scopedCharts;
+    let _embedCharts = moVisCharts(_source);
+    // Positional fallback: if myDash uses mo-NN ids (config codes) but stored charts
+    // have im-NN ids (buildImJson output), no direct match occurs. Map mo-NN → index N-1.
+    if (!isCorp && _embedCharts.length === 0 && (myDash?.charts?.length ?? 0) > 0) {
+      const MO_ID_RE = /^mo-(\d+)$/;
+      const positions = (myDash!.charts)
+        .map((id) => { const m = id.match(MO_ID_RE); return m ? parseInt(m[1], 10) - 1 : -1; })
+        .filter((p) => p >= 0)
+        .sort((a, b) => a - b);
+      if (positions.length > 0) _embedCharts = positions.map((p) => _source[p]).filter(Boolean);
+    }
     return (
       <>
-        {moVisCharts(isCorp ? corpMoCharts : scopedCharts).map((def) => {
+        {_embedCharts.map((def) => {
           const { override, fullPeriod } = chartOpts(def);
           return (
             <HcChart
@@ -3716,24 +3782,40 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           }),
         },
       }, 'imd08'),
-      make('im-03', 'Top 10 Department x Category Heatmap', 'heatmap', 'Drilldown: Department → Incident Category → Incident Item Name', 'COUNT by department x category (top 10 x top 10)', (() => {
-        const dcm = (s as { dept_category_map?: Record<string, Record<string, number>> }).dept_category_map ?? {};
-        const deptCats = Object.entries(dcm)
-          .map(([d, m]) => [d, Object.values(m ?? {}).reduce((a, b) => a + b, 0)] as const)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 10)
-          .map(([d]) => d);
-        const catTotals: Record<string, number> = {};
-        for (const d of deptCats) for (const [c, v] of Object.entries(dcm[d] ?? {})) catTotals[c] = (catTotals[c] ?? 0) + v;
-        const catKeys = Object.entries(catTotals).sort(([, a], [, b]) => b - a).slice(0, 10).map(([c]) => c);
-        const heat = deptCats.flatMap((d, xi) =>
-          catKeys.map((c, yi) => [xi, yi, dcm[d]?.[c] ?? 0]),
-        );
+      make('im-03', 'Top Incident → Daily Trend', 'bar', 'Top 10 incident items by volume. Click a bar to see its daily count trend.', 'COUNT by incident_item_name; drilldown: COUNT by created_date', (() => {
+        const GREEN  = '#0F766E';
+        const ORANGE = '#C2410C';
+        const idm = data.summary.im_item_date_map;
+        const hasIdm = !!idm && Object.keys(idm).length > 0;
+        const topItems: Array<[string, number]> = hasIdm
+          ? Object.entries(idm)
+              .map(([item, dm]): [string, number] => [item, Object.values(dm).reduce((a, c) => a + c, 0)])
+              .sort(([, a], [, b]) => b - a).slice(0, 10)
+          : Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
+        const allDates = hasIdm
+          ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm![k] ?? {})))).sort()
+          : [];
         return {
-          xAxis: { categories: deptCats },
-          yAxis: { categories: catKeys, reversed: true },
-          colorAxis: { min: 0 },
-          series: [{ type: 'heatmap', data: heat }],
+          chart: { type: 'bar' },
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Incidents' } },
+          series: [{
+            type: 'bar', name: 'Incidents', color: GREEN,
+            data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: hasIdm ? `im03d:${k}` : undefined })),
+            dataLabels: { enabled: true },
+          }],
+          plotOptions: { bar: { dataLabels: { enabled: true } } },
+          ...(hasIdm && allDates.length > 0 ? {
+            drilldown: {
+              series: topItems.map(([k]) => ({
+                id: `im03d:${k}`,
+                name: `${k} — Daily Trend`,
+                type: 'bar', color: ORANGE,
+                dataLabels: { enabled: true },
+                data: allDates.map((date) => ({ name: date, y: idm![k]?.[date] ?? 0 })),
+              })),
+            },
+          } : {}),
         } as Record<string, unknown>;
       })(), 'im-05'),
       make('im-04', 'Incident by Status → Department', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status -> department', {
@@ -4164,8 +4246,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     }
     if (GAUGE_CHARTS.has(def.id)) {
       const isHimGauge = /^im-\d+$/i.test(def.id);
-      const trackColor  = '#e6e6e6';
-      const valueColor  = '#7cb5ec';
+      const trackColor  = '#0F766E';
+      const valueColor  = '#C2410C';
       const sliceBorder = themeTokens.surfaceAlt;
       const labelColor  = themeTokens.chart.text;
       const mutedColor  = themeTokens.chart.muted;
@@ -4187,8 +4269,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             borderWidth: 2,
             borderColor: sliceBorder,
             data: [
-              { name: '', y: value, color: valueColor, borderColor: sliceBorder, borderWidth: 2, dataLabels: { enabled: true, distance: -50 } },
-              { name: '', y: remainder, color: trackColor, borderColor: sliceBorder, borderWidth: 2, dataLabels: { enabled: !isHimGauge, distance: 16 } },
+              { name: '', y: value, color: valueColor, borderColor: sliceBorder, borderWidth: 1, dataLabels: { enabled: true, distance: -50 } },
+              { name: '', y: remainder, color: trackColor, borderColor: sliceBorder, borderWidth: 1, dataLabels: { enabled: !isHimGauge, distance: 16 } },
             ],
           };
         }) as Highcharts.SeriesOptionsType[],
@@ -4197,7 +4279,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             startAngle: -90, endAngle: 90,
             center: ['50%', '80%'],
             size: '130%', innerSize: '58%',
-            borderWidth: 2,
+            borderWidth: 1,
             borderColor: sliceBorder,
             states: { hover: { enabled: false }, inactive: { opacity: 1 } },
             dataLabels: {

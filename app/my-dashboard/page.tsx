@@ -54,6 +54,18 @@ export default async function MyDashboardPage({
           if (data && (data.meta.chain_code ?? '').toUpperCase() !== chain) data = null;
           if (data && (data.meta.hotel_code ?? '').toUpperCase() !== hotel) data = null;
         }
+        // If the selected hotel has no data for this module, fall back to any hotel
+        // in chainEntries that does — so My Hotel shows MO/IM/JO even when the
+        // alphabetically-first hotel hasn't uploaded that module yet.
+        if (!data && mod !== 'co') {
+          const altHotel = entriesByModule[mod]?.find(
+            (e) => e.hotel_code && e.hotel_code.toUpperCase() !== hotel.toUpperCase(),
+          )?.hotel_code;
+          if (altHotel) {
+            const altData = await fetchDashboard(altHotel, mod);
+            if (altData && (altData.meta.chain_code ?? '').toUpperCase() === chain) data = altData;
+          }
+        }
         // CO is not hotel-scoped on My Hotel — CO uploads use their own
         // sub-property codes (e.g. WMET/WMWT), so always use the chain's rows.
         const coRows: CoRow[] = mod === 'co' ? await fetchCoRows('CORP', chain) : [];

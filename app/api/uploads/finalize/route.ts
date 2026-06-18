@@ -412,6 +412,9 @@ interface ImAcc {
   catStatusMap:  Record<string, Record<string, number>>;
   catSevMap:     Record<string, Record<string, number>>;
   catDailyMap:   Record<string, Record<string, number>>;
+  itemDailyMap:     Record<string, Record<string, number>>;
+  itemDurationMap:  Record<string, { sum: number; count: number }>;
+  itemCompletedMap: Record<string, number>;
   sevDailyMap:   Record<string, Record<string, number>>;
   monthSevMap:   Record<string, Record<string, number>>;
   wdMonthMap:    Record<string, Record<number, number>>;
@@ -437,7 +440,7 @@ function newImAcc(): ImAcc {
     deptMap: {}, sourceMap: {}, hourMap: {}, weekMap: {},
     bookingMap: {},
     dailyMap: {}, monthMap: {}, weekdayMap: {},
-    catStatusMap: {}, catSevMap: {}, catDailyMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
+    catStatusMap: {}, catSevMap: {}, catDailyMap: {}, itemDailyMap: {}, itemDurationMap: {}, itemCompletedMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
     weekSourceMap: {},
     statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {},
     repeatMap: new Map(),
@@ -461,8 +464,10 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>) {
   const booking = bookingRaw === null || bookingRaw === undefined ? 'Unknown' : String(bookingRaw);
   const vip      = isVip(rr);
 
-  if (status === 'Completed') acc.completed++;
-  else if (status === 'Cancelled') acc.cancelled++;
+  if (status === 'Completed') {
+    acc.completed++;
+    if (item) acc.itemCompletedMap[item] = (acc.itemCompletedMap[item] ?? 0) + 1;
+  } else if (status === 'Cancelled') acc.cancelled++;
 
   acc.severitySum += SEV_WEIGHTS[severity] ?? 0;
 
@@ -566,6 +571,23 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>) {
 
       if (!acc.catDailyMap[category]) acc.catDailyMap[category] = {};
       acc.catDailyMap[category][dayKey] = (acc.catDailyMap[category][dayKey] ?? 0) + 1;
+
+      if (item) {
+        if (!acc.itemDailyMap[item]) acc.itemDailyMap[item] = {};
+        acc.itemDailyMap[item][dayKey] = (acc.itemDailyMap[item][dayKey] ?? 0) + 1;
+
+        const closedRaw = toStr(rr.investigation_updated_on_2);
+        if (closedRaw) {
+          const t2 = new Date(closedRaw).getTime();
+          const t1 = new Date(dayKey).getTime();
+          const days = (t2 - t1) / 86_400_000;
+          if (days >= 0 && days < 3650) {
+            if (!acc.itemDurationMap[item]) acc.itemDurationMap[item] = { sum: 0, count: 0 };
+            acc.itemDurationMap[item].sum += days;
+            acc.itemDurationMap[item].count++;
+          }
+        }
+      }
 
       if (!acc.sevDailyMap[severity]) acc.sevDailyMap[severity] = {};
       acc.sevDailyMap[severity][dayKey] = (acc.sevDailyMap[severity][dayKey] ?? 0) + 1;
@@ -1260,6 +1282,11 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     dept_item_map: acc.deptItemMap,
     dept_category_map: acc.deptCatMap,
     week_map:     acc.weekMap,
+    im_item_date_map: acc.itemDailyMap,
+    im_item_duration_map: Object.fromEntries(
+      Object.entries(acc.itemDurationMap).map(([k, v]) => [k, v.count > 0 ? v.sum / v.count : 0])
+    ),
+    im_item_completed_map: acc.itemCompletedMap,
     week_source_map: acc.weekSourceMap,
     dept_source_map: acc.deptSourceMap,
     status_dept_map: acc.statusDeptMap,

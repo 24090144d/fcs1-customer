@@ -274,7 +274,7 @@
   "chart_titles_im": {
     "im-01": "🟣 Daily Incident Trend",
     "im-02": "🟣 VIP -> Top 10 Incident Case",
-    "im-03": "🟣 Top 10 Department x Category Heatmap",
+    "im-03": "🟣 Top Incident → Daily Trend",
     "im-04": "🟣 Incident by Status → Department",
     "im-05": "🟣 Incident Resolution SLA Compliance",
     "im-06": "Severity Breakdown",
@@ -357,10 +357,10 @@
     "cim-14": "🟢 Regional Risk Heatmap",
     "cim-15": "🟢 Department Risk Heatmap",
     "cim-16": "🟢 Root Cause Pareto Chart",
-    "cim-17": "🟢 Open Critical Aging Dashboard",
+    "cim-17": "🟣 Top Incident → Daily Trend (Chain)",
     "cim-18": "🟢 Hotel x Department Matrix",
     "cim-19": "🟢 Chain Weekly Incident Trend",
-    "cim-20": "🟢 Chain SLA Breach Rate by Hotel"
+    "cim-20": "🟣 Top Incident vs Completion Rate (Chain)"
   },
   "chart_notes_im": {
     "im-01": "Drilldown: Incident Case",

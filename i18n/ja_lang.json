@@ -274,7 +274,7 @@
   "chart_titles_im": {
     "im-01": "🟣 日次インシデント推移",
     "im-02": "🟣 VIP → 上位10インシデント案件",
-    "im-03": "🟣 上位10 部署×カテゴリ ヒートマップ",
+    "im-03": "🟣 トップインシデント → 日次トレンド",
     "im-04": "🟣 ステータス別インシデント → 部署",
     "im-05": "🟣 インシデント解決SLA遵守率",
     "im-06": "重要度内訳",
@@ -357,10 +357,10 @@
     "cim-14": "🟢 Regional Risk Heatmap",
     "cim-15": "🟢 Department Risk Heatmap",
     "cim-16": "🟢 Root Cause Pareto Chart",
-    "cim-17": "🟢 Open Critical Aging Dashboard",
+    "cim-17": "🟣 トップインシデント → 日次トレンド（チェーン全体）",
     "cim-18": "🟢 Hotel x Department Matrix",
     "cim-19": "🟢 Chain Weekly Incident Trend",
-    "cim-20": "🟢 Chain SLA Breach Rate by Hotel"
+    "cim-20": "🟣 Top Incident vs Completion Rate (Chain)"
   },
   "chart_notes_im": {
     "im-01": "ドリルダウン：インシデント案件",

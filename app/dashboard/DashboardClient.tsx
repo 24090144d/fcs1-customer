@@ -2255,6 +2255,9 @@ function buildHotelMoCharts(
   const dates = (rawDaily ?? []).map((d) => d.date);
   const topCats = topN(categoryMap, 10);
   const topLocations = topN(locationMap, 12);
+  const moItemDateMap = summary.mo_item_date_map ?? {};
+  const moItemDurationMap = summary.mo_item_duration_map ?? {};
+  const topItems = topN(itemMap, 10);
 
   const make = (id: string, options: Record<string, unknown>): ChartDef => ({
     id, title: id, note: '', formula: '', filterable: false, options,
@@ -2322,10 +2325,56 @@ function buildHotelMoCharts(
       series: [{ type: 'spline', name: 'Work Orders', data: (rawDaily ?? []).map((d) => d.total ?? 0) }],
       tooltip: { shared: true },
     }),
-    // mo-04 — Completion Rate (gauge)
-    gauge('mo-04', total > 0 ? (completed / total) * 100 : 0),
-    // mo-05 — Open Work Order Rate (gauge)
-    gauge('mo-05', total > 0 ? (open / total) * 100 : 0),
+    // mo-04 — Top 10 Defect by Daily Trend (bar → drilldown to dates)
+    make('mo-04', {
+      chart: { type: 'bar' },
+      xAxis: { type: 'category', title: { text: null } },
+      yAxis: { title: { text: 'Work Orders' }, min: 0 },
+      series: [{
+        type: 'bar', name: 'Work Orders', colorByPoint: true,
+        data: topItems.map(([name, y]) => ({ name, y, drilldown: `mo04:${name}` })),
+      }],
+      drilldown: {
+        series: topItems.map(([name]) => {
+          const dateMap = moItemDateMap[name] ?? {};
+          const sortedDates = Object.keys(dateMap).sort();
+          return {
+            id: `mo04:${name}`, type: 'bar', name: `${name} — Daily Trend`,
+            xAxis: { type: 'category' },
+            data: sortedDates.map((d) => ({ name: d, y: dateMap[d] ?? 0 })),
+          };
+        }),
+      },
+      plotOptions: { bar: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+    }),
+    // mo-05 — Top 10 Defect vs Resolution Hours (dual-axis bar + line)
+    (() => {
+      const items = topItems.map(([name, y]) => ({ name, y }));
+      const hours = topItems.map(([name]) => r2(moItemDurationMap[name] ?? 0));
+      return make('mo-05', {
+        chart: { type: 'column' },
+        xAxis: { type: 'category', categories: items.map((i) => i.name) },
+        yAxis: [
+          { title: { text: 'Work Orders' }, min: 0 },
+          { title: { text: 'Avg Hours' }, opposite: true, min: 0 },
+        ],
+        series: [
+          {
+            type: 'column', name: 'Work Orders', yAxis: 0,
+            data: items.map((i) => i.y),
+            dataLabels: { enabled: true, format: '{y}' },
+          },
+          {
+            type: 'line', name: 'Avg Resolution Hours', yAxis: 1,
+            data: hours,
+            dataLabels: { enabled: true, format: '{y:.1f}h' },
+            color: '#C2410C', marker: { enabled: true },
+          },
+        ],
+        tooltip: { shared: true },
+      });
+    })(),
     // mo-06 — Worldmap Maintenance (single-country map; falls back to location column)
     worldMapData && countryCode
       ? make('mo-06', {

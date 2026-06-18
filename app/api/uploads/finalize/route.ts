@@ -2087,6 +2087,8 @@ export async function POST(req: NextRequest) {
     MO: newImAcc(),
     PM: newImAcc(),
   };
+  const moItemDateAcc: Record<string, Record<string, number>> = {};
+  const moItemDurAcc: Record<string, { sum: number; count: number }> = {};
   const coRowsById = module_code === 'co'
     ? await (async () => {
         const gathered: StagingRow[] = [];
@@ -2334,6 +2336,18 @@ export async function POST(req: NextRequest) {
         accumulate(acc, imLike);
         accumulate(moTypeAcc[type], imLike);
 
+        // mo-04 / mo-05 accumulators (item = defect or asset field)
+        const defectKey = toStr(rr.defect) ?? toStr(rr.asset) ?? toStr(rr.job_order) ?? 'Unknown';
+        if (createdDate) {
+          if (!moItemDateAcc[defectKey]) moItemDateAcc[defectKey] = {};
+          moItemDateAcc[defectKey][createdDate] = (moItemDateAcc[defectKey][createdDate] ?? 0) + 1;
+        }
+        if (resolutionMinutes !== null) {
+          if (!moItemDurAcc[defectKey]) moItemDurAcc[defectKey] = { sum: 0, count: 0 };
+          moItemDurAcc[defectKey].sum += resolutionMinutes;
+          moItemDurAcc[defectKey].count += 1;
+        }
+
         return {
           organization_id,
           upload_job_id,
@@ -2494,6 +2508,12 @@ export async function POST(req: NextRequest) {
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';
+    generatedJson.summary.mo_item_date_map = Object.fromEntries(
+      Object.entries(moItemDateAcc).map(([item, dm]) => [item, { ...dm }]),
+    );
+    generatedJson.summary.mo_item_duration_map = Object.fromEntries(
+      Object.entries(moItemDurAcc).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count / 60 : 0]),
+    );
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'co-v1';

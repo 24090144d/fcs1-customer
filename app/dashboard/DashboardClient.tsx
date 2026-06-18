@@ -24,7 +24,7 @@ const GAUGE_CHARTS = new Set(['im-45', 'im-67', 'im-68', 'im-69', 'im-09', 'im-1
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
-const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10'];
+const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12'];
 const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
   { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
@@ -2227,6 +2227,161 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
   ];
 }
 
+// Hotel-level MO charts mo-01..mo-12 — single-hotel counterparts of the corp
+// cmo-01..cmo-12 charts. Built client-side from the stored summary + raw_daily
+// so existing uploads render correct MO charts without re-upload (the legacy
+// im-46..im-69 charts in stored MO JSON are ignored). Fully independent from
+// buildCorpMoCharts: different ids (mo-* vs cmo-*), single-hotel scope.
+// Titles/notes/formulas are localized by the caller via hmo_chart_* i18n keys.
+function buildHotelMoCharts(
+  summary: HotelSummary,
+  rawDaily: DailyBucket[],
+  worldMapData: Record<string, unknown> | null | undefined,
+  countryCode: string,
+  hotelCode: string,
+): ChartDef[] {
+  const total = summary.total ?? 0;
+  const completed = summary.completed ?? 0;
+  const cancelled = summary.cancelled ?? 0;
+  const open = Math.max(total - completed - cancelled, 0);
+  const categoryMap = summary.category_map ?? {};
+  const statusMap = summary.status_map ?? {};
+  const severityMap = summary.severity_map ?? {};
+  const locationMap = summary.location_map ?? {};
+  const itemMap = summary.item_map ?? {};
+  const guestRelated = summary.vip_total ?? 0;
+  const dates = (rawDaily ?? []).map((d) => d.date);
+  const topCats = topN(categoryMap, 10);
+  const topLocations = topN(locationMap, 12);
+
+  const make = (id: string, options: Record<string, unknown>): ChartDef => ({
+    id, title: id, note: '', formula: '', filterable: false, options,
+  });
+
+  // Semi-donut gauge (pie, no extra module): value arc burnt orange, track deep teal.
+  const gauge = (id: string, value: number): ChartDef => make(id, {
+    chart: { type: 'pie', margin: [0, 0, 0, 0] },
+    plotOptions: {
+      pie: {
+        startAngle: -90, endAngle: 90, center: ['50%', '70%'], size: '120%', innerSize: '70%',
+        borderWidth: 1, borderColor: '#FAF7F2',
+        dataLabels: { enabled: true, format: `<b>{point.y:.1f}%</b>`, distance: -38, style: { fontSize: '20px' } },
+      },
+    },
+    series: [{
+      type: 'pie', name: 'Rate', data: [
+        { name: '', y: r1(value), color: '#C2410C', borderColor: '#FAF7F2', borderWidth: 1 },
+        { name: '', y: r1(Math.max(100 - value, 0)), color: '#0F766E', borderColor: '#FAF7F2', borderWidth: 1, dataLabels: { enabled: false } },
+      ],
+    }],
+    tooltip: { enabled: false },
+  });
+
+  return [
+    // mo-01 — Total Work Orders → Top Category
+    make('mo-01', {
+      chart: { type: 'pie' },
+      series: [{ type: 'pie', innerSize: '45%', name: 'Work Orders', data: topCats.map(([name, y]) => ({ name, y })) }],
+      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' } } },
+      tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' },
+    }),
+    // mo-02 — Total Work Orders → Job Status
+    make('mo-02', {
+      chart: { type: 'pie' },
+      series: [{
+        type: 'pie', innerSize: '45%', name: 'Status',
+        data: Object.entries(statusMap).sort(([, a], [, b]) => Number(b) - Number(a))
+          .map(([name, y]) => ({ name, y: Number(y), ...(STAT_COLORS[name] ? { color: STAT_COLORS[name] } : {}) })),
+      }],
+      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
+    }),
+    // mo-03 — Daily Work Order Trend
+    make('mo-03', {
+      chart: { type: 'spline' },
+      xAxis: { categories: dates, tickInterval: Math.max(1, Math.floor(dates.length / 10)) },
+      yAxis: { title: { text: 'Work Orders' }, min: 0 },
+      series: [{ type: 'spline', name: 'Work Orders', data: (rawDaily ?? []).map((d) => d.total ?? 0) }],
+      tooltip: { shared: true },
+    }),
+    // mo-04 — Completion Rate (gauge)
+    gauge('mo-04', total > 0 ? (completed / total) * 100 : 0),
+    // mo-05 — Open Work Order Rate (gauge)
+    gauge('mo-05', total > 0 ? (open / total) * 100 : 0),
+    // mo-06 — Worldmap Maintenance (single-country map; falls back to location column)
+    worldMapData && countryCode
+      ? make('mo-06', {
+          chart: { type: 'map' },
+          mapNavigation: { enabled: true },
+          colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
+          series: [{
+            type: 'map', name: 'Maintenance Orders', mapData: worldMapData,
+            data: [{ code: countryCode.toUpperCase(), value: total, custom: { hotels: `${hotelCode} ${total}` } }],
+            joinBy: ['iso-a2', 'code'], borderColor: '#B9A88A', nullColor: '#F4EEE4',
+            states: { hover: { color: '#C55A10' } },
+            dataLabels: { enabled: true, useHTML: true, formatter: function (this: { point?: { options?: { custom?: { hotels?: string } } } }) { return `<span style="font-size:9px;font-weight:700">${this.point?.options?.custom?.hotels ?? ''}</span>`; } },
+          }],
+        })
+      : make('mo-06', {
+          chart: { type: 'column' },
+          xAxis: { categories: topLocations.map(([k]) => k) },
+          yAxis: { title: { text: 'Work Orders' } },
+          series: [{ type: 'column', name: 'Work Orders', data: topLocations.map(([, v]) => v) }],
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+        }),
+    // mo-07 — Guest Related Orders
+    make('mo-07', {
+      chart: { type: 'pie' },
+      series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: [
+        { name: 'Guest Related', y: guestRelated, color: '#C2410C' },
+        { name: 'Non Guest Related', y: Math.max(total - guestRelated, 0), color: '#0F766E' },
+      ] }],
+      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' } } },
+    }),
+    // mo-08 — Severity Index (severity distribution column)
+    make('mo-08', {
+      chart: { type: 'column' },
+      xAxis: { categories: SEV_ORDER.filter((s) => severityMap[s]) as unknown as string[] },
+      yAxis: { title: { text: 'Work Orders' } },
+      series: [{ type: 'column', name: 'Work Orders', colorByPoint: true,
+        data: SEV_ORDER.filter((s) => severityMap[s]).map((s) => ({ y: severityMap[s] ?? 0, color: SEV_COLORS[s as keyof typeof SEV_COLORS] })) }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+    }),
+    // mo-09 — Top Categories (bar)
+    make('mo-09', {
+      chart: { type: 'bar' },
+      xAxis: { categories: topCats.map(([k]) => k), title: { text: null } },
+      yAxis: { title: { text: 'Work Orders' } },
+      series: [{ type: 'bar', name: 'Work Orders', data: topCats.map(([, v]) => v) }],
+      plotOptions: { bar: { dataLabels: { enabled: true } } },
+    }),
+    // mo-10 — Category Concentration (top 6 + Others pie)
+    make('mo-10', (() => {
+      const top6 = topN(categoryMap, 6);
+      const othersTotal = total - top6.reduce((s, [, v]) => s + v, 0);
+      const data = top6.map(([name, y]) => ({ name, y }));
+      if (othersTotal > 0) data.push({ name: 'Others', y: othersTotal });
+      return {
+        chart: { type: 'pie' },
+        series: [{ type: 'pie', name: 'Concentration', data }],
+        plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
+      };
+    })()),
+    // mo-11 — Location Hotspots (column of top locations)
+    make('mo-11', {
+      chart: { type: 'column' },
+      xAxis: { categories: topLocations.map(([k]) => k) },
+      yAxis: { title: { text: 'Work Orders' } },
+      series: [{ type: 'column', name: 'Work Orders', colorByPoint: true, data: topLocations.map(([, v]) => v) }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+    }),
+    // mo-12 — Top Assets / Defects (treemap)
+    make('mo-12', {
+      chart: { type: 'treemap' },
+      series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topN(itemMap, 15).map(([name, value]) => ({ name, value })) }],
+    }),
+  ];
+}
+
 function CorpMoPerformanceTable({
   entries,
   dark,
@@ -2607,13 +2762,6 @@ function corpCoKpiNote(note: string, id: string): string {
 // Stored MO dashboard rows generated before the finalize-route rename still
 // carry chart_01..chart_10 ids — map them to the live mo-01..mo-10 ids so
 // config toggles and My Dashboard overrides match.
-function renameLegacyMoChartIds(defs: ChartDef[]): ChartDef[] {
-  return defs.map((d) => {
-    const m = d.id.match(/^chart_(0[1-9]|10)$/);
-    return m ? { ...d, id: `mo-${m[1]}` } : d;
-  });
-}
-
 function orderChartDefs(defs: ChartDef[], orderedIds: string[]): ChartDef[] {
   const rank = new Map(orderedIds.map((id, index) => [id, index]));
   return [...defs].sort((a, b) => {
@@ -2717,32 +2865,6 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
   const isCo = data.meta.schema === 'co-v1';
   const isMo = maintenanceType === 'MO';
-  const scopedCharts = useMemo(
-    () => orderChartDefs(
-      data.meta.schema === 'mo-v1'
-        ? renameLegacyMoChartIds(data.charts_by_type?.[maintenanceType] ?? data.charts)
-        : (data.charts_by_type?.[maintenanceType] ?? data.charts),
-      HOTEL_MO_CHART_DISPLAY_ORDER,
-    ).map((def) => {
-      if (!isMo && !isCo) return def;
-      const scope = moLocalizationScope(isCorp);
-      const localized = {
-        ...def,
-        title: t(`${scope}_chart_titles.${def.id}`, def.title),
-        note: t(`${scope}_chart_notes.${def.id}`, def.note),
-        formula: t(`${scope}_chart_formulas.${def.id}`, def.formula),
-      };
-      return isCo
-        ? {
-            ...localized,
-            title: coLocalizeText(localized.title),
-            note: coLocalizeText(localized.note),
-            formula: coLocalizeText(localized.formula),
-          }
-        : localized;
-    }),
-    [data, maintenanceType, isCorp, isMo, isCo, t],
-  );
   const baseScopedSummary = useMemo(
     () => data.summary_by_type?.[maintenanceType] ?? data.summary,
     [data, maintenanceType],
@@ -2754,6 +2876,30 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
   const scopedSummary = useMemo(
     () => (fd ? summaryFromFilteredData(fd, baseScopedSummary) : baseScopedSummary),
     [fd, baseScopedSummary],
+  );
+  // Hotel MO charts mo-01..mo-12 built client-side from the scoped (date-filtered)
+  // summary, replacing the legacy stored im-46..im-69 charts. Corp MO uses
+  // corpMoCharts instead, so this is only consumed on the hotel path.
+  const scopedCharts = useMemo(
+    () => orderChartDefs(
+      buildHotelMoCharts(
+        scopedSummary,
+        fd ? fd.days : scopedRawDaily,
+        worldMapData,
+        String(data.meta.country_code ?? ''),
+        String(data.meta.hotel_code ?? ''),
+      ),
+      HOTEL_MO_CHART_DISPLAY_ORDER,
+    ).map((def) => {
+      const scope = moLocalizationScope(isCorp);
+      return {
+        ...def,
+        title: t(`${scope}_chart_titles.${def.id}`, def.title),
+        note: t(`${scope}_chart_notes.${def.id}`, def.note),
+        formula: t(`${scope}_chart_formulas.${def.id}`, def.formula),
+      };
+    }),
+    [scopedSummary, fd, scopedRawDaily, worldMapData, data.meta.country_code, data.meta.hotel_code, isCorp, t],
   );
   const scopedKpis = useMemo(
     () => {
@@ -2800,7 +2946,7 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
     : data.meta.source_name;
 
   useEffect(() => {
-    if (!isCorp) return;
+    // Load the world map for both corp (cmo-06) and hotel (mo-06) maintenance maps.
     let cancelled = false;
     fetch('https://code.highcharts.com/mapdata/custom/world.geo.json')
       .then((r) => r.json())
@@ -2869,14 +3015,11 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
     setFiltered(true);
   }, [data.meta.date_range.max, data.meta.date_range.min]);
 
-  const chartOpts = useCallback((def: ChartDef): { override?: Highcharts.Options; fullPeriod: boolean } => {
-    if (isCorp) return { fullPeriod: false };
-    if (!fd) return { fullPeriod: filtered };
-    const storedOptions = (def.options ?? {}) as Record<string, unknown>;
-    if (def.id === 'mo-03' && storedOptions.drilldown) return { fullPeriod: true };
-    const override = buildFilteredOptions(def, fd);
-    return override ? { override, fullPeriod: false } : { fullPeriod: true };
-  }, [fd, filtered, isCorp]);
+  // Both corp (corpMoCharts) and hotel (scopedCharts) MO charts are now built
+  // from already date-filtered summaries, so chartOpts uses def.options as-is.
+  const chartOpts = useCallback((_def: ChartDef): { override?: Highcharts.Options; fullPeriod: boolean } => {
+    return { fullPeriod: false };
+  }, []);
 
   const activeCorpEntries = useMemo(() => {
     if (!isCorp) return [];
@@ -2974,21 +3117,9 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
         </>
       );
     }
-    const _source = isCorp ? corpMoCharts : scopedCharts;
-    let _embedCharts = moVisCharts(_source);
-    // Positional fallback: if myDash uses mo-NN ids (config codes) but stored charts
-    // have im-NN ids (buildImJson output), no direct match occurs. Map mo-NN → index N-1.
-    if (!isCorp && _embedCharts.length === 0 && (myDash?.charts?.length ?? 0) > 0) {
-      const MO_ID_RE = /^mo-(\d+)$/;
-      const positions = (myDash!.charts)
-        .map((id) => { const m = id.match(MO_ID_RE); return m ? parseInt(m[1], 10) - 1 : -1; })
-        .filter((p) => p >= 0)
-        .sort((a, b) => a - b);
-      if (positions.length > 0) _embedCharts = positions.map((p) => _source[p]).filter(Boolean);
-    }
     return (
       <>
-        {_embedCharts.map((def) => {
+        {moVisCharts(isCorp ? corpMoCharts : scopedCharts).map((def) => {
           const { override, fullPeriod } = chartOpts(def);
           return (
             <HcChart

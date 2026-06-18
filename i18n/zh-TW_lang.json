@@ -960,7 +960,9 @@
     "cmo-09": "#9 · Top Categories by Hotel — stacked category comparison across hotels identifies chain-wide maintenance demand patterns.",
     "cmo-10": "#10 · Category Concentration by Hotel — measures whether top-category dominance at each hotel is improving or worsening.",
     "cmo-11": "#11 · Location Hotspots by Hotel — heatmap of maintenance location concentration for targeted facility-improvement decisions.",
-    "cmo-12": "#12 · Chain Asset/Defect Treemap — cross-hotel treemap of most frequent assets or defects drives chain-wide preventive maintenance investment."
+    "cmo-12": "#12 · Chain Asset/Defect Treemap — cross-hotel treemap of most frequent assets or defects drives chain-wide preventive maintenance investment.",
+    "mo-11": "#11 · Location Hotspots — ranks maintenance location concentration for targeted facility-improvement decisions.",
+    "mo-12": "#12 · Asset/Defect Treemap — surfaces the most frequent assets or defects to drive preventive maintenance investment."
   },
   "chart_bv_im": {
     "im-01": "#1 · Daily Incident Trend — day-over-day incident volume with drilldown to case detail; the primary signal for spotting emerging service disruptions before they escalate.",
@@ -1110,7 +1112,9 @@
     "cmo-09": "🟢 Top Categories by Hotel",
     "cmo-10": "🟢 Category Concentration by Hotel",
     "cmo-11": "🟢 Location Hotspots by Hotel",
-    "cmo-12": "🟢 Top Assets / Defects Across Chain"
+    "cmo-12": "🟢 Top Assets / Defects Across Chain",
+    "mo-11": "🟣 Location Hotspots",
+    "mo-12": "🟣 Top Assets / Defects"
   },
   "chart_notes_mo": {
     "cmo01": "外環顯示各酒店的MO總工單數。點擊酒店切片可下鑽檢視其前N維修類別。",
@@ -1146,7 +1150,9 @@
     "cmo-09": "Stacked category comparison across hotels for maintenance demand concentration.",
     "cmo-10": "Shows how dominant the top category is at each hotel.",
     "cmo-11": "Heatmap of top maintenance hotspots by hotel using location or building.",
-    "cmo-12": "Treemap of the most frequent maintenance assets or defects across the chain."
+    "cmo-12": "Treemap of the most frequent maintenance assets or defects across the chain.",
+    "mo-11": "Top maintenance hotspots for this hotel by location or building.",
+    "mo-12": "Treemap of the most frequent maintenance assets or defects at this hotel."
   },
   "chart_formulas_mo": {
     "cmo01": "COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO",
@@ -1252,7 +1258,9 @@
     "mo-09": "依酒店的前N類別",
     "mo-10": "依酒店的類別集中度",
     "chart_11": "依酒店的位置熱點",
-    "chart_12": "連鎖集團前N資產/缺陷"
+    "chart_12": "連鎖集團前N資產/缺陷",
+    "mo-11": "🟣 Location Hotspots",
+    "mo-12": "🟣 Top Assets / Defects"
   },
   "hmo_chart_notes": {
     "cmo01": "外環顯示各酒店的MO總工單數。點擊酒店切片可下鑽檢視其前N維修類別。",
@@ -1278,7 +1286,9 @@
     "mo-09": "依酒店的堆疊類別比較，用於瞭解維修需求集中情況。",
     "mo-10": "展示各酒店最高類別的支配程度。",
     "chart_11": "依位置或樓棟的酒店前N維修熱點熱力圖。",
-    "chart_12": "連鎖集團內最頻繁的維修資產或缺陷的樹狀圖。"
+    "chart_12": "連鎖集團內最頻繁的維修資產或缺陷的樹狀圖。",
+    "mo-11": "Top maintenance hotspots for this hotel by location or building.",
+    "mo-12": "Treemap of the most frequent maintenance assets or defects at this hotel."
   },
   "hmo_chart_formulas": {
     "cmo01": "COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO",
@@ -1304,7 +1314,9 @@
     "mo-09": "COUNT(*) BY hotel_code, category WHERE type = MO",
     "mo-10": "MAX(category_count) / total_orders * 100 BY hotel_code WHERE type = MO",
     "chart_11": "COUNT(*) BY hotel_code, location WHERE type = MO",
-    "chart_12": "COUNT(*) BY defect_or_asset WHERE type = MO"
+    "chart_12": "COUNT(*) BY defect_or_asset WHERE type = MO",
+    "mo-11": "COUNT(*) BY location WHERE type = MO",
+    "mo-12": "COUNT(*) BY defect_or_asset WHERE type = MO ORDER BY count DESC"
   },
   "imc_chart_map": {
     "cim01": "酒店事件 → 前10事件項目",

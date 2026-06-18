@@ -85,8 +85,8 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(seq('cmo_kpi_', 1, 10), 'cmo_kpi_labels', 'cmo_kpi_notes'),
     ],
     charts: [
-      // Hotel MO charts — actual dashboard IDs mo-01..mo-10
-      ...items(seq('mo-', 1, 10), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
+      // Hotel MO charts — actual dashboard IDs mo-01..mo-12
+      ...items(seq('mo-', 1, 12), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
       // Corp MO charts — actual dashboard IDs cmo-01..cmo-12
       ...items(seq('cmo-', 1, 12), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
     ],

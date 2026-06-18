@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.71** (as of 2026-06-19) |
+| Version | **v1.0.72** (as of 2026-06-19) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.72** | 2026-06-19 | Hotel MO charts rebuilt: new `buildHotelMoCharts` emits real `mo-01..mo-12` client-side from the scoped summary (single-hotel mirror of corp `cmo-01..cmo-12`), replacing the legacy `im-46..im-69` charts that leaked from `buildImJson`; fixes regular hotel MO dashboard AND My Hotel (config `mo-01`/`mo-02` now match); corp `cmo-*` untouched and fully independent; world map now loads for hotel `mo-06`; `chartOpts` simplified (charts pre-filtered); removed dead `renameLegacyMoChartIds` + v1.0.71 positional fallback; hotel MO config extended to `mo-01..mo-12`; i18n `mo-11`/`mo-12` added all 4 langs |
 | **v1.0.71** | 2026-06-19 | My Hotel MO charts fix: positional fallback in embed mode (mo-NN → Nth stored im-NN chart) when stored MO data has im-NN IDs; page.tsx hotel-data fallback for modules missing data on first hotel; cim-20 dual-axis column+line (Top Incident vs Completion Rate); gauge colors burnt orange + deep teal + 1px border |
 | **v1.0.70** | 2026-06-13 | cjo-07 → bar-drilldown "Top Service Items → Daily Trend (Chain)": mirrors jo-11; merges `jo_item_date_map` across all hotels, top 10 items, drilldown = daily counts; jo-01↔jo-05 and jo-02↔jo-11 display-order swaps; i18n all 4 langs |
 | **v1.0.69** | 2026-06-13 | cjo-07 → treemap "Top Service Items (Chain)": aggregates `item_map` across all hotels, top 30 items, tile size = total jobs; i18n updated all 4 langs |

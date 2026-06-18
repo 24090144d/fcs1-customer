@@ -1291,6 +1291,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     dept_source_map: acc.deptSourceMap,
     status_dept_map: acc.statusDeptMap,
     status_created_dept_map: acc.statusCreatedDeptMap,
+    cat_status_map: acc.catStatusMap,
     booking_map:  acc.bookingMap,
     source_map:   acc.sourceMap,
     severity_map: acc.severityMap,

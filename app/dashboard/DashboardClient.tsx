@@ -2249,6 +2249,8 @@ function buildHotelMoCharts(
   const severityMap = summary.severity_map ?? {};
   const locationMap = summary.location_map ?? {};
   const itemMap = summary.item_map ?? {};
+  const catStatusMap = summary.cat_status_map ?? {};
+  const statusCreatedDeptMap = summary.status_created_dept_map ?? {};
   const guestRelated = summary.vip_total ?? 0;
   const dates = (rawDaily ?? []).map((d) => d.date);
   const topCats = topN(categoryMap, 10);
@@ -2278,21 +2280,38 @@ function buildHotelMoCharts(
   });
 
   return [
-    // mo-01 — Total Work Orders → Top Category
+    // mo-01 — Top 10 Category by Status (donut → drilldown to job status)
     make('mo-01', {
       chart: { type: 'pie' },
-      series: [{ type: 'pie', innerSize: '45%', name: 'Work Orders', data: topCats.map(([name, y]) => ({ name, y })) }],
+      series: [{
+        type: 'pie', innerSize: '45%', name: 'Work Orders',
+        data: topCats.map(([name, y]) => ({ name, y, drilldown: `mo01:${name}` })),
+      }],
+      drilldown: {
+        series: topCats.map(([name]) => ({
+          id: `mo01:${name}`, type: 'pie', innerSize: '45%', name: `${name} — Status`,
+          data: Object.entries(catStatusMap[name] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a))
+            .map(([s, y]) => ({ name: s, y: Number(y), ...(STAT_COLORS[s] ? { color: STAT_COLORS[s] } : {}) })),
+        })),
+      },
       plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' } } },
       tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' },
     }),
-    // mo-02 — Total Work Orders → Job Status
+    // mo-02 — Work Order Status by Created-by Department (donut → drilldown to dept)
     make('mo-02', {
       chart: { type: 'pie' },
       series: [{
         type: 'pie', innerSize: '45%', name: 'Status',
         data: Object.entries(statusMap).sort(([, a], [, b]) => Number(b) - Number(a))
-          .map(([name, y]) => ({ name, y: Number(y), ...(STAT_COLORS[name] ? { color: STAT_COLORS[name] } : {}) })),
+          .map(([name, y]) => ({ name, y: Number(y), drilldown: `mo02:${name}`, ...(STAT_COLORS[name] ? { color: STAT_COLORS[name] } : {}) })),
       }],
+      drilldown: {
+        series: Object.keys(statusMap).map((status) => ({
+          id: `mo02:${status}`, type: 'pie', innerSize: '45%', name: `${status} — Created Dept`,
+          data: Object.entries(statusCreatedDeptMap[status] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a))
+            .map(([d, y]) => ({ name: d, y: Number(y) })),
+        })),
+      },
       plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
     }),
     // mo-03 — Daily Work Order Trend

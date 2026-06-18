@@ -75,6 +75,7 @@ export interface HotelSummary {
   dept_source_map: Record<string, Record<string, number>>;
   status_dept_map?: Record<string, Record<string, number>>;
   status_created_dept_map?: Record<string, Record<string, number>>;
+  cat_status_map?: Record<string, Record<string, number>>; // category → status → count (mo-01 drilldown)
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;

@@ -2257,6 +2257,8 @@ function buildHotelMoCharts(
   const topLocations = topN(locationMap, 12);
   const moItemDateMap = summary.mo_item_date_map ?? {};
   const moItemDurationMap = summary.mo_item_duration_map ?? {};
+  const moDurDistMap = summary.mo_duration_dist_map ?? {};
+  const moHourMap = summary.mo_hour_map ?? {};
   const topItems = topN(itemMap, 10);
 
   const make = (id: string, options: Record<string, unknown>): ChartDef => ({
@@ -2428,24 +2430,31 @@ function buildHotelMoCharts(
         data: SEV_ORDER.filter((s) => severityMap[s]).map((s) => ({ y: severityMap[s] ?? 0, color: SEV_COLORS[s as keyof typeof SEV_COLORS] })) }],
       plotOptions: { column: { dataLabels: { enabled: true } } },
     }),
-    // mo-09 — Top Categories (bar)
-    make('mo-09', {
-      chart: { type: 'bar' },
-      xAxis: { categories: topCats.map(([k]) => k), title: { text: null } },
-      yAxis: { title: { text: 'Work Orders' } },
-      series: [{ type: 'bar', name: 'Work Orders', data: topCats.map(([, v]) => v) }],
-      plotOptions: { bar: { dataLabels: { enabled: true } } },
-    }),
-    // mo-10 — Category Concentration (top 6 + Others pie)
-    make('mo-10', (() => {
-      const top6 = topN(categoryMap, 6);
-      const othersTotal = total - top6.reduce((s, [, v]) => s + v, 0);
-      const data = top6.map(([name, y]) => ({ name, y }));
-      if (othersTotal > 0) data.push({ name: 'Others', y: othersTotal });
+    // mo-09 — Work Order Duration Distribution
+    make('mo-09', (() => {
+      const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+      const counts = DUR_BUCKETS.map((b) => moDurDistMap[b] ?? 0);
       return {
-        chart: { type: 'pie' },
-        series: [{ type: 'pie', name: 'Concentration', data }],
-        plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
+        chart: { type: 'column' },
+        xAxis: { categories: DUR_BUCKETS, title: { text: 'Duration Range' } },
+        yAxis: { title: { text: 'Work Orders' }, min: 0 },
+        series: [{ type: 'column', name: 'Work Orders', colorByPoint: true, data: counts }],
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{y}' } } },
+        tooltip: { pointFormat: '<b>{point.category}</b>: {point.y} orders' },
+      };
+    })()),
+    // mo-10 — Work Order 24-Hour Distribution
+    make('mo-10', (() => {
+      const hours = Array.from({ length: 24 }, (_, i) => i);
+      const labels = hours.map((h) => `${String(h).padStart(2, '0')}:00`);
+      const counts = hours.map((h) => moHourMap[String(h)] ?? 0);
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: labels, title: { text: 'Hour of Day' } },
+        yAxis: { title: { text: 'Work Orders' }, min: 0 },
+        series: [{ type: 'column', name: 'Work Orders', colorByPoint: false, color: '#0E7470', data: counts }],
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{y}' } } },
+        tooltip: { pointFormat: '<b>{point.category}</b>: {point.y} orders' },
       };
     })()),
     // mo-11 — Location Hotspots (column of top locations)

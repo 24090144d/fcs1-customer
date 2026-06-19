@@ -2089,6 +2089,8 @@ export async function POST(req: NextRequest) {
   };
   const moItemDateAcc: Record<string, Record<string, number>> = {};
   const moItemDurAcc: Record<string, { sum: number; count: number }> = {};
+  const moHourAcc: Record<string, number> = {};
+  const moDurDistAcc: Record<string, number> = {};
   const coRowsById = module_code === 'co'
     ? await (async () => {
         const gathered: StagingRow[] = [];
@@ -2346,6 +2348,19 @@ export async function POST(req: NextRequest) {
           if (!moItemDurAcc[defectKey]) moItemDurAcc[defectKey] = { sum: 0, count: 0 };
           moItemDurAcc[defectKey].sum += resolutionMinutes;
           moItemDurAcc[defectKey].count += 1;
+          // mo-09: duration distribution bucket
+          const durBucket = resolutionMinutes < 60 ? '< 1h'
+            : resolutionMinutes < 120 ? '1-2h'
+            : resolutionMinutes < 240 ? '2-4h'
+            : resolutionMinutes < 480 ? '4-8h'
+            : resolutionMinutes < 1440 ? '8-24h'
+            : '24h+';
+          moDurDistAcc[durBucket] = (moDurDistAcc[durBucket] ?? 0) + 1;
+        }
+        // mo-10: 24-hour distribution
+        if (createdHour !== null) {
+          const hKey = String(createdHour);
+          moHourAcc[hKey] = (moHourAcc[hKey] ?? 0) + 1;
         }
 
         return {
@@ -2515,13 +2530,17 @@ export async function POST(req: NextRequest) {
       Object.entries(moItemDurAcc).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count / 60 : 0]),
     );
     // Inject into top-level summary AND summary_by_type.MO — the hotel MO dashboard
-    // reads summary_by_type.MO first (falls back to summary), so both must carry the
-    // mo-04/mo-05 maps. cat_status_map is already present in both via buildImJson.
+    // reads summary_by_type.MO first (falls back to summary), so both must carry all maps.
+    // cat_status_map is already present in both via buildImJson.
     generatedJson.summary.mo_item_date_map = moItemDateMap;
     generatedJson.summary.mo_item_duration_map = moItemDurationMap;
+    generatedJson.summary.mo_duration_dist_map = { ...moDurDistAcc };
+    generatedJson.summary.mo_hour_map = { ...moHourAcc };
     if (generatedJson.summary_by_type?.MO) {
       generatedJson.summary_by_type.MO.mo_item_date_map = moItemDateMap;
       generatedJson.summary_by_type.MO.mo_item_duration_map = moItemDurationMap;
+      generatedJson.summary_by_type.MO.mo_duration_dist_map = { ...moDurDistAcc };
+      generatedJson.summary_by_type.MO.mo_hour_map = { ...moHourAcc };
     }
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);

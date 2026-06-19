@@ -28,10 +28,11 @@ for (const dash of dashRows) {
   // category → incident_category (default 'Uncategorized'); job_status →
   // normalized incident_status, replicating mapMoStatusToIncidentStatus() so the
   // drilldown taxonomy matches the summary status_map (Pending/Cancelled/Completed).
+  // Keys must match the TypeScript accumulate() logic: no TRIM, null→'' (not 'Uncategorized')
   const agg = (await client.query(
-    `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS cat,
+    `SELECT COALESCE(NULLIF(category, ''), '') AS cat,
             CASE
-              WHEN COALESCE(TRIM(job_status), '') = '' THEN 'Pending'
+              WHEN COALESCE(job_status, '') = '' THEN 'Pending'
               WHEN LOWER(job_status) LIKE '%cancel%' THEN 'Cancelled'
               WHEN LOWER(job_status) LIKE '%complete%' OR LOWER(job_status) LIKE '%close%'
                 OR LOWER(job_status) LIKE '%done%' OR LOWER(job_status) LIKE '%finish%' THEN 'Completed'

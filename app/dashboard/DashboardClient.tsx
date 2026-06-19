@@ -24,7 +24,7 @@ const GAUGE_CHARTS = new Set(['im-45', 'im-67', 'im-68', 'im-69', 'im-09', 'im-1
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
-const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-07', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-02', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12'];
+const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-02', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-07', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12'];
 const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
   { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
@@ -2284,22 +2284,27 @@ function buildHotelMoCharts(
 
   return [
     // mo-01 — Top 10 Category by Status (donut → drilldown to job status)
-    make('mo-01', {
-      chart: { type: 'pie' },
-      series: [{
-        type: 'pie', innerSize: '45%', name: 'Work Orders',
-        data: topCats.map(([name, y]) => ({ name, y, drilldown: `mo01:${name}` })),
-      }],
-      drilldown: {
-        series: topCats.map(([name]) => ({
-          id: `mo01:${name}`, type: 'pie', innerSize: '45%', name: `${name} — Status`,
-          data: Object.entries(catStatusMap[name] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a))
-            .map(([s, y]) => ({ name: s, y: Number(y), ...(STAT_COLORS[s] ? { color: STAT_COLORS[s] } : {}) })),
-        })),
-      },
-      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' } } },
-      tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' },
-    }),
+    make('mo-01', (() => {
+      // Lookup helper: try exact key, then trimmed key (guards against TRIM mismatch in backfilled data)
+      const catStatusLookup = (name: string) =>
+        catStatusMap[name] ?? catStatusMap[name.trim()] ?? catStatusMap[name.trim() || 'Uncategorized'] ?? {};
+      return {
+        chart: { type: 'pie' },
+        series: [{
+          type: 'pie', innerSize: '45%', name: 'Work Orders',
+          data: topCats.map(([name, y]) => ({ name, y, drilldown: `mo01:${name}` })),
+        }],
+        drilldown: {
+          series: topCats.map(([name]) => ({
+            id: `mo01:${name}`, type: 'pie', innerSize: '45%', name: `${name} — Status`,
+            data: Object.entries(catStatusLookup(name)).sort(([, a], [, b]) => Number(b) - Number(a))
+              .map(([s, y]) => ({ name: s, y: Number(y), ...(STAT_COLORS[s] ? { color: STAT_COLORS[s] } : {}) })),
+          })),
+        },
+        plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' } } },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} ({point.percentage:.1f}%)' },
+      };
+    })()),
     // mo-02 — Work Order Status by Created-by Department (donut → drilldown to dept)
     make('mo-02', {
       chart: { type: 'pie' },
@@ -2326,28 +2331,37 @@ function buildHotelMoCharts(
       tooltip: { shared: true },
     }),
     // mo-04 — Top 10 Defect by Daily Trend (bar → drilldown to dates)
-    make('mo-04', {
-      chart: { type: 'bar' },
-      xAxis: { type: 'category', title: { text: null } },
-      yAxis: { title: { text: 'Work Orders' }, min: 0 },
-      series: [{
-        type: 'bar', name: 'Work Orders', colorByPoint: true,
-        data: topItems.map(([name, y]) => ({ name, y, drilldown: `mo04:${name}` })),
-      }],
-      drilldown: {
-        series: topItems.map(([name]) => {
-          const dateMap = moItemDateMap[name] ?? {};
-          const sortedDates = Object.keys(dateMap).sort();
-          return {
-            id: `mo04:${name}`, type: 'bar', name: `${name} — Daily Trend`,
-            xAxis: { type: 'category' },
-            data: sortedDates.map((d) => ({ name: d, y: dateMap[d] ?? 0 })),
-          };
-        }),
-      },
-      plotOptions: { bar: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
-    }),
+    make('mo-04', (() => {
+      // Lookup helper: guards against TRIM/null mismatch in backfilled data
+      const itemDateLookup = (name: string) =>
+        moItemDateMap[name] ?? moItemDateMap[name.trim()] ?? moItemDateMap[name.trim() || 'Unknown'] ?? {};
+      // Collect all dates across all top items for consistent drilldown x-axis
+      const allItemDates = Array.from(
+        new Set(topItems.flatMap(([name]) => Object.keys(itemDateLookup(name)))),
+      ).sort();
+      return {
+        chart: { type: 'bar' },
+        xAxis: { type: 'category', title: { text: null } },
+        yAxis: { title: { text: 'Work Orders' }, min: 0 },
+        series: [{
+          type: 'bar', name: 'Work Orders', colorByPoint: true,
+          data: topItems.map(([name, y]) => ({ name, y, drilldown: `mo04:${name}` })),
+          dataLabels: { enabled: true },
+        }],
+        drilldown: {
+          series: topItems.map(([name]) => {
+            const dm = itemDateLookup(name);
+            return {
+              id: `mo04:${name}`, type: 'bar', name: `${name} — Daily Trend`, color: '#C2410C',
+              dataLabels: { enabled: true },
+              data: allItemDates.map((d) => ({ name: d, y: dm[d] ?? 0 })),
+            };
+          }),
+        },
+        plotOptions: { bar: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+      };
+    })()),
     // mo-05 — Top 10 Defect vs Resolution Hours (dual-axis bar + line)
     (() => {
       const items = topItems.map(([name, y]) => ({ name, y }));

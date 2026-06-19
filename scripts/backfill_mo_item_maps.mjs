@@ -25,9 +25,10 @@ for (const dash of dashRows) {
   )).rows[0]?.n ?? 0);
   const typeFilter = moCount > 0 ? `AND type = 'MO'` : '';
 
+  // Keys must match the TypeScript accumulate() logic: no TRIM, null→'' (not 'Unknown')
   const agg = (await client.query(
     `SELECT
-       COALESCE(NULLIF(TRIM(defect), ''), NULLIF(TRIM(asset), ''), NULLIF(TRIM(job_order), ''), 'Unknown') AS item,
+       COALESCE(NULLIF(defect, ''), NULLIF(asset, ''), NULLIF(job_order, ''), '') AS item,
        TO_CHAR(created_datetime::date, 'YYYY-MM-DD') AS created_date,
        COUNT(*)::int AS cnt,
        AVG(EXTRACT(EPOCH FROM (completed_datetime::timestamptz - created_datetime::timestamptz)) / 3600.0)::numeric(10,4) AS avg_hours

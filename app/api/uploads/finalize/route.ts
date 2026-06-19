@@ -6,6 +6,17 @@ import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { deriveMoType } from './mo-helpers.mjs';
 import { buildCoRow } from '@/lib/csv/coMapping';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function localHour(d: Date, tz: string): number {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const h = parseInt(s, 10);
+    if (!isNaN(h)) return h === 24 ? 0 : h;
+  } catch { /* fall through */ }
+  return d.getUTCHours();
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE    = 1_000;
@@ -449,7 +460,7 @@ function newImAcc(): ImAcc {
   };
 }
 
-function accumulate(acc: ImAcc, rr: Record<string, unknown>) {
+function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
   acc.total++;
   const status   = toStr(rr.incident_status)   ?? '';
   const severity = toStr(rr.severity)           ?? '';
@@ -539,7 +550,7 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>) {
       const dayKey   = d.toISOString().slice(0, 10);
       const monthKey = d.toISOString().slice(0, 7);
       const wd       = d.getDay();
-      const hr       = d.getUTCHours();
+      const hr       = localHour(d, timezone);
       const wkKey    = toWeekKey(d);
 
       if (!acc.dailyMap[dayKey]) acc.dailyMap[dayKey] = {
@@ -1460,7 +1471,7 @@ function push2(map: Record<string, Record<string, number[]>>, k1: string, k2: st
   map[k1][k2].push(v);
 }
 
-function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
+function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone = 'UTC') {
   acc.total++;
   const statusRaw = (toStr(rr.job_status) ?? '').trim().toLowerCase();
   const status = toStr(rr.job_status) ?? 'Unknown';
@@ -1542,7 +1553,7 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
   }
 
   // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
-  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getHours(); })() : null;
+  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : localHour(d, timezone); })() : null;
   if (createdHour !== null) {
     acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
     // track service item count per hour for cjo-22
@@ -1629,7 +1640,7 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>) {
     if (createdAt2) {
       const d2 = new Date(createdAt2);
       if (!isNaN(d2.getTime())) {
-        const h = d2.getHours();
+        const h = localHour(d2, timezone);
         acc.vipHourCount[h] = (acc.vipHourCount[h] ?? 0) + 1;
         if (!acc.vipHourItemCount[h]) acc.vipHourItemCount[h] = {};
         acc.vipHourItemCount[h][item] = (acc.vipHourItemCount[h][item] ?? 0) + 1;
@@ -2029,6 +2040,12 @@ export async function POST(req: NextRequest) {
   if (jobError || !job) return NextResponse.json({ error: 'Upload job not found' }, { status: 404 });
 
   const { organization_id, module_code, source_name } = job;
+
+  // Load org timezone for local-time 24h charts
+  const { data: orgRow } = await supabase
+    .from('organizations').select('timezone').eq('id', organization_id).maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
+  const orgTimezone = orgRow?.timezone ?? 'UTC';
+
   const stagingTable = module_code === 'im'
     ? 'im_staging_rows'
     : module_code === 'jo'
@@ -2132,7 +2149,7 @@ export async function POST(req: NextRequest) {
 
     if (module_code === 'im') {
       payload = rows.map(r => {
-        accumulate(acc, r.raw_row);
+        accumulate(acc, r.raw_row, orgTimezone);
         const rr = r.raw_row;
         return {
           organization_id, upload_job_id,
@@ -2195,8 +2212,8 @@ export async function POST(req: NextRequest) {
     } else if (module_code === 'jo') {
       payload = rows.map(r => {
         const rr = r.raw_row;
-        accumulate(acc, normaliseJoForIm(rr));
-        accumulateJoKpis(joKpiAcc, rr);
+        accumulate(acc, normaliseJoForIm(rr), orgTimezone);
+        accumulateJoKpis(joKpiAcc, rr, orgTimezone);
         return {
           organization_id, upload_job_id,
           uploaded_file_id:      uploaded_file_id ?? r.uploaded_file_id,
@@ -2237,8 +2254,8 @@ export async function POST(req: NextRequest) {
         const rr = r.raw_row;
         const co = coRowsById?.get(r.id) ?? buildCoRow(rr, r.row_number);
         const imLike = normaliseCoForIm(co);
-        accumulate(acc, imLike);
-        accumulate(moTypeAcc.MO, imLike);
+        accumulate(acc, imLike, orgTimezone);
+        accumulate(moTypeAcc.MO, imLike, orgTimezone);
         return {
           organization_id,
           upload_job_id,
@@ -2325,7 +2342,7 @@ export async function POST(req: NextRequest) {
         const completedWithinSla = typeof deadlineVarianceMinutes === 'number' ? deadlineVarianceMinutes <= 0 : false;
         const isOverdue = !!deadlineAt && ((!completedAt && deadlineAt.getTime() < Date.now()) || (typeof deadlineVarianceMinutes === 'number' && deadlineVarianceMinutes > 0));
         const createdDate = createdAt ? createdAt.toISOString().slice(0, 10) : null;
-        const createdHour = createdAt ? createdAt.getUTCHours() : null;
+        const createdHour = createdAt ? localHour(createdAt, orgTimezone) : null;
         const createdWeek = createdAt ? toWeekKey(createdAt) : null;
         const createdMonth = createdAt ? createdAt.toISOString().slice(0, 7) : null;
         const createdQuarter = createdAt ? `${createdAt.getUTCFullYear()}-Q${Math.floor(createdAt.getUTCMonth() / 3) + 1}` : null;
@@ -2337,8 +2354,8 @@ export async function POST(req: NextRequest) {
           ...normaliseMoForIm(rr),
           vip_code: isGuestRelated ? 'Y' : null,
         };
-        accumulate(acc, imLike);
-        accumulate(moTypeAcc[type], imLike);
+        accumulate(acc, imLike, orgTimezone);
+        accumulate(moTypeAcc[type], imLike, orgTimezone);
 
         // mo-04 / mo-05 accumulators (item = defect or asset field)
         const defectKey = toStr(rr.defect) ?? toStr(rr.asset) ?? toStr(rr.job_order) ?? 'Unknown';

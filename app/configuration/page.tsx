@@ -560,6 +560,109 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// System Settings panel (timezone)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMMON_TIMEZONES = [
+  'UTC',
+  'Asia/Hong_Kong', 'Asia/Macau', 'Asia/Shanghai', 'Asia/Taipei',
+  'Asia/Tokyo', 'Asia/Seoul', 'Asia/Singapore', 'Asia/Bangkok',
+  'Asia/Kuala_Lumpur', 'Asia/Jakarta', 'Asia/Manila',
+  'Asia/Dubai', 'Asia/Kolkata',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'Australia/Sydney', 'Pacific/Auckland',
+];
+
+function SystemSettingsPanel({ pal }: { pal: Palette }) {
+  const [timezone, setTimezone] = useState('UTC');
+  const [orgName, setOrgName]   = useState('');
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const [msg, setMsg]           = useState('');
+  const [isError, setIsError]   = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/system-settings')
+      .then(r => r.json())
+      .then((d: { timezone?: string; organization_name?: string }) => {
+        if (d.timezone) setTimezone(d.timezone);
+        if (d.organization_name) setOrgName(d.organization_name);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setMsg('');
+    try {
+      const res = await fetch('/api/admin/system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone }),
+      });
+      const d = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || d.error) { setIsError(true); setMsg(d.error ?? 'Save failed'); }
+      else { setIsError(false); setMsg('Saved. Re-upload CSV to recompute 24h charts with the new timezone.'); }
+    } catch (e) {
+      setIsError(true); setMsg(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ background: pal.panelBg, border: `1px solid ${pal.panelBorder}`, borderRadius: 10, padding: '20px 24px', marginBottom: 24 }}>
+      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: pal.accent, marginBottom: 14, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        System Settings{orgName ? ` — ${orgName}` : ''}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: '0.8rem', color: pal.muted, minWidth: 90 }}>Local Timezone</label>
+        {loading ? (
+          <span style={{ fontSize: '0.8rem', color: pal.muted }}>Loading…</span>
+        ) : (
+          <select
+            value={timezone}
+            onChange={e => { setTimezone(e.target.value); setMsg(''); }}
+            style={{
+              fontSize: '0.82rem', padding: '6px 10px', borderRadius: 6,
+              border: `1px solid ${pal.panelBorder}`, background: pal.inputBg,
+              color: pal.text, outline: 'none', minWidth: 220,
+            }}
+          >
+            {COMMON_TIMEZONES.map(tz => (
+              <option key={tz} value={tz}>{tz}</option>
+            ))}
+          </select>
+        )}
+        <button
+          onClick={save}
+          disabled={saving || loading}
+          style={{
+            padding: '6px 16px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+            background: pal.accent, color: '#fff', border: 'none', opacity: (saving || loading) ? 0.6 : 1,
+          }}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+
+      {msg && (
+        <div style={{ marginTop: 10, fontSize: '0.78rem', color: isError ? '#ef4444' : '#22c55e' }}>
+          {msg}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, fontSize: '0.74rem', color: pal.muted }}>
+        Used for 24-hour distribution charts (mo-10, mo-11, jo-23–jo-26, im hourMap). Takes effect on next CSV upload; run backfill scripts to recompute existing data.
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Reset Database panel (System tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1398,6 +1501,7 @@ export default function ConfigurationPage() {
               {/* ── System tab ───────────────────────────────────────────── */}
               {activeTab === 'system' && (
                 <>
+                  <SystemSettingsPanel pal={pal} />
                   <ResetPanel pal={pal} t={t} />
                   <ResetByHotelPanel pal={pal} t={t} />
                 </>

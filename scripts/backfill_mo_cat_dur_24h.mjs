@@ -14,6 +14,11 @@ const connectionString = process.argv[2] ?? 'postgresql://postgres:Qazz%40%40201
 const client = new Client({ connectionString });
 await client.connect();
 
+const orgTz = (await client.query(
+  `SELECT COALESCE(timezone, 'UTC') AS tz FROM organizations ORDER BY created_at LIMIT 1`
+)).rows[0]?.tz ?? 'UTC';
+console.log(`Using timezone: ${orgTz}`);
+
 const dashRows = (await client.query(
   `SELECT id, upload_job_id, generated_json->'meta'->>'hotel_code' AS hotel
      FROM mo_dashboard_json`
@@ -30,11 +35,11 @@ for (const dash of dashRows) {
     `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS cat,
             COALESCE(NULLIF(TRIM(defect), ''), 'Uncategorized')  AS defect,
             resolution_minutes,
-            created_hour
+            EXTRACT(HOUR FROM created_datetime AT TIME ZONE $2)::int AS local_hour
        FROM mo_records
       WHERE upload_job_id = $1
         ${typeFilter}`,
-    [dash.upload_job_id]
+    [dash.upload_job_id, orgTz]
   )).rows;
 
   if (rows.length === 0) {
@@ -47,15 +52,15 @@ for (const dash of dashRows) {
   // mo-11: defect → hour "0"-"23" → count  (only for resolution_minutes >= 1440)
   const item24hHourAcc = {};
 
-  for (const { cat, defect, resolution_minutes, created_hour } of rows) {
+  for (const { cat, defect, resolution_minutes, local_hour } of rows) {
     const mins = resolution_minutes !== null ? Number(resolution_minutes) : null;
     if (mins !== null) {
       if (!catDurAcc[cat]) catDurAcc[cat] = { sum: 0, count: 0 };
       catDurAcc[cat].sum += mins;
       catDurAcc[cat].count += 1;
 
-      if (mins >= 1440 && created_hour !== null) {
-        const hKey = String(created_hour);
+      if (mins >= 1440 && local_hour !== null) {
+        const hKey = String(local_hour);
         if (!item24hHourAcc[defect]) item24hHourAcc[defect] = {};
         item24hHourAcc[defect][hKey] = (item24hHourAcc[defect][hKey] ?? 0) + 1;
       }

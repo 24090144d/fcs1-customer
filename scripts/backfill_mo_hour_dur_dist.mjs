@@ -13,6 +13,12 @@ const connectionString = process.argv[2] ?? 'postgresql://postgres:Qazz%40%40201
 const client = new Client({ connectionString });
 await client.connect();
 
+// Read org timezone for local-hour computation
+const orgTz = (await client.query(
+  `SELECT COALESCE(timezone, 'UTC') AS tz FROM organizations ORDER BY created_at LIMIT 1`
+)).rows[0]?.tz ?? 'UTC';
+console.log(`Using timezone: ${orgTz}`);
+
 const dashRows = (await client.query(
   `SELECT id, upload_job_id, generated_json->'meta'->>'hotel_code' AS hotel
      FROM mo_dashboard_json`
@@ -35,12 +41,12 @@ for (const dash of dashRows) {
   const typeFilter = moCount > 0 ? `AND type = 'MO'` : '';
 
   const rows = (await client.query(
-    `SELECT created_hour,
+    `SELECT EXTRACT(HOUR FROM created_datetime AT TIME ZONE $2)::int AS local_hour,
             resolution_minutes
        FROM mo_records
       WHERE upload_job_id = $1
         ${typeFilter}`,
-    [dash.upload_job_id]
+    [dash.upload_job_id, orgTz]
   )).rows;
 
   if (rows.length === 0) {
@@ -51,9 +57,9 @@ for (const dash of dashRows) {
   const hourMap = {};
   const durDistMap = {};
 
-  for (const { created_hour, resolution_minutes } of rows) {
-    if (created_hour !== null) {
-      const h = String(created_hour);
+  for (const { local_hour, resolution_minutes } of rows) {
+    if (local_hour !== null) {
+      const h = String(local_hour);
       hourMap[h] = (hourMap[h] ?? 0) + 1;
     }
     if (resolution_minutes !== null) {

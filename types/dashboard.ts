@@ -80,6 +80,8 @@ export interface HotelSummary {
   mo_item_duration_map?: Record<string, number>;             // defect/item → avg resolution hours (mo-05)
   mo_duration_dist_map?: Record<string, number>;             // bucket ("< 1h","1-2h",...) → count (mo-09)
   mo_hour_map?: Record<string, number>;                      // hour "0"-"23" → count (mo-10)
+  mo_cat_duration_map?: Record<string, number>;              // category → avg resolution hours (mo-06)
+  mo_item_24h_date_map?: Record<string, Record<string, number>>; // defect → date → count (24h+ only, mo-11)
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;

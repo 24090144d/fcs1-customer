@@ -2091,6 +2091,8 @@ export async function POST(req: NextRequest) {
   const moItemDurAcc: Record<string, { sum: number; count: number }> = {};
   const moHourAcc: Record<string, number> = {};
   const moDurDistAcc: Record<string, number> = {};
+  const moCatDurAcc: Record<string, { sum: number; count: number }> = {};
+  const moItem24hDateAcc: Record<string, Record<string, number>> = {};
   const coRowsById = module_code === 'co'
     ? await (async () => {
         const gathered: StagingRow[] = [];
@@ -2362,6 +2364,18 @@ export async function POST(req: NextRequest) {
           const hKey = String(createdHour);
           moHourAcc[hKey] = (moHourAcc[hKey] ?? 0) + 1;
         }
+        // mo-06: category → avg resolution hours (matches normaliseMoForIm: toStr(category) ?? 'Uncategorized')
+        const catKey = toStr(rr.category) ?? 'Uncategorized';
+        if (resolutionMinutes !== null) {
+          if (!moCatDurAcc[catKey]) moCatDurAcc[catKey] = { sum: 0, count: 0 };
+          moCatDurAcc[catKey].sum += resolutionMinutes;
+          moCatDurAcc[catKey].count += 1;
+        }
+        // mo-11: 24h+ defect → date → count
+        if (resolutionMinutes !== null && resolutionMinutes >= 1440 && createdDate) {
+          if (!moItem24hDateAcc[defectKey]) moItem24hDateAcc[defectKey] = {};
+          moItem24hDateAcc[defectKey][createdDate] = (moItem24hDateAcc[defectKey][createdDate] ?? 0) + 1;
+        }
 
         return {
           organization_id,
@@ -2536,11 +2550,21 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.mo_item_duration_map = moItemDurationMap;
     generatedJson.summary.mo_duration_dist_map = { ...moDurDistAcc };
     generatedJson.summary.mo_hour_map = { ...moHourAcc };
+    const moCatDurationMap = Object.fromEntries(
+      Object.entries(moCatDurAcc).map(([cat, v]) => [cat, v.count > 0 ? v.sum / v.count / 60 : 0]),
+    );
+    const moItem24hDateMap = Object.fromEntries(
+      Object.entries(moItem24hDateAcc).map(([item, dm]) => [item, { ...dm }]),
+    );
+    generatedJson.summary.mo_cat_duration_map = moCatDurationMap;
+    generatedJson.summary.mo_item_24h_date_map = moItem24hDateMap;
     if (generatedJson.summary_by_type?.MO) {
       generatedJson.summary_by_type.MO.mo_item_date_map = moItemDateMap;
       generatedJson.summary_by_type.MO.mo_item_duration_map = moItemDurationMap;
       generatedJson.summary_by_type.MO.mo_duration_dist_map = { ...moDurDistAcc };
       generatedJson.summary_by_type.MO.mo_hour_map = { ...moHourAcc };
+      generatedJson.summary_by_type.MO.mo_cat_duration_map = moCatDurationMap;
+      generatedJson.summary_by_type.MO.mo_item_24h_date_map = moItem24hDateMap;
     }
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);

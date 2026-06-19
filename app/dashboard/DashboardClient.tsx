@@ -2259,6 +2259,8 @@ function buildHotelMoCharts(
   const moItemDurationMap = summary.mo_item_duration_map ?? {};
   const moDurDistMap = summary.mo_duration_dist_map ?? {};
   const moHourMap = summary.mo_hour_map ?? {};
+  const moCatDurationMap = summary.mo_cat_duration_map ?? {};
+  const moItem24hDateMap = summary.mo_item_24h_date_map ?? {};
   const topItems = topN(itemMap, 10);
 
   const make = (id: string, options: Record<string, unknown>): ChartDef => ({
@@ -2391,27 +2393,28 @@ function buildHotelMoCharts(
         tooltip: { shared: true },
       });
     })(),
-    // mo-06 — Worldmap Maintenance (single-country map; falls back to location column)
-    worldMapData && countryCode
-      ? make('mo-06', {
-          chart: { type: 'map' },
-          mapNavigation: { enabled: true },
-          colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
-          series: [{
-            type: 'map', name: 'Maintenance Orders', mapData: worldMapData,
-            data: [{ code: countryCode.toUpperCase(), value: total, custom: { hotels: `${hotelCode} ${total}` } }],
-            joinBy: ['iso-a2', 'code'], borderColor: '#B9A88A', nullColor: '#F4EEE4',
-            states: { hover: { color: '#C55A10' } },
-            dataLabels: { enabled: true, useHTML: true, formatter: function (this: { point?: { options?: { custom?: { hotels?: string } } } }) { return `<span style="font-size:9px;font-weight:700">${this.point?.options?.custom?.hotels ?? ''}</span>`; } },
-          }],
-        })
-      : make('mo-06', {
-          chart: { type: 'column' },
-          xAxis: { categories: topLocations.map(([k]) => k) },
-          yAxis: { title: { text: 'Work Orders' } },
-          series: [{ type: 'column', name: 'Work Orders', data: topLocations.map(([, v]) => v) }],
-          plotOptions: { column: { dataLabels: { enabled: true } } },
-        }),
+    // mo-06 — Top 10 Category vs Resolution Hours (dual-axis column + line)
+    make('mo-06', (() => {
+      const catDurLookup = (name: string) =>
+        moCatDurationMap[name] ?? moCatDurationMap[name.trim()] ?? 0;
+      const cats = topCats.map(([name, y]) => ({ name, y }));
+      const hours = topCats.map(([name]) => r2(catDurLookup(name)));
+      return {
+        chart: { type: 'column' },
+        xAxis: { type: 'category', categories: cats.map((c) => c.name) },
+        yAxis: [
+          { title: { text: 'Work Orders' }, min: 0 },
+          { title: { text: 'Avg Hours' }, opposite: true, min: 0 },
+        ],
+        series: [
+          { type: 'column', name: 'Work Orders', yAxis: 0, data: cats.map((c) => c.y),
+            dataLabels: { enabled: true, format: '{y}' } },
+          { type: 'line', name: 'Avg Resolution Hours', yAxis: 1, data: hours,
+            dataLabels: { enabled: true, format: '{y:.1f}h' }, color: '#C2410C', marker: { enabled: true } },
+        ],
+        tooltip: { shared: true },
+      };
+    })()),
     // mo-07 — Guest Related Orders
     make('mo-07', {
       chart: { type: 'pie' },
@@ -2457,14 +2460,36 @@ function buildHotelMoCharts(
         tooltip: { pointFormat: '<b>{point.category}</b>: {point.y} orders' },
       };
     })()),
-    // mo-11 — Location Hotspots (column of top locations)
-    make('mo-11', {
-      chart: { type: 'column' },
-      xAxis: { categories: topLocations.map(([k]) => k) },
-      yAxis: { title: { text: 'Work Orders' } },
-      series: [{ type: 'column', name: 'Work Orders', colorByPoint: true, data: topLocations.map(([, v]) => v) }],
-      plotOptions: { column: { dataLabels: { enabled: true } } },
-    }),
+    // mo-11 — Top 10 Defect > 24 Hours (bar drilldown to daily trend)
+    make('mo-11', (() => {
+      const top24h: Array<[string, number]> = Object.entries(moItem24hDateMap)
+        .map(([name, dm]): [string, number] => [name, Object.values(dm).reduce((a, c) => a + c, 0)])
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10);
+      const allDates = Array.from(
+        new Set(top24h.flatMap(([name]) => Object.keys(moItem24hDateMap[name] ?? {}))),
+      ).sort();
+      return {
+        chart: { type: 'bar' },
+        xAxis: { type: 'category', title: { text: null } },
+        yAxis: { title: { text: 'Work Orders (> 24h)' }, min: 0 },
+        series: [{
+          type: 'bar', name: 'Work Orders (> 24h)', colorByPoint: true,
+          data: top24h.map(([name, y]) => ({ name, y, drilldown: `mo11:${name}` })),
+          dataLabels: { enabled: true, format: '{point.y}' },
+        }],
+        drilldown: {
+          series: top24h.map(([name]) => ({
+            id: `mo11:${name}`, type: 'bar', name: `${name} — Daily > 24h`,
+            color: '#C2410C',
+            dataLabels: { enabled: true },
+            data: allDates.map((d) => ({ name: d, y: moItem24hDateMap[name]?.[d] ?? 0 })),
+          })),
+        },
+        plotOptions: { bar: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+      };
+    })()),
     // mo-12 — Top Assets / Defects (treemap)
     make('mo-12', {
       chart: { type: 'treemap' },

@@ -2260,7 +2260,7 @@ function buildHotelMoCharts(
   const moDurDistMap = summary.mo_duration_dist_map ?? {};
   const moHourMap = summary.mo_hour_map ?? {};
   const moCatDurationMap = summary.mo_cat_duration_map ?? {};
-  const moItem24hDateMap = summary.mo_item_24h_date_map ?? {};
+  const moItem24hHourMap = summary.mo_item_24h_hour_map ?? {};
   const topItems = topN(itemMap, 10);
 
   const make = (id: string, options: Record<string, unknown>): ChartDef => ({
@@ -2460,15 +2460,13 @@ function buildHotelMoCharts(
         tooltip: { pointFormat: '<b>{point.category}</b>: {point.y} orders' },
       };
     })()),
-    // mo-11 — Top 10 Defect > 24 Hours (bar drilldown to daily trend)
+    // mo-11 — Top 10 Defect > 24 Hours (bar drilldown to 24-hour distribution)
     make('mo-11', (() => {
-      const top24h: Array<[string, number]> = Object.entries(moItem24hDateMap)
-        .map(([name, dm]): [string, number] => [name, Object.values(dm).reduce((a, c) => a + c, 0)])
+      const hours = Array.from({ length: 24 }, (_, i) => String(i));
+      const top24h: Array<[string, number]> = Object.entries(moItem24hHourMap)
+        .map(([name, hm]): [string, number] => [name, Object.values(hm).reduce((a, c) => a + c, 0)])
         .sort(([, a], [, b]) => b - a)
         .slice(0, 10);
-      const allDates = Array.from(
-        new Set(top24h.flatMap(([name]) => Object.keys(moItem24hDateMap[name] ?? {}))),
-      ).sort();
       return {
         chart: { type: 'bar' },
         xAxis: { type: 'category', title: { text: null } },
@@ -2480,10 +2478,10 @@ function buildHotelMoCharts(
         }],
         drilldown: {
           series: top24h.map(([name]) => ({
-            id: `mo11:${name}`, type: 'bar', name: `${name} — Daily > 24h`,
+            id: `mo11:${name}`, type: 'column', name: `${name} — 24h Distribution`,
             color: '#C2410C',
-            dataLabels: { enabled: true },
-            data: allDates.map((d) => ({ name: d, y: moItem24hDateMap[name]?.[d] ?? 0 })),
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: hours.map((h) => ({ name: `${h.padStart(2, '0')}:00`, y: moItem24hHourMap[name]?.[h] ?? 0 })),
           })),
         },
         plotOptions: { bar: { dataLabels: { enabled: true, format: '{point.y}' } } },

@@ -30,7 +30,7 @@ for (const dash of dashRows) {
     `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS cat,
             COALESCE(NULLIF(TRIM(defect), ''), 'Uncategorized')  AS defect,
             resolution_minutes,
-            TO_CHAR(created_date, 'YYYY-MM-DD') AS created_date
+            created_hour
        FROM mo_records
       WHERE upload_job_id = $1
         ${typeFilter}`,
@@ -44,19 +44,20 @@ for (const dash of dashRows) {
 
   // mo-06: category → { sum, count } → avg hours
   const catDurAcc = {};
-  // mo-11: defect → date → count  (only for resolution_minutes >= 1440)
-  const item24hDateAcc = {};
+  // mo-11: defect → hour "0"-"23" → count  (only for resolution_minutes >= 1440)
+  const item24hHourAcc = {};
 
-  for (const { cat, defect, resolution_minutes, created_date } of rows) {
+  for (const { cat, defect, resolution_minutes, created_hour } of rows) {
     const mins = resolution_minutes !== null ? Number(resolution_minutes) : null;
     if (mins !== null) {
       if (!catDurAcc[cat]) catDurAcc[cat] = { sum: 0, count: 0 };
       catDurAcc[cat].sum += mins;
       catDurAcc[cat].count += 1;
 
-      if (mins >= 1440 && created_date) {
-        if (!item24hDateAcc[defect]) item24hDateAcc[defect] = {};
-        item24hDateAcc[defect][created_date] = (item24hDateAcc[defect][created_date] ?? 0) + 1;
+      if (mins >= 1440 && created_hour !== null) {
+        const hKey = String(created_hour);
+        if (!item24hHourAcc[defect]) item24hHourAcc[defect] = {};
+        item24hHourAcc[defect][hKey] = (item24hHourAcc[defect][hKey] ?? 0) + 1;
       }
     }
   }
@@ -64,12 +65,12 @@ for (const dash of dashRows) {
   const moCatDurationMap = Object.fromEntries(
     Object.entries(catDurAcc).map(([c, v]) => [c, v.count > 0 ? v.sum / v.count / 60 : 0])
   );
-  const moItem24hDateMap = Object.fromEntries(
-    Object.entries(item24hDateAcc).map(([item, dm]) => [item, { ...dm }])
+  const moItem24hHourMap = Object.fromEntries(
+    Object.entries(item24hHourAcc).map(([item, hm]) => [item, { ...hm }])
   );
 
   const catP  = JSON.stringify(moCatDurationMap);
-  const i24P  = JSON.stringify(moItem24hDateMap);
+  const i24P  = JSON.stringify(moItem24hHourMap);
 
   await client.query(
     `UPDATE mo_dashboard_json
@@ -78,17 +79,17 @@ for (const dash of dashRows) {
                 WHEN generated_json->'summary_by_type'->'MO' IS NOT NULL
                 THEN jsonb_set(jsonb_set(generated_json,
                        '{summary_by_type,MO,mo_cat_duration_map}', $1::jsonb),
-                       '{summary_by_type,MO,mo_item_24h_date_map}', $2::jsonb)
+                       '{summary_by_type,MO,mo_item_24h_hour_map}', $2::jsonb)
                 ELSE generated_json
               END,
               '{summary,mo_cat_duration_map}', $1::jsonb),
-              '{summary,mo_item_24h_date_map}', $2::jsonb),
+              '{summary,mo_item_24h_hour_map}', $2::jsonb),
             updated_at = NOW()
       WHERE id = $3`,
     [catP, i24P, dash.id]
   );
 
-  console.log(`${dash.hotel}: ${Object.keys(moCatDurationMap).length} categories, ${Object.keys(moItem24hDateMap).length} 24h+ defects backfilled (${moCount > 0 ? 'MO' : 'all'} rows)`);
+  console.log(`${dash.hotel}: ${Object.keys(moCatDurationMap).length} categories, ${Object.keys(moItem24hHourMap).length} 24h+ defects backfilled (${moCount > 0 ? 'MO' : 'all'} rows)`);
 }
 
 await client.end();

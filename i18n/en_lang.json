@@ -1151,7 +1151,7 @@
     "cmo-10": "Shows how dominant the top category is at each hotel.",
     "cmo-11": "Heatmap of top maintenance hotspots by hotel using location or building.",
     "cmo-12": "Treemap of the most frequent maintenance assets or defects across the chain.",
-    "mo-11": "Top 10 defects by count of orders taking > 24 hours to resolve. Click a bar to drill into its daily distribution.",
+    "mo-11": "Top 10 defects by count of orders taking > 24 hours to resolve. Click a bar to drill into its 24-hour distribution.",
     "mo-12": "Treemap of the most frequent maintenance assets or defects at this hotel."
   },
   "chart_formulas_mo": {
@@ -1299,7 +1299,7 @@
     "mo-10": "Number of work orders created by hour of day (00:00–23:00). Reveals peak maintenance request windows for staffing decisions.",
     "chart_11": "Heatmap of top maintenance hotspots by hotel using location or building.",
     "chart_12": "Treemap of the most frequent maintenance assets or defects across the chain.",
-    "mo-11": "Top 10 defects by count of orders taking > 24 hours to resolve. Click a bar to drill into its daily distribution.",
+    "mo-11": "Top 10 defects by count of orders taking > 24 hours to resolve. Click a bar to drill into its 24-hour distribution.",
     "mo-12": "Treemap of the most frequent maintenance assets or defects at this hotel."
   },
   "hmo_chart_formulas": {
@@ -1327,7 +1327,7 @@
     "mo-10": "COUNT(*) GROUP BY EXTRACT(HOUR FROM created_datetime) WHERE type = MO",
     "chart_11": "COUNT(*) BY hotel_code, location WHERE type = MO",
     "chart_12": "COUNT(*) BY defect_or_asset WHERE type = MO",
-    "mo-11": "COUNT(*) BY defect WHERE resolution_minutes >= 1440 AND type = MO DRILLDOWN COUNT(*) BY created_date WITHIN defect",
+    "mo-11": "COUNT(*) BY defect WHERE resolution_minutes >= 1440 AND type = MO DRILLDOWN COUNT(*) BY HOUR(created_datetime) WITHIN defect",
     "mo-12": "COUNT(*) BY defect_or_asset WHERE type = MO ORDER BY count DESC"
   },
   "imc_chart_map": {

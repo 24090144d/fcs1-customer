@@ -2508,12 +2508,21 @@ export async function POST(req: NextRequest) {
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';
-    generatedJson.summary.mo_item_date_map = Object.fromEntries(
+    const moItemDateMap = Object.fromEntries(
       Object.entries(moItemDateAcc).map(([item, dm]) => [item, { ...dm }]),
     );
-    generatedJson.summary.mo_item_duration_map = Object.fromEntries(
+    const moItemDurationMap = Object.fromEntries(
       Object.entries(moItemDurAcc).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count / 60 : 0]),
     );
+    // Inject into top-level summary AND summary_by_type.MO — the hotel MO dashboard
+    // reads summary_by_type.MO first (falls back to summary), so both must carry the
+    // mo-04/mo-05 maps. cat_status_map is already present in both via buildImJson.
+    generatedJson.summary.mo_item_date_map = moItemDateMap;
+    generatedJson.summary.mo_item_duration_map = moItemDurationMap;
+    if (generatedJson.summary_by_type?.MO) {
+      generatedJson.summary_by_type.MO.mo_item_date_map = moItemDateMap;
+      generatedJson.summary_by_type.MO.mo_item_duration_map = moItemDurationMap;
+    }
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'co-v1';

@@ -65,15 +65,25 @@ for (const dash of dashRows) {
     Object.entries(itemDurAcc).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count : 0])
   );
 
+  // Write into BOTH summary and summary_by_type.MO — the hotel MO dashboard reads
+  // summary_by_type.MO first (falls back to summary).
+  const dateP = JSON.stringify(itemDateMap);
+  const durP = JSON.stringify(itemDurationMap);
   await client.query(
     `UPDATE mo_dashboard_json
-        SET generated_json = jsonb_set(
-              jsonb_set(generated_json, '{summary,mo_item_date_map}', $1::jsonb),
-              '{summary,mo_item_duration_map}', $2::jsonb
-            ),
+        SET generated_json = jsonb_set(jsonb_set(
+              CASE
+                WHEN generated_json->'summary_by_type'->'MO' IS NOT NULL
+                THEN jsonb_set(jsonb_set(generated_json,
+                       '{summary_by_type,MO,mo_item_date_map}', $1::jsonb),
+                       '{summary_by_type,MO,mo_item_duration_map}', $2::jsonb)
+                ELSE generated_json
+              END,
+              '{summary,mo_item_date_map}', $1::jsonb),
+              '{summary,mo_item_duration_map}', $2::jsonb),
             updated_at = NOW()
       WHERE id = $3`,
-    [JSON.stringify(itemDateMap), JSON.stringify(itemDurationMap), dash.id]
+    [dateP, durP, dash.id]
   );
   console.log(`${dash.hotel}: ${Object.keys(itemDateMap).length} items backfilled (${moCount > 0 ? 'MO' : 'all'} rows)`);
 }

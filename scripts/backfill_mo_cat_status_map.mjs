@@ -57,12 +57,21 @@ for (const dash of dashRows) {
     catStatusMap[cat][status] = cnt;
   }
 
+  // Write into BOTH summary and summary_by_type.MO — the hotel MO dashboard reads
+  // summary_by_type.MO first (falls back to summary).
+  const payload = JSON.stringify(catStatusMap);
   await client.query(
     `UPDATE mo_dashboard_json
-        SET generated_json = jsonb_set(generated_json, '{summary,cat_status_map}', $1::jsonb),
+        SET generated_json = jsonb_set(
+              CASE
+                WHEN generated_json->'summary_by_type'->'MO' IS NOT NULL
+                THEN jsonb_set(generated_json, '{summary_by_type,MO,cat_status_map}', $1::jsonb)
+                ELSE generated_json
+              END,
+              '{summary,cat_status_map}', $1::jsonb),
             updated_at = NOW()
       WHERE id = $2`,
-    [JSON.stringify(catStatusMap), dash.id]
+    [payload, dash.id]
   );
   console.log(`${dash.hotel}: ${Object.keys(catStatusMap).length} categories backfilled (${moCount > 0 ? 'MO' : 'all'} rows)`);
 }

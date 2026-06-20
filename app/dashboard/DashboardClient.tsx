@@ -2204,7 +2204,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       const chainTotals = BUCKETS.map((b) => entries.reduce((s, e) => s + (e.summary.mo_duration_dist_map?.[b] ?? 0), 0));
       return {
         chart: { type: 'column' },
-        xAxis: { categories: BUCKETS },
+        xAxis: { type: 'category' },
         yAxis: { title: { text: 'Work Orders' }, min: 0 },
         series: [{
           type: 'column', name: 'Work Orders', colorByPoint: true,
@@ -2230,7 +2230,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       const chainTotals = hours.map((h) => entries.reduce((s, e) => s + (e.summary.mo_hour_map?.[String(h)] ?? 0), 0));
       return {
         chart: { type: 'column' },
-        xAxis: { categories: hours.map((h) => String(h).padStart(2, '0') + ':00') },
+        xAxis: { type: 'category' },
         yAxis: { title: { text: 'Work Orders' }, min: 0 },
         series: [{
           type: 'column', name: 'Work Orders', colorByPoint: true,

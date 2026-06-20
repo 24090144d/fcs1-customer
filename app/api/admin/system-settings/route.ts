@@ -33,7 +33,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: NextRequest) {
+async function saveTimezone(req: NextRequest) {
   try {
     const body = await req.json() as { timezone?: string };
     const timezone = body.timezone?.trim();
@@ -59,3 +59,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
+
+export async function PUT(req: NextRequest) { return saveTimezone(req); }
+export async function POST(req: NextRequest) { return saveTimezone(req); }

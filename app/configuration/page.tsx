@@ -598,7 +598,7 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
     setMsg('');
     try {
       const res = await fetch('/api/admin/system-settings', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timezone }),
       });

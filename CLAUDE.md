@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.78** (as of 2026-06-20) |
+| Version | **v1.0.79** (as of 2026-06-20) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.79** | 2026-06-20 | Fix Configuration > System timezone save: removed `updated_at` from organizations UPDATE (column absent in Neon production caused empty response body) |
 | **v1.0.78** | 2026-06-20 | Corp MO cmo-09/10/11 redesigned to mirror hotel mo-09/10/11 for chain data: cmo-09 "Work Order Duration Distribution (Chain)" (BUCKETS column + per-hotel drilldown), cmo-10 "24-Hour Work Order Distribution (Chain)" (00:00–23:00 column + per-hotel drilldown), cmo-11 "Top 10 Defect > 24 Hours (Chain)" (bar + per-hotel drilldown); aggregates `mo_duration_dist_map`, `mo_hour_map`, `mo_item_24h_hour_map` across `entries`; drilldown IDs prefixed `cmo09:`/`cmo10:`/`cmo11:` to avoid collision; i18n updated all 4 langs (chart_bv_mo, chart_titles_mo, chart_notes_mo, hmo_chart_titles, hmo_chart_notes, cmo_chart_titles, cmo_chart_notes, cmo_chart_formulas) |
 | **v1.0.73** | 2026-06-19 | Hotel MO `mo-01`/`mo-02` redesigned as donut drilldowns: `mo-01` "Top 10 Category by Status" (top-10 category donut → drilldown to job-status via new `cat_status_map`); `mo-02` "Work Order Status by Department" (status donut → drilldown to created-by dept via existing `status_created_dept_map`); `cat_status_map` (category→status) added to `HotelSummary` + finalize summary output; `scripts/backfill_mo_cat_status_map.mjs` backfills it from `mo_records` with `mapMoStatusToIncidentStatus` normalization (matches stored `status_map`); i18n titles/notes/formulas/BV updated all 4 langs; corp `cmo-*` untouched |
 | **v1.0.72** | 2026-06-19 | Hotel MO charts rebuilt: new `buildHotelMoCharts` emits real `mo-01..mo-12` client-side from the scoped summary (single-hotel mirror of corp `cmo-01..cmo-12`), replacing the legacy `im-46..im-69` charts that leaked from `buildImJson`; fixes regular hotel MO dashboard AND My Hotel (config `mo-01`/`mo-02` now match); corp `cmo-*` untouched and fully independent; world map now loads for hotel `mo-06`; `chartOpts` simplified (charts pre-filtered); removed dead `renameLegacyMoChartIds` + v1.0.71 positional fallback; hotel MO config extended to `mo-01..mo-12`; i18n `mo-11`/`mo-12` added all 4 langs |

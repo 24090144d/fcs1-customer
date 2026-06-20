@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest) {
 
     const { error } = await supabase
       .from('organizations')
-      .update({ timezone, updated_at: new Date().toISOString() })
+      .update({ timezone })
       .eq('id', org.id) as unknown as SbResult<null>;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -2198,28 +2198,93 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       xAxis: { categories: hotelCodes },
       series: [{ type: 'column', name: 'Severity Index', data: entries.map((e) => e.summary.total > 0 ? r2((e.summary.severity_sum ?? 0) / e.summary.total) : 0) }],
     }),
-    make('cmo-09', 'Top Categories by Hotel', 'Stacked category comparison across hotels for maintenance demand concentration.', 'COUNT(*) BY hotel_code, category WHERE type = MO', {
-      chart: { type: 'bar' },
-      xAxis: { categories: hotelCodes },
-      plotOptions: { bar: { stacking: 'normal' } },
-      series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
-    }),
-    make('cmo-10', 'Category Concentration by Hotel', 'Shows how dominant the top category is at each hotel.', 'MAX(category_count) / total_orders * 100 BY hotel_code WHERE type = MO', {
-      chart: { type: 'bar' },
-      xAxis: { categories: hotelCodes },
-      yAxis: { max: 100, title: { text: 'Top Category Share %' } },
-      series: [{ type: 'bar', name: 'Top Category Share %', data: entries.map((e) => {
-        const top = topN(e.summary.category_map ?? {}, 1)[0]?.[1] ?? 0;
-        return e.summary.total > 0 ? r1((top / e.summary.total) * 100) : 0;
-      }) }],
-    }),
-    make('cmo-11', 'Location Hotspots by Hotel', 'Heatmap of top maintenance hotspots by hotel using location or building.', 'COUNT(*) BY hotel_code, location WHERE type = MO', {
-      chart: { type: 'heatmap' },
-      xAxis: { categories: hotelCodes },
-      yAxis: { categories: allLocations, title: { text: null }, reversed: true },
-      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
-      series: [{ type: 'heatmap', name: 'Orders', data: hotelCodes.flatMap((hotel, xi) => allLocations.map((location, yi) => [xi, yi, entries.find((e) => e.hotel_code === hotel)?.summary.location_map?.[location] ?? 0])), dataLabels: { enabled: true } }],
-    }),
+    // cmo-09: Work Order Duration Distribution (Chain) — drilldown to per-hotel count
+    make('cmo-09', 'Work Order Duration Distribution (Chain)', 'Chain-wide distribution of work orders by resolution time. Click a bucket to see per-hotel breakdown.', 'COUNT(*) BY duration_bucket WHERE type = MO DRILLDOWN COUNT(*) BY hotel_code WITHIN bucket', (() => {
+      const BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+      const chainTotals = BUCKETS.map((b) => entries.reduce((s, e) => s + (e.summary.mo_duration_dist_map?.[b] ?? 0), 0));
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: BUCKETS },
+        yAxis: { title: { text: 'Work Orders' }, min: 0 },
+        series: [{
+          type: 'column', name: 'Work Orders', colorByPoint: true,
+          data: BUCKETS.map((b, i) => ({ name: b, y: chainTotals[i], drilldown: `cmo09:${b}` })),
+          dataLabels: { enabled: true, format: '{point.y}' },
+        }],
+        drilldown: {
+          series: BUCKETS.map((b) => ({
+            id: `cmo09:${b}`, type: 'column', name: `${b} — By Hotel`,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: entries
+              .map((e) => ({ name: e.hotel_code, y: e.summary.mo_duration_dist_map?.[b] ?? 0 }))
+              .filter((p) => p.y > 0)
+              .sort((a, bb) => bb.y - a.y),
+          })),
+        },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+      };
+    })()),
+    // cmo-10: 24-Hour Work Order Distribution (Chain) — drilldown to per-hotel count
+    make('cmo-10', '24-Hour Work Order Distribution (Chain)', 'Chain-wide 24-hour work order distribution. Click an hour to see per-hotel breakdown.', 'COUNT(*) BY HOUR(created_datetime) WHERE type = MO DRILLDOWN COUNT(*) BY hotel_code WITHIN hour', (() => {
+      const hours = Array.from({ length: 24 }, (_, i) => i);
+      const chainTotals = hours.map((h) => entries.reduce((s, e) => s + (e.summary.mo_hour_map?.[String(h)] ?? 0), 0));
+      return {
+        chart: { type: 'column' },
+        xAxis: { categories: hours.map((h) => String(h).padStart(2, '0') + ':00') },
+        yAxis: { title: { text: 'Work Orders' }, min: 0 },
+        series: [{
+          type: 'column', name: 'Work Orders', colorByPoint: true,
+          data: hours.map((h, i) => ({ name: String(h).padStart(2, '0') + ':00', y: chainTotals[i], drilldown: `cmo10:${h}` })),
+          dataLabels: { enabled: true, format: '{point.y}' },
+        }],
+        drilldown: {
+          series: hours.map((h) => ({
+            id: `cmo10:${h}`, type: 'column', name: `${String(h).padStart(2, '0')}:00 — By Hotel`,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: entries
+              .map((e) => ({ name: e.hotel_code, y: e.summary.mo_hour_map?.[String(h)] ?? 0 }))
+              .filter((p) => p.y > 0)
+              .sort((a, bb) => bb.y - a.y),
+          })),
+        },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+      };
+    })()),
+    // cmo-11: Top 10 Defect > 24h (Chain) — drilldown to per-hotel count
+    make('cmo-11', 'Top 10 Defect > 24 Hours (Chain)', 'Top 10 defects with resolution > 24 hours across the chain. Click a bar to see per-hotel breakdown.', 'COUNT(*) BY defect WHERE resolution_minutes >= 1440 AND type = MO DRILLDOWN COUNT(*) BY hotel_code WITHIN defect', (() => {
+      const chainDefectTotals: Record<string, number> = {};
+      for (const e of entries) {
+        for (const [defect, hm] of Object.entries(e.summary.mo_item_24h_hour_map ?? {})) {
+          const total = Object.values(hm as Record<string, number>).reduce((a, c) => a + c, 0);
+          chainDefectTotals[defect] = (chainDefectTotals[defect] ?? 0) + total;
+        }
+      }
+      const top10 = topN(chainDefectTotals, 10);
+      return {
+        chart: { type: 'bar' },
+        xAxis: { type: 'category', title: { text: null } },
+        yAxis: { title: { text: 'Work Orders (> 24h)' }, min: 0 },
+        series: [{
+          type: 'bar', name: 'Work Orders (> 24h)', colorByPoint: true,
+          data: top10.map(([name, y]) => ({ name, y, drilldown: `cmo11:${name}` })),
+          dataLabels: { enabled: true, format: '{point.y}' },
+        }],
+        drilldown: {
+          series: top10.map(([defect]) => ({
+            id: `cmo11:${defect}`, type: 'column', name: `${defect} — By Hotel`,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: entries
+              .map((e) => ({
+                name: e.hotel_code,
+                y: Object.values(e.summary.mo_item_24h_hour_map?.[defect] ?? {}).reduce((a, c) => a + (c as number), 0),
+              }))
+              .filter((p) => p.y > 0)
+              .sort((a, bb) => bb.y - a.y),
+          })),
+        },
+        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
+      };
+    })()),
     make('cmo-12', 'Top Assets / Defects Across Chain', 'Treemap of the most frequent maintenance assets or defects across the chain.', 'COUNT(*) BY defect_or_asset WHERE type = MO', {
       chart: { type: 'treemap' },
       series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topItems.map(([name, value]) => ({ name, value })) }],

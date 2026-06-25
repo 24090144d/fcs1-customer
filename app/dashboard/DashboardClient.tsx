@@ -4867,10 +4867,52 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     };
   }, [isJo, isCorp, data.summary, t]);
 
+  const hotelJo06Chart = useMemo<ChartDef | null>(() => {
+    if (!isJo || isCorp) return null;
+    const sum = data.summary as HotelSummary;
+    const sm = (sum.jo_status_hour_map ?? {}) as Record<string, Record<string, number>>;
+    const hours24 = Array.from({ length: 24 }, (_, i) => i);
+    const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    const TEAL = '#0F766E', ORANGE = '#C2410C';
+    const statuses = Object.entries(sm)
+      .map(([s, hm]): [string, number] => [s, Object.values(hm).reduce((a, b) => a + b, 0)])
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a);
+    if (statuses.length === 0) return null;
+    return {
+      id: 'jo-06', filterable: false,
+      title: t('chart_titles_jo.jo-06', '🟢 Job Status by 24-Hour Job Distribution'),
+      note: t('chart_notes_jo.jo-06', 'Job statuses ranked by total count (bar). Click a status to drill into its 24-hour distribution.'),
+      formula: 'COUNT(*) BY job_status; drilldown: COUNT(*) BY HOUR(created_datetime)',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: TEAL,
+          data: statuses.map(([s, v]) => ({ name: s, y: v, drilldown: `jo06h:${s}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: statuses.map(([s]) => ({
+            id: `jo06h:${s}`,
+            name: `${s} — 24-Hour Distribution`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: hours24.map((h) => ({ name: hl(h), y: (sm[s]?.[String(h)] ?? 0) as number })),
+          })),
+        },
+      },
+    };
+  }, [isJo, isCorp, data.summary, t]);
+
   // Partition core charts
   const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
   const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
-  const injectedJoById = new Map(hotelJo2728Charts.map((c) => [c.id, c]));
+  const injectedJoById = new Map([
+    ...hotelJo2728Charts.map((c) => [c.id, c] as [string, ChartDef]),
+    ...(hotelJo06Chart ? [['jo-06', hotelJo06Chart] as [string, ChartDef]] : []),
+  ]);
   const storedJoIds = new Set(localizedCharts.map((c) => c.id));
   const operationalCharts = isJo
     ? [

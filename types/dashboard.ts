@@ -121,6 +121,8 @@ export interface HotelSummary {
   jo_hour_timeout_map?:     Record<string, number>;
   // jo-11: service item → date (YYYY-MM-DD) → count
   jo_item_date_map?:        Record<string, Record<string, number>>;
+  // jo-03: service item → completion duration bucket → completed count
+  jo_item_dur_bkt_map?:     Record<string, Record<string, number>>;
   // im-03: incident item → date (YYYY-MM-DD) → count
   im_item_date_map?:        Record<string, Record<string, number>>;
   // incident item → avg resolution days

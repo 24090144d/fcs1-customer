@@ -4796,6 +4796,77 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     return out;
   }, [isJo, isCorp, data.summary, data.charts, filtered, dateFrom, dateTo, t]);
 
+  // ── Hotel jo-01: 24-Hour Delayed Job Distribution (replaces stored donut) ──
+  // x = hour of day (00:00–23:00), y = delayed order count, data labels on.
+  // Built client-side from jo_hour_delayed_map so it works for legacy rows too.
+  const hotelJo01Chart = useMemo<ChartDef | null>(() => {
+    if (!isJo || isCorp) return null;
+    const sum = data.summary as HotelSummary;
+    const hm = (sum.jo_hour_delayed_map ?? {}) as Record<string, number>;
+    const hours24 = Array.from({ length: 24 }, (_, i) => i);
+    const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    return {
+      id: 'jo-01', filterable: false,
+      title: t('chart_titles_jo.jo-01', '🟢 24-Hour Delayed Job Distribution'),
+      note: t('chart_notes_jo.jo-01', 'Delayed jobs (delay > 0) by hour of day (00:00–23:00); bar height and label show the delayed order count.'),
+      formula: 'COUNT(*) WHERE delay > 0 GROUP BY HOUR(created_datetime)',
+      options: {
+        chart: { type: 'column' },
+        legend: { enabled: false },
+        xAxis: { type: 'category', title: { text: 'Hour of Day' } },
+        yAxis: { min: 0, title: { text: 'Delayed Orders' } },
+        series: [{ type: 'column', name: 'Delayed Orders', color: '#C2410C',
+          data: hours24.map((h) => ({ name: hl(h), y: hm[String(h)] ?? 0 })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+      },
+    };
+  }, [isJo, isCorp, data.summary, t]);
+
+  // ── Hotel jo-03: Top Service Items → Completed Job Duration Distribution ──
+  // Primary bar = top 10 items by completed jobs; drilldown = duration buckets.
+  // Built client-side from jo_item_dur_bkt_map (needs backfill on legacy rows).
+  const hotelJo03Chart = useMemo<ChartDef | null>(() => {
+    if (!isJo || isCorp) return null;
+    const sum = data.summary as HotelSummary;
+    const m = (sum.jo_item_dur_bkt_map ?? {}) as Record<string, Record<string, number>>;
+    const DUR_ORDER = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'];
+    const TEAL = '#0F766E', ORANGE = '#C2410C';
+    const topItems = Object.entries(m)
+      .map(([item, bm]): [string, number] => [item, Object.values(bm).reduce((a, b) => a + b, 0)])
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10);
+    if (topItems.length === 0) return null;
+    return {
+      id: 'jo-03', filterable: false,
+      title: t('chart_titles_jo.jo-03', '🟢 Top Service Items → Completed Job Duration Distribution'),
+      note: t('chart_notes_jo.jo-03', 'Top 10 service items by completed jobs. Click an item bar to drill into its completed-job duration distribution.'),
+      formula: 'COUNT(*) WHERE completed BY service_item; drilldown: COUNT(*) BY duration_bucket',
+      options: {
+        chart: { type: 'bar' },
+        legend: { enabled: false },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Completed Jobs' } },
+        series: [{ type: 'bar', name: 'Completed Jobs', color: TEAL,
+          data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: `jo03d:${k}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { bar: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: topItems.map(([k]) => ({
+            id: `jo03d:${k}`,
+            name: `${k} — Completed Job Duration`,
+            type: 'bar', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: DUR_ORDER.map((b) => ({ name: b, y: m[k]?.[b] ?? 0 })),
+          })),
+        },
+      },
+    };
+  }, [isJo, isCorp, data.summary, t]);
+
   // Partition core charts
   const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
   const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
@@ -4838,7 +4909,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   }, [isCorp, isJo, activeChainEntries]);
 
   // c05(eac[4]) ↔ c02(eac[1])  and  c13(operationalCharts[6]) ↔ c06(eac[5])
-  const reorderedEac = [...localizedEac];
+  const injectedJoEac = new Map([hotelJo01Chart, hotelJo03Chart].filter((c): c is ChartDef => !!c).map((c) => [c.id, c]));
+  const reorderedEac = [...localizedEac].map((c) => injectedJoEac.get(c.id) ?? c);
   const reorderedOperational = [...operationalCharts];
   if (!isJo && reorderedEac.length > 5 && reorderedOperational.length > 6) {
     [reorderedEac[1], reorderedEac[4]] = [reorderedEac[4], reorderedEac[1]];
@@ -4846,9 +4918,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     reorderedEac[5] = reorderedOperational[6];
     reorderedOperational[6] = _savedEac06;
   }
-  // JO hotel: jo-01(eac[0]) ↔ jo-05(op[0])  and  jo-02(eac[1]) ↔ jo-11(op[6])
+  // JO hotel: jo-02(eac[1]) ↔ jo-11(op[6]). jo-01 stays at eac[0] (top), jo-05 at op[0].
   if (isJo && !isCorp && reorderedEac.length >= 2 && reorderedOperational.length >= 7) {
-    [reorderedEac[0], reorderedOperational[0]] = [reorderedOperational[0], reorderedEac[0]];
     [reorderedEac[1], reorderedOperational[6]] = [reorderedOperational[6], reorderedEac[1]];
   }
 

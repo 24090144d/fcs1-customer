@@ -1397,6 +1397,8 @@ interface JoKpiAcc {
   hourTimeout: Record<number, number>;
   // ── jo-11: service item → date (YYYY-MM-DD) → count ──────────────────────
   itemDateMap: Record<string, Record<string, number>>;
+  // ── jo-03: service item → completion duration bucket → completed count ────
+  itemDurBkt: Record<string, Record<string, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1450,6 +1452,7 @@ function newJoKpiAcc(): JoKpiAcc {
     hourDelayed: {},
     hourTimeout: {},
     itemDateMap: {},
+    itemDurBkt: {},
   };
 }
 
@@ -1550,6 +1553,10 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
       acc.resolutionMins.push(resolutionMin);
       push2(acc.catItemResolution, category, item, resolutionMin);
     }
+  }
+  // jo-03: completed job duration distribution per service item
+  if (completedFlag && resolutionMin !== null) {
+    inc2(acc.itemDurBkt, item, durBucket(resolutionMin));
   }
 
   // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
@@ -2544,6 +2551,10 @@ export async function POST(req: NextRequest) {
     // jo-11: item → date (YYYY-MM-DD) → count
     generatedJson.summary.jo_item_date_map = Object.fromEntries(
       Object.entries(joKpiAcc.itemDateMap).map(([item, dm]) => [item, { ...dm }]),
+    );
+    // jo-03: item → completion duration bucket → completed count
+    generatedJson.summary.jo_item_dur_bkt_map = Object.fromEntries(
+      Object.entries(joKpiAcc.itemDurBkt).map(([item, bm]) => [item, { ...bm }]),
     );
     // P90 resolution per category (for cjo-22 — superseded; kept for future use)
     generatedJson.summary.jo_cat_res_p90 = Object.fromEntries(

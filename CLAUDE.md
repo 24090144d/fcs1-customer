@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.80** (as of 2026-06-20) |
+| Version | **v1.0.81** (as of 2026-06-25) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.81** | 2026-06-25 | Hotel JO chart redesigns (client-side injected, work on legacy rows): **jo-01** → "🟢 24-Hour Delayed Job Distribution" (column, x=hour 00–23, y=delayed order count, data labels) from existing `jo_hour_delayed_map`; **jo-03** → "🟢 Top Service Items → Completed Job Duration Distribution" (bar-drilldown: top 10 items by completed jobs → per-item completion duration buckets) from new `jo_item_dur_bkt_map` (item→durBucket→completed count) added to `HotelSummary` + finalize accumulator + `scripts/backfill_jo_item_dur_bkt_map.mjs` (run on local; **Neon needs backfill or new upload**); removed the v1.0.70 jo-01↔jo-05 display swap so jo-01 sits first; injected jo-01/jo-03 replace stored EAC charts in place; i18n titles/notes updated all 4 langs |
 | **v1.0.80** | 2026-06-20 | JO/MO/CO chart footer notes annotated with benchmarks: appended a `Benchmark — …` line to all 255 notes per language (×4 langs) — numeric Good/Watch/Bad thresholds for measurable charts (SLA %, duration, close/completion rate, delay/escalation counts), Healthy/Warning pattern for distribution/donut/hour-of-day/trend charts; covers hotel + corp (`chart_notes_jo` hjo/jo-/cjo/cjo-, `chart_notes_co` co-/cco-, `chart_notes_mo`+`hmo_chart_notes`+`cmo_chart_notes`); applied via idempotent local `scripts/annotate_chart_benchmarks.mjs` (line-scan preserves formatting); also routes system-settings save through POST as well as PUT (Vercel blocked bare PUT with INVALID_REQUEST_METHOD) |
 | **v1.0.79** | 2026-06-20 | Fix Configuration > System timezone save: removed `updated_at` from organizations UPDATE (column absent in Neon production caused empty response body) |
 | **v1.0.78** | 2026-06-20 | Corp MO cmo-09/10/11 redesigned to mirror hotel mo-09/10/11 for chain data: cmo-09 "Work Order Duration Distribution (Chain)" (BUCKETS column + per-hotel drilldown), cmo-10 "24-Hour Work Order Distribution (Chain)" (00:00–23:00 column + per-hotel drilldown), cmo-11 "Top 10 Defect > 24 Hours (Chain)" (bar + per-hotel drilldown); aggregates `mo_duration_dist_map`, `mo_hour_map`, `mo_item_24h_hour_map` across `entries`; drilldown IDs prefixed `cmo09:`/`cmo10:`/`cmo11:` to avoid collision; i18n updated all 4 langs (chart_bv_mo, chart_titles_mo, chart_notes_mo, hmo_chart_titles, hmo_chart_notes, cmo_chart_titles, cmo_chart_notes, cmo_chart_formulas) |

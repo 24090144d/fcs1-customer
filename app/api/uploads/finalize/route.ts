@@ -1308,6 +1308,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     booking_map:  acc.bookingMap,
     source_map:   acc.sourceMap,
     severity_map: acc.severityMap,
+    im_hour_map: Object.fromEntries(Object.entries(acc.hourMap).map(([h, v]) => [String(h), v])),
     im_vip_hour_map: Object.fromEntries(Object.entries(acc.vipHourMap).map(([h, v]) => [String(h), v])),
   };
 

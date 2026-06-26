@@ -4136,10 +4136,9 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         const vipTotal = data.summary.vip_total ?? 0;
         const nonVipTotal = (s.total ?? 0) - vipTotal;
 
-        // Total hourly from the stored 24-h chart (im-01): series[0].data = Array(24)
-        const im01Opts = (data.charts.find((c) => c.id === 'im-01')?.options ?? {}) as Record<string, unknown>;
-        const totalHourArr = ((im01Opts.series as Array<{ data?: number[] }>)?.[0]?.data)
-          ?? Array.from<number>({ length: 24 }).fill(0);
+        // Total hourly from summary (im_hour_map stored by finalize route)
+        const imHourRaw = data.summary.im_hour_map ?? {};
+        const totalHourArr = Array.from({ length: 24 }, (_, i) => Number(imHourRaw[String(i)] ?? 0));
 
         const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
 

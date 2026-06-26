@@ -25,6 +25,16 @@ const DATABASES = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Mirror of localHour() in app/api/uploads/finalize/route.ts */
+function localHour(d, tz) {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const h = parseInt(s, 10);
+    if (!isNaN(h)) return h === 24 ? 0 : h;
+  } catch { /* fall through */ }
+  return d.getUTCHours();
+}
+
 const DUR_BUCKETS = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'];
 
 function durBucket(mins) {
@@ -72,7 +82,7 @@ function inc2(obj, h, key) {
 
 // ── Core computation ─────────────────────────────────────────────────────────
 
-function computeHourMaps(rows) {
+function computeHourMaps(rows, timezone = 'UTC') {
   const hourCompleted      = {};
   const hourCompBkt        = {};
   const hourRespBkt        = {};
@@ -100,11 +110,11 @@ function computeHourMaps(rows) {
     const isEscalated  = escalatedFlag(escGroup, delayMin);
     const isSlaComp    = !(delayMin !== null && delayMin > 0);
 
-    // Extract created-at hour (pg driver returns JS Date for timestamptz)
+    // Extract created-at hour in org timezone (pg driver returns UTC JS Date for timestamptz)
     if (!createdAt) continue;
     const createdDate  = createdAt instanceof Date ? createdAt : new Date(createdAt);
     if (isNaN(createdDate.getTime())) continue;
-    const h = createdDate.getHours();
+    const h = localHour(createdDate, timezone);
 
     // hourSlaTotal — every job
     inc(hourSlaTotal, h);
@@ -192,9 +202,14 @@ async function backfillDb({ label, url }) {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
 
-  // 1. Fetch all JO dashboard rows
+  // 1. Fetch all JO dashboard rows with org timezone
   const { rows: dashRows } = await client.query(
-    `SELECT upload_job_id, generated_json FROM jo_dashboard_json ORDER BY updated_at`,
+    `SELECT jd.upload_job_id, jd.generated_json,
+            COALESCE(o.timezone, 'UTC') AS org_timezone
+       FROM jo_dashboard_json jd
+       JOIN upload_jobs uj ON uj.id = jd.upload_job_id
+       JOIN organizations o ON o.id = uj.organization_id
+      ORDER BY jd.updated_at`,
   );
   console.log(`  Found ${dashRows.length} JO dashboard row(s).`);
 
@@ -221,8 +236,8 @@ async function backfillDb({ label, url }) {
       continue;
     }
 
-    // 3. Compute new maps
-    const newMaps = computeHourMaps(records);
+    // 3. Compute new maps using org timezone
+    const newMaps = computeHourMaps(records, dash.org_timezone);
 
     // 4. Merge into summary
     const summary = json.summary ?? {};
@@ -238,7 +253,7 @@ async function backfillDb({ label, url }) {
     );
 
     const totalJobs = Object.values(newMaps.jo_hour_sla_total_map).reduce((s, v) => s + v, 0);
-    console.log(`  [OK]   ${jobId} — ${records.length} records, ${totalJobs} jobs across hours`);
+    console.log(`  [OK]   ${jobId} (${dash.org_timezone}) — ${records.length} records, ${totalJobs} jobs across hours`);
     updated++;
   }
 

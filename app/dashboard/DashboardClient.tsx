@@ -4867,6 +4867,46 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     };
   }, [isJo, isCorp, data.summary, t]);
 
+  const hotelJo02Chart = useMemo<ChartDef | null>(() => {
+    if (!isJo || isCorp) return null;
+    const sum = data.summary as HotelSummary;
+    const cm = (sum.jo_cat_hour_map ?? {}) as Record<string, Record<string, number>>;
+    const hours24 = Array.from({ length: 24 }, (_, i) => i);
+    const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    const TEAL = '#0F766E', ORANGE = '#C2410C';
+    const cats = Object.entries(cm)
+      .map(([c, hm]): [string, number] => [c, Object.values(hm).reduce((a, b) => a + b, 0)])
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10);
+    if (cats.length === 0) return null;
+    return {
+      id: 'jo-02', filterable: false,
+      title: t('chart_titles_jo.jo-02', '🟢 Top Service Item Category → 24-Hour Job Distribution'),
+      note: t('chart_notes_jo.jo-02', 'Top 10 service item categories ranked by total job count (column). Click a category to drill into its 24-hour distribution.'),
+      formula: 'COUNT(*) BY service_item_category; drilldown: COUNT(*) BY HOUR(created_datetime)',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: TEAL,
+          data: cats.map(([c, v]) => ({ name: c, y: v, drilldown: `jo02h:${c}` })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: cats.map(([c]) => ({
+            id: `jo02h:${c}`,
+            name: `${c} — 24-Hour Distribution`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: hours24.map((h) => ({ name: hl(h), y: (cm[c]?.[String(h)] ?? 0) as number })),
+          })),
+        },
+      },
+    };
+  }, [isJo, isCorp, data.summary, t]);
+
   const hotelJo06Chart = useMemo<ChartDef | null>(() => {
     if (!isJo || isCorp) return null;
     const sum = data.summary as HotelSummary;
@@ -4951,7 +4991,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   }, [isCorp, isJo, activeChainEntries]);
 
   // c05(eac[4]) ↔ c02(eac[1])  and  c13(operationalCharts[6]) ↔ c06(eac[5])
-  const injectedJoEac = new Map([hotelJo01Chart, hotelJo03Chart].filter((c): c is ChartDef => !!c).map((c) => [c.id, c]));
+  const injectedJoEac = new Map([hotelJo01Chart, hotelJo02Chart, hotelJo03Chart].filter((c): c is ChartDef => !!c).map((c) => [c.id, c]));
   const reorderedEac = [...localizedEac].map((c) => injectedJoEac.get(c.id) ?? c);
   const reorderedOperational = [...operationalCharts];
   if (!isJo && reorderedEac.length > 5 && reorderedOperational.length > 6) {

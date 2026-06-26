@@ -1385,6 +1385,8 @@ interface JoKpiAcc {
   vipHourItemCount: Record<number, Record<string, number>>;
   // ── All-jobs 24-hour × service-item (cjo-22) ─────────────────────────────
   hourItemCount:    Record<number, Record<string, number>>;
+  // ── jo-02: all jobs → item category → hour → count ───────────────────────
+  catHourMap:       Record<string, Record<number, number>>;
   // ── jo-27: job status → hour → count ─────────────────────────────────────
   statusHourMap:    Record<string, Record<number, number>>;
   // ── jo-28 (legacy): escalation group → hour → count ──────────────────────
@@ -1446,6 +1448,7 @@ function newJoKpiAcc(): JoKpiAcc {
     vipHourCount: {},
     vipHourItemCount: {},
     hourItemCount: {},
+    catHourMap: {},
     statusHourMap: {},
     escGroupHourMap: {},
     overdueCatHourMap: {},
@@ -1624,6 +1627,10 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
       if (!acc.escGroupHourMap[escGroupRaw]) acc.escGroupHourMap[escGroupRaw] = {};
       acc.escGroupHourMap[escGroupRaw][createdHour] = (acc.escGroupHourMap[escGroupRaw][createdHour] ?? 0) + 1;
     }
+
+    // jo-02: all jobs → item category → hour
+    if (!acc.catHourMap[category]) acc.catHourMap[category] = {};
+    acc.catHourMap[category][createdHour] = (acc.catHourMap[category][createdHour] ?? 0) + 1;
 
     // jo-28: overdue jobs (delay > 0) → item category → hour
     if (delayMin !== null && delayMin > 0) {
@@ -2543,6 +2550,7 @@ export async function POST(req: NextRequest) {
     // jo-27/jo-28: status/escgroup → hour maps
     const s2m = (m: Record<string, Record<number, number>>) =>
       Object.fromEntries(Object.entries(m).map(([k, hm]) => [k, Object.fromEntries(Object.entries(hm).map(([h, v]) => [h, v]))]));
+    generatedJson.summary.jo_cat_hour_map          = s2m(joKpiAcc.catHourMap);
     generatedJson.summary.jo_status_hour_map      = s2m(joKpiAcc.statusHourMap);
     generatedJson.summary.jo_escgroup_hour_map    = s2m(joKpiAcc.escGroupHourMap);
     generatedJson.summary.jo_overdue_cat_hour_map = s2m(joKpiAcc.overdueCatHourMap);

@@ -109,6 +109,8 @@ export interface HotelSummary {
   jo_hour_sla_comp_map?:       Record<string, number>;                        // hour → SLA compliant count
   jo_hour_sla_cat_total_map?:  Record<string, Record<string, number>>;        // hour → cat → eligible count
   jo_hour_sla_cat_comp_map?:   Record<string, Record<string, number>>;        // hour → cat → compliant count
+  // jo-02: all jobs → item category → hour → count
+  jo_cat_hour_map?:      Record<string, Record<string, number>>;
   // jo-27/cjo-27: job status → hour → count
   jo_status_hour_map?:   Record<string, Record<string, number>>;
   // jo-28/cjo-28 (legacy): escalation group → hour → count (field empty in current data)

@@ -5008,6 +5008,10 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   if (isJo && !isCorp && reorderedEac.length >= 2 && reorderedOperational.length >= 7) {
     [reorderedEac[1], reorderedOperational[6]] = [reorderedOperational[6], reorderedEac[1]];
   }
+  // JO hotel: jo-04(op[6]) ↔ jo-07(op[2])
+  if (isJo && !isCorp && reorderedOperational.length >= 7) {
+    [reorderedOperational[2], reorderedOperational[6]] = [reorderedOperational[6], reorderedOperational[2]];
+  }
 
   // Global chart sequence index across all groups (no reset between sections)
   let chartSequence = 0;

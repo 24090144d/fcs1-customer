@@ -437,6 +437,7 @@ interface ImAcc {
   deptCatMap:    Record<string, Record<string, number>>; // dept → category → count
   deptItemMap:   Record<string, Record<string, number>>; // dept → incident item → count
   vipDeptMap:    Record<string, number>;
+  vipHourMap:    Record<number, number>;
   repeatMap:     Map<string, number>;
   nightsBkts:    Record<string, number>;
   repeatCount:   number;
@@ -453,7 +454,7 @@ function newImAcc(): ImAcc {
     dailyMap: {}, monthMap: {}, weekdayMap: {},
     catStatusMap: {}, catSevMap: {}, catDailyMap: {}, itemDailyMap: {}, itemDurationMap: {}, itemCompletedMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
     weekSourceMap: {},
-    statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {},
+    statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {}, vipHourMap: {},
     repeatMap: new Map(),
     nightsBkts: { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 },
     repeatCount: 0,
@@ -573,6 +574,7 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
       inc(acc.monthMap, monthKey);
       acc.weekdayMap[wd] = (acc.weekdayMap[wd] ?? 0) + 1;
       acc.hourMap[hr]    = (acc.hourMap[hr]    ?? 0) + 1;
+      if (vip) acc.vipHourMap[hr] = (acc.vipHourMap[hr] ?? 0) + 1;
       acc.weekMap[wkKey] = (acc.weekMap[wkKey] ?? 0) + 1;
       if (!acc.weekSourceMap[wkKey]) acc.weekSourceMap[wkKey] = {};
       inc(acc.weekSourceMap[wkKey], source || null);
@@ -1306,6 +1308,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     booking_map:  acc.bookingMap,
     source_map:   acc.sourceMap,
     severity_map: acc.severityMap,
+    im_vip_hour_map: Object.fromEntries(Object.entries(acc.vipHourMap).map(([h, v]) => [String(h), v])),
   };
 
   return {

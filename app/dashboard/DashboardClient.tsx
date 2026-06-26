@@ -4128,26 +4128,63 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           } : {}),
         } as Record<string, unknown>;
       })(), 'im-05'),
-      make('im-04', 'Incident by Status → Department', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status -> department', {
-        series: [{
-          type: 'pie',
-          innerSize: '45%',
-          name: 'Status',
-          data: statusKeys.map((k) => ({ name: k, y: Number(statusMap[k] ?? 0), drilldown: `im-04:${k}` })),
-        }],
-        drilldown: {
-          series: statusKeys.map((k) => ({
-            id: `im-04:${k}`,
-            type: 'pie',
-            innerSize: '45%',
-            name: `${k} Departments`,
-            data: Object.entries(deptScopedSummary?.status_dept_map?.[k] ?? {})
-              .sort(([, a], [, b]) => Number(b) - Number(a))
-              .slice(0, 10)
-              .map(([name, y]) => ({ name, y: Number(y) })),
-          })),
-        },
-      }, 'imd27'),
+      make('im-04', 'VIP vs Non-VIP → 24-Hour Distribution', 'column', 'Click VIP or Non-VIP to drill into its 24-hour incident distribution.', 'COUNT by vip_flag; drilldown: COUNT by created_hour', (() => {
+        const vipHourRaw = data.summary.im_vip_hour_map ?? {};
+        const vipHourMap: Record<number, number> = Object.fromEntries(
+          Object.entries(vipHourRaw).map(([h, v]) => [Number(h), Number(v)]),
+        );
+        const vipTotal = data.summary.vip_total ?? 0;
+        const nonVipTotal = (s.total ?? 0) - vipTotal;
+
+        // Total hourly from the stored 24-h chart (im-01): series[0].data = Array(24)
+        const im01Opts = (data.charts.find((c) => c.id === 'im-01')?.options ?? {}) as Record<string, unknown>;
+        const totalHourArr = ((im01Opts.series as Array<{ data?: number[] }>)?.[0]?.data)
+          ?? Array.from<number>({ length: 24 }).fill(0);
+
+        const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+
+        return {
+          chart: { type: 'column' },
+          xAxis: { type: 'category' },
+          yAxis: { min: 0, title: { text: 'Incidents' } },
+          plotOptions: { column: { dataLabels: { enabled: true } } },
+          series: [{
+            type: 'column',
+            name: 'Count',
+            colorByPoint: true,
+            data: [
+              { name: 'VIP', y: vipTotal, drilldown: 'im04:VIP' },
+              { name: 'Non-VIP', y: nonVipTotal, drilldown: 'im04:NonVIP' },
+            ],
+            dataLabels: { enabled: true },
+          }],
+          drilldown: {
+            series: [
+              {
+                id: 'im04:VIP',
+                name: 'VIP — 24-Hour Distribution',
+                type: 'column',
+                colorByPoint: false,
+                color: '#f59e0b',
+                dataLabels: { enabled: true },
+                data: hours.map((label, h) => ({ name: label, y: vipHourMap[h] ?? 0 })),
+              },
+              {
+                id: 'im04:NonVIP',
+                name: 'Non-VIP — 24-Hour Distribution',
+                type: 'column',
+                colorByPoint: false,
+                color: '#6366f1',
+                dataLabels: { enabled: true },
+                data: hours.map((label, h) => ({
+                  name: label,
+                  y: Math.max(0, (totalHourArr[h] ?? 0) - (vipHourMap[h] ?? 0)),
+                })),
+              },
+            ],
+          },
+        } as Record<string, unknown>;
+      })(), 'imd27'),
       make('im-05', 'Incident Resolution SLA Compliance', 'column', 'Drilldown: Department → Severity → Incident Case', 'SLA met / total', { xAxis: { categories: ['SLA Compliance'] }, yAxis: [{ max: 100, title: { text: '%' } }], series: [{ name: 'Compliance %', data: [s.total > 0 ? r1((s.completed / s.total) * 100) : 0] }] }, 'im-02'),
       make('im-06', 'Severity Breakdown', 'column', 'Drilldown: Severity → Incident Status → Incident Case', 'COUNT by severity', { xAxis: { categories: severityKeys }, series: [{ name: 'Cases', data: severityKeys.map((k) => sevMap[k]) }] }, 'im-03'),
       make('im-07', 'Incident Root Cause Flow', 'sankey', 'Drilldown: Department → Incident Category → Incident Item Name', 'Root-cause flow proxy', {

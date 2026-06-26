@@ -131,6 +131,8 @@ export interface HotelSummary {
   im_item_duration_map?:    Record<string, number>;
   // cim-20: incident item → completed count (for completion rate line)
   im_item_completed_map?:   Record<string, number>;
+  // im-04: VIP incidents → hour "0"-"23" → count (24-hour VIP distribution)
+  im_vip_hour_map?:         Record<string, number>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

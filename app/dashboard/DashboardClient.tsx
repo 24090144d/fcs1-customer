@@ -4092,7 +4092,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           }),
         },
       }, 'imd08'),
-      make('im-03', 'Top Incident → Daily Trend', 'bar', 'Top 10 incident items by volume. Click a bar to see its daily count trend.', 'COUNT by incident_item_name; drilldown: COUNT by created_date', (() => {
+      make('im-03', 'Top Incident → Daily Trend', 'column', 'Top 10 incident items by volume. Click a bar to see its daily count trend.', 'COUNT by incident_item_name; drilldown: COUNT by created_date', (() => {
         const GREEN  = '#0F766E';
         const ORANGE = '#C2410C';
         const idm = data.summary.im_item_date_map;
@@ -4106,21 +4106,21 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm![k] ?? {})))).sort()
           : [];
         return {
-          chart: { type: 'bar' },
+          chart: { type: 'column' },
           xAxis: { type: 'category' },
           yAxis: { min: 0, title: { text: 'Incidents' } },
           series: [{
-            type: 'bar', name: 'Incidents', color: GREEN,
+            type: 'column', name: 'Incidents', color: GREEN,
             data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: hasIdm ? `im03d:${k}` : undefined })),
             dataLabels: { enabled: true },
           }],
-          plotOptions: { bar: { dataLabels: { enabled: true } } },
+          plotOptions: { column: { dataLabels: { enabled: true } } },
           ...(hasIdm && allDates.length > 0 ? {
             drilldown: {
               series: topItems.map(([k]) => ({
                 id: `im03d:${k}`,
                 name: `${k} — Daily Trend`,
-                type: 'bar', color: ORANGE,
+                type: 'column', color: ORANGE,
                 dataLabels: { enabled: true },
                 data: allDates.map((date) => ({ name: date, y: idm![k]?.[date] ?? 0 })),
               })),

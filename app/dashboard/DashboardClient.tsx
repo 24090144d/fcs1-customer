@@ -5000,7 +5000,11 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     reorderedEac[5] = reorderedOperational[6];
     reorderedOperational[6] = _savedEac06;
   }
-  // JO hotel: jo-02(eac[1]) ↔ jo-11(op[6]). jo-01 stays at eac[0] (top), jo-05 at op[0].
+  // JO hotel: swap jo-02 (eac[1]) ↔ jo-04 (eac[3]) so jo-02 shows in EAC slot 4
+  if (isJo && !isCorp && reorderedEac.length >= 4) {
+    [reorderedEac[1], reorderedEac[3]] = [reorderedEac[3], reorderedEac[1]];
+  }
+  // JO hotel: jo-04(eac[1], after swap) ↔ jo-11(op[6]). jo-01 at eac[0], jo-05 at op[0].
   if (isJo && !isCorp && reorderedEac.length >= 2 && reorderedOperational.length >= 7) {
     [reorderedEac[1], reorderedOperational[6]] = [reorderedOperational[6], reorderedEac[1]];
   }

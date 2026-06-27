@@ -9,7 +9,7 @@ import { loadMyDashConfig, type MyDashScope } from '@/lib/my-dashboard-defs';
 import { APP_VERSION } from '@/lib/version';
 import { useI18n } from './I18nProvider';
 import { useTheme } from './ThemeProvider';
-import { getAppThemeTokens } from '@/lib/theme';
+import { getAppThemeTokens, getThemeSwatches } from '@/lib/theme';
 
 interface AppSidebarProps {
   open:        boolean;
@@ -284,15 +284,24 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
             )}
             {themeMenuOpen && (
               <div
-                className="absolute left-0 top-9 z-50 min-w-[180px] p-1.5"
+                className="absolute left-0 top-9 z-50 w-[300px] p-1.5"
                 style={{
                   background: t.menuBg,
                   border: `1px solid ${t.menuBorder}`,
-                  boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+                  borderRadius: '12px',
+                  boxShadow: '0 14px 34px rgba(0,0,0,0.22)',
                 }}
               >
+                <div
+                  className="font-mono uppercase px-3 pt-2 pb-2.5"
+                  style={{ fontSize: '0.6rem', letterSpacing: '0.18em', color: t.dim }}
+                >
+                  {tr('sidebar.themes_heading', 'Themes')}
+                </div>
                 {options.map((option) => {
                   const active = option.value === theme;
+                  const optTokens = getAppThemeTokens(option.value, dark);
+                  const swatches = getThemeSwatches(option.value, dark);
                   return (
                     <button
                       key={option.value}
@@ -301,19 +310,57 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                         setTheme(option.value);
                         setThemeMenuOpen(false);
                       }}
-                      className="w-full flex items-center justify-between px-2.5 py-2 text-left transition-colors"
+                      className="w-full flex items-start gap-3 px-3 py-2.5 text-left transition-colors relative"
                       style={{
                         background: active ? t.menuSelectedBg : 'transparent',
-                        color: active ? t.text : t.nav,
+                        borderRadius: '10px',
+                        boxShadow: active ? `inset 0 0 0 1.5px ${themeTokens.accent}` : 'none',
                       }}
                     >
                       <span
-                        className="font-mono uppercase"
-                        style={{ fontSize: '0.68rem', letterSpacing: '0.14em' }}
+                        className="shrink-0 flex items-center justify-center font-semibold"
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: '50%',
+                          background: optTokens.sidebar.bg,
+                          color: optTokens.sidebar.text,
+                          fontSize: '0.66rem',
+                          letterSpacing: '0.04em',
+                          border: `1px solid ${optTokens.sidebar.rule}`,
+                        }}
                       >
-                        {option.label}
+                        {option.initials}
                       </span>
-                      {active && <Check size={12} style={{ color: themeTokens.accent }} />}
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="flex items-center gap-1.5 font-medium"
+                          style={{ fontSize: '0.82rem', color: active ? t.text : t.nav }}
+                        >
+                          {option.label}
+                          {active && <Check size={12} style={{ color: themeTokens.accent }} />}
+                        </span>
+                        <span
+                          className="block mt-0.5 mb-1.5"
+                          style={{ fontSize: '0.68rem', lineHeight: 1.45, color: t.dim }}
+                        >
+                          {option.description}
+                        </span>
+                        <span className="flex gap-1">
+                          {swatches.map((c, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                width: 30,
+                                height: 11,
+                                borderRadius: 4,
+                                background: c,
+                                boxShadow: 'inset 0 0 0 0.75px rgba(127,127,127,0.25)',
+                              }}
+                            />
+                          ))}
+                        </span>
+                      </span>
                     </button>
                   );
                 })}

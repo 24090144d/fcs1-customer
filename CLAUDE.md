@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.85** (as of 2026-06-27) |
+| Version | **v1.0.87** (as of 2026-06-27) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,8 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.87** | 2026-06-27 | Theme picker rebuilt as card layout (avatar badge + name + description + 4-color swatch row, 300px panel, accent border on active); **Color Ink Wash** replaced with **Jade & Ink** (`jade-ink`) — jade-green sidebar (`#0C4A3E`), rice-paper surfaces, jade/gold/deep-blue palette, Chinese cultural character; `AppThemeOption` type + `initials`/`description` fields + `getThemeSwatches()` helper added to `lib/theme.ts` |
+| **v1.0.86** | 2026-06-27 | Two new app UI themes added to `lib/theme.ts`: **Chromatic Ink Wash** (`chromatic-ink`) — deep sumi-ink sidebar, rice-paper cream surfaces, saturated pigment palette (teal `#1F5E57`, vermillion `#C84030`, amber `#D08830`); **Color Ink Wash** (`color-ink`) — lighter paper, brighter pigments, warm dark-brown sidebar (teal `#0E7A6A`, coral `#D44C30`); both with full light + dark variants; `AppThemeName`, `APP_THEME_OPTIONS`, `getAppThemeTokens` updated |
 | **v1.0.85** | 2026-06-27 | Hotel IM im-04 redesign: **im-04** → "🟣 VIP vs Non-VIP → 24-Hour Distribution" (column-drilldown: VIP and Non-VIP totals → click to 24-hour distribution per group; new `im_vip_hour_map` in `ImAcc` + `HotelSummary` + finalize route; `scripts/backfill_im_vip_hour_map.mjs` run on local DB for 5 hotels); i18n title/note/BV/formula updated all 4 langs |
 | **v1.0.84** | 2026-06-26 | 24-hour distribution timezone fix: `backfill_jo_hour_maps.mjs` replaced `getHours()` (system local) with `localHour(d, orgTimezone)` mirroring finalize route; `backfill_jo_cat_hour_map.mjs` replaced hardcoded `UTC` with `AT TIME ZONE org_timezone` from `organizations.timezone`; finalize route was already correct; local DB re-backfilled (all 7 hotels, Asia/Hong_Kong) |
 | **v1.0.83** | 2026-06-26 | Hotel JO jo-02 redesign: **jo-02** → "🟢 Top Service Item Category → 24-Hour Job Distribution" (column-drilldown: top 10 categories by total jobs → click to 24-hour distribution; new `jo_cat_hour_map` in finalize accumulator + `HotelSummary`; `scripts/backfill_jo_cat_hour_map.mjs` run on local DB); i18n title/note/BV updated all 4 langs |

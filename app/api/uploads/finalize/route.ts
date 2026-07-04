@@ -1399,6 +1399,8 @@ interface JoKpiAcc {
   overdueCatHourMap: Record<string, Record<number, number>>;
   // ── cjo-12: delayed jobs (delay > 0) → hour → count ──────────────────────
   hourDelayed: Record<number, number>;
+  // ── jo-01: delayed jobs (delay > 0) → hour → service item → count ────────
+  hourDelayedItem: Record<number, Record<string, number>>;
   // ── cjo-14: timeout jobs → hour → count ───────────────────────────────────
   hourTimeout: Record<number, number>;
   // ── jo-11: service item → date (YYYY-MM-DD) → count ──────────────────────
@@ -1457,6 +1459,7 @@ function newJoKpiAcc(): JoKpiAcc {
     escGroupHourMap: {},
     overdueCatHourMap: {},
     hourDelayed: {},
+    hourDelayedItem: {},
     hourTimeout: {},
     itemDateMap: {},
     itemDurBkt: {},
@@ -1645,6 +1648,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
     // cjo-12: delayed jobs (delay > 0) → hour (per-hotel for corp drilldown)
     if (delayMin !== null && delayMin > 0) {
       acc.hourDelayed[createdHour] = (acc.hourDelayed[createdHour] ?? 0) + 1;
+      // jo-01: delayed jobs → hour → service item
+      if (!acc.hourDelayedItem[createdHour]) acc.hourDelayedItem[createdHour] = {};
+      acc.hourDelayedItem[createdHour][item] = (acc.hourDelayedItem[createdHour][item] ?? 0) + 1;
     }
 
     // cjo-14: timeout jobs → hour (per-hotel for corp drilldown)
@@ -2559,6 +2565,10 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_escgroup_hour_map    = s2m(joKpiAcc.escGroupHourMap);
     generatedJson.summary.jo_overdue_cat_hour_map = s2m(joKpiAcc.overdueCatHourMap);
     generatedJson.summary.jo_hour_delayed_map     = h2s(joKpiAcc.hourDelayed);
+    // jo-01: delayed jobs → hour → service item
+    generatedJson.summary.jo_hour_delayed_item_map = Object.fromEntries(
+      Object.entries(joKpiAcc.hourDelayedItem).map(([h, m]) => [h, { ...m }]),
+    );
     generatedJson.summary.jo_hour_timeout_map     = h2s(joKpiAcc.hourTimeout);
     // jo-11: item → date (YYYY-MM-DD) → count
     generatedJson.summary.jo_item_date_map = Object.fromEntries(

@@ -56,7 +56,8 @@ export async function GET(req: NextRequest) {
     const ao = Number(a.display_order ?? Number.MAX_SAFE_INTEGER);
     const bo = Number(b.display_order ?? Number.MAX_SAFE_INTEGER);
     if (ao !== bo) return ao - bo;
-    return a.created_at.localeCompare(b.created_at);
+    // created_at may be a Date (pg driver) or an ISO string
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   });
 
   const ids = (charts ?? []).map((c) => c.id);

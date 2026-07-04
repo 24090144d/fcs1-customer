@@ -1322,7 +1322,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     return total > 0 ? r1((pending / total) * 100) : 0;
   });
 
-  return [
+  const charts: ChartDef[] = [
     make('cjo-01', 'Total Jobs by Hotel -> Top Service Category', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its top service categories.', 'COUNT(*) BY hotel_code, then TOP service_item_category BY hotel_code', {
       chart: { type: 'pie' },
       series: [{
@@ -1341,27 +1341,58 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         })),
       },
     }),
-    make('cjo-02', 'Total Jobs by Hotel -> Job Status', 'Outer donut shows total JO volume by hotel. Click a hotel slice to drill into its job status distribution.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code', {
-      chart: { type: 'pie' },
-      series: [{
-        type: 'pie',
-        name: 'Jobs',
-        innerSize: '45%',
-        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `hotel-status:${e.hotel_code}` })),
-      }],
-      drilldown: {
-        series: entries.map((e) => ({
-          id: `hotel-status:${e.hotel_code}`,
-          type: 'pie',
-          name: `${e.hotel_code} Job Status`,
-          innerSize: '45%',
-          data: Object.entries(e.summary.status_map ?? {})
-            .sort(([, a], [, b]) => Number(b) - Number(a))
-            .map(([name, y]) => ({ name, y: Number(y) })),
-        })),
-      },
-    }),
-    make('cjo-03', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
+    make('cjo-02', '🟢 Hotel Job Volume → Job Status → 24-Hour Distribution',
+      'Columns show total job volume per hotel. Click a hotel to drill into its job status breakdown, then click a status to see the 24-hour job distribution.',
+      'COUNT(*) BY hotel_code; COUNT(*) BY job_status per hotel; COUNT(*) BY hour per status', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const BLUE   = '#1D4ED8';
+      const hours24 = Array.from({ length: 24 }, (_, i) => i);
+      const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+      const sorted = [...entries].sort((a, b) => (b.summary.total ?? 0) - (a.summary.total ?? 0));
+      const ddSeries: Highcharts.SeriesOptionsType[] = [];
+      for (const e of sorted) {
+        const statuses = Object.entries(e.summary.status_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a));
+        const shm = (e.summary.jo_status_hour_map ?? {}) as Record<string, Record<string, number>>;
+        ddSeries.push({
+          id: `cjo02h:${e.hotel_code}`,
+          type: 'column',
+          name: `${e.hotel_code} — Job Status`,
+          color: ORANGE,
+          dataLabels: { enabled: true },
+          data: statuses.map(([status, cnt]) => ({
+            name: status,
+            y: Number(cnt),
+            drilldown: shm[status] ? `cjo02s:${e.hotel_code}:${status}` : undefined,
+          })),
+        } as Highcharts.SeriesOptionsType);
+        for (const [status, hm] of Object.entries(shm)) {
+          ddSeries.push({
+            id: `cjo02s:${e.hotel_code}:${status}`,
+            type: 'column',
+            name: `${e.hotel_code} ${status} — 24-Hour`,
+            color: BLUE,
+            dataLabels: { enabled: true },
+            data: hours24.map((h) => ({ name: hl(h), y: (hm as Record<string, number>)[String(h)] ?? 0 })),
+          } as Highcharts.SeriesOptionsType);
+        }
+      }
+      return {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Total Jobs' } },
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        series: [{
+          type: 'column',
+          name: 'Total Jobs',
+          color: GREEN,
+          dataLabels: { enabled: true },
+          data: sorted.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo02h:${e.hotel_code}` })),
+        }],
+        drilldown: { series: ddSeries },
+      };
+    })()),
+    make('cjo-27', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
     }),
     // cjo-07: Top Service Items → Daily Trend (chain aggregate, mirrors jo-11)
@@ -1607,9 +1638,56 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       };
     })()),
-    make('cjo-15', 'Status Mix by Hotel', 'Status mix comparison across hotels.', 'COUNT(*) BY hotel_code, job_status', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: statusKeys.map((status) => ({ type: 'column', name: status, data: entries.map((e) => e.summary.status_map?.[status] ?? 0) })),
-    }),
+    make('cjo-15', '🟢 Hotel Job Volume → Job Status → Completed Duration Distribution',
+      'Columns show total job volume per hotel. Click a hotel to drill into its job status breakdown, then click a status to see the completion duration distribution.',
+      'COUNT(*) BY hotel_code; COUNT(*) BY job_status per hotel; COUNT(*) BY dur_bucket per status', (() => {
+      const GREEN  = '#0F766E';
+      const ORANGE = '#C2410C';
+      const BLUE   = '#1D4ED8';
+      const DUR_ORDER = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'];
+      const sorted = [...entries].sort((a, b) => (b.summary.total ?? 0) - (a.summary.total ?? 0));
+      const ddSeries: Highcharts.SeriesOptionsType[] = [];
+      for (const e of sorted) {
+        const statuses = Object.entries(e.summary.status_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a));
+        const sdm = (e.summary.jo_status_dur_bkt_map ?? {}) as Record<string, Record<string, number>>;
+        ddSeries.push({
+          id: `cjo15h:${e.hotel_code}`,
+          type: 'column',
+          name: `${e.hotel_code} — Job Status`,
+          color: ORANGE,
+          dataLabels: { enabled: true },
+          data: statuses.map(([status, cnt]) => ({
+            name: status,
+            y: Number(cnt),
+            drilldown: sdm[status] ? `cjo15s:${e.hotel_code}:${status}` : undefined,
+          })),
+        } as Highcharts.SeriesOptionsType);
+        for (const [status, bktMap] of Object.entries(sdm)) {
+          ddSeries.push({
+            id: `cjo15s:${e.hotel_code}:${status}`,
+            type: 'column',
+            name: `${e.hotel_code} ${status} — Duration`,
+            color: BLUE,
+            dataLabels: { enabled: true },
+            data: DUR_ORDER.map((bkt) => ({ name: bkt, y: (bktMap as Record<string, number>)[bkt] ?? 0 })),
+          } as Highcharts.SeriesOptionsType);
+        }
+      }
+      return {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Total Jobs' } },
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        series: [{
+          type: 'column',
+          name: 'Total Jobs',
+          color: GREEN,
+          dataLabels: { enabled: true },
+          data: sorted.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo15h:${e.hotel_code}` })),
+        }],
+        drilldown: { series: ddSeries },
+      };
+    })()),
     make('cjo-16', 'Top Service Categories by Hotel', 'Compares top JO categories across hotels.', 'COUNT(*) BY hotel_code, service_item_category', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
     }),
@@ -1819,35 +1897,49 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       });
 
-      // cjo-27: Job Status → 24-Hour distribution
-      const chainStatusHour: Record<string, Record<number, number>> = {};
-      for (const e of entries) {
-        const m = e.summary.jo_status_hour_map ?? {};
-        for (const [s, hm] of Object.entries(m)) {
-          if (!chainStatusHour[s]) chainStatusHour[s] = {};
-          for (const [h, v] of Object.entries(hm)) chainStatusHour[s][+h] = (chainStatusHour[s][+h] ?? 0) + v;
+      // cjo-27: Hotel Jobs → 24-Hour Distribution → Top 10 Service Items (3-level)
+      const sortedForCjo27 = [...entries].sort((a, b) => (b.summary.total ?? 0) - (a.summary.total ?? 0));
+      const cjo27DdSeries: Highcharts.SeriesOptionsType[] = [];
+      for (const e of sortedForCjo27) {
+        const him = (e.summary.jo_hour_item_map ?? {}) as Record<string, Record<string, number>>;
+        // Level 1: 24-hour distribution for this hotel
+        cjo27DdSeries.push({
+          id: `cjo27e:${e.hotel_code}`,
+          type: 'column',
+          name: `${e.hotel_code} — 24-Hour`,
+          color: ORANGE,
+          dataLabels: { enabled: true },
+          data: hours24.map((h) => ({
+            name: `${String(h).padStart(2, '0')}:00`,
+            y: Object.values((him[String(h)] ?? {})).reduce((a, b) => a + b, 0),
+            drilldown: `cjo27i:${e.hotel_code}:${h}`,
+          })),
+        } as Highcharts.SeriesOptionsType);
+        // Level 2: Top 10 service items for each hour of this hotel
+        for (const h of hours24) {
+          const im = him[String(h)] ?? {};
+          const top10 = Object.entries(im).sort(([, a], [, b]) => b - a).slice(0, 10);
+          if (top10.length === 0) continue;
+          cjo27DdSeries.push({
+            id: `cjo27i:${e.hotel_code}:${h}`,
+            type: 'column',
+            name: `${e.hotel_code} ${String(h).padStart(2, '0')}:00 — Items`,
+            color: '#1D4ED8',
+            dataLabels: { enabled: true },
+            data: top10.map(([item, cnt]) => ({ name: item, y: cnt })),
+          } as Highcharts.SeriesOptionsType);
         }
       }
-      const cjo27 = make('cjo-27', 'Job Status → 24-Hour Jobs Distribution', 'Job count by status across the chain. Click a status bar to see its 24-hour distribution.', 'COUNT(*) BY job_status; drilldown: COUNT(*) BY created_hour', {
+      const cjo27 = make('cjo-03', '🟢 Hotel Jobs → 24-Hour Distribution → Top 10 Service Items', 'Columns show total jobs per hotel. Click a hotel to drill into its 24-hour job distribution, then click an hour to see the top 10 service items for that hour.', 'COUNT(*) BY hotel_code; drilldown: COUNT(*) BY created_hour; drilldown: TOP 10 COUNT(*) BY service_item', {
         chart: { type: 'column' },
         xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'Jobs' } },
         series: [{ type: 'column', name: 'Jobs', color: GREEN,
-          data: Object.entries(chainStatusHour)
-            .map(([s, hm]) => ({ name: s, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo27:${s}` }))
-            .sort((a, b) => b.y - a.y),
+          data: sortedForCjo27.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo27e:${e.hotel_code}` })),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: Object.entries(chainStatusHour).map(([s, hm]) => ({
-            id: `cjo27:${s}`,
-            name: `${s} — 24-Hour Distribution`,
-            type: 'column', color: ORANGE,
-            dataLabels: { enabled: true },
-            data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[h] ?? 0 })),
-          })),
-        },
+        drilldown: { series: cjo27DdSeries },
       });
 
       // cjo-28: Overdue Jobs by Item Category → 24-Hour distribution
@@ -1885,6 +1977,15 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       return [cjo23, cjo24, cjo25, cjo26, cjo27, cjo28];
     })(),
   ];
+  // Swap display positions of cjo-03 and cjo-27 (chart contents live in opposite slots)
+  const i03 = charts.findIndex((c) => c.id === 'cjo-03');
+  const i27 = charts.findIndex((c) => c.id === 'cjo-27');
+  if (i03 >= 0 && i27 >= 0) {
+    const tmp = charts[i03];
+    charts[i03] = charts[i27];
+    charts[i27] = tmp;
+  }
+  return charts;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -4760,70 +4861,37 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       });
     }
 
-    // jo-11 — always inject (replaces stored plain-bar); drilldown = daily trend when jo_item_date_map is present, else dept breakdown
-    const idm = sum.jo_item_date_map;
-    const dateFilterOn = filtered && !!dateFrom && !!dateTo;
-    const dateInRange = (d: string) => !dateFilterOn || (d >= dateFrom && d <= dateTo);
-    // When the date map exists, item totals respect the applied date filter;
-    // otherwise fall back to all-time item_map (no per-date data available).
-    const topItems: Array<[string, number]> = idm
-      ? Object.entries(idm)
-          .map(([item, dm]): [string, number] => [
-            item,
-            Object.entries(dm).reduce((a, [d, c]) => a + (dateInRange(d) ? c : 0), 0),
-          ])
-          .filter(([, v]) => v > 0)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 10)
-      : Object.entries(sum.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
-    if (topItems.length > 0) {
-      // Build item→dept map by inverting dept_item_map (fallback drilldown)
-      const itemDeptMap: Record<string, Record<string, number>> = {};
-      for (const [dept, items] of Object.entries(sum.dept_item_map ?? {})) {
-        for (const [item, cnt] of Object.entries(items as Record<string, number>)) {
-          if (!itemDeptMap[item]) itemDeptMap[item] = {};
-          itemDeptMap[item][dept] = (itemDeptMap[item][dept] ?? 0) + cnt;
-        }
-      }
-      const allDates = idm
-        ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm[k] ?? {}).filter(dateInRange)))).sort()
-        : [];
+    // 24-Hour Job Distribution → Top Service Items — displays code jo-02 but stays in the jo-11 grid slot
+    const jo11Him = (sum.jo_hour_item_map ?? {}) as Record<string, Record<string, number>>;
+    if (Object.keys(jo11Him).length > 0) {
       out.push({
-        id: 'jo-11', filterable: !!idm,
-        title: t('chart_titles_jo.jo-11', 'Top Service Items → Daily Trend'),
-        note: t('chart_notes_jo.jo-11', 'Ranks the most requested service items. Click an item bar to see its daily job count trend.'),
-        formula: 'COUNT(*) by service_item; drilldown: COUNT(*) by created_date',
+        id: 'jo-02', filterable: false,
+        title: t('chart_titles_jo.jo-11', '🟢 24-Hour Job Distribution → Top Service Items'),
+        note: t('chart_notes_jo.jo-11', 'Columns show total jobs per hour of day (00:00–23:00). Click an hour to drill into the top 10 service items requested during that hour.'),
+        formula: 'COUNT(*) BY HOUR(created_datetime); drilldown: TOP 10 COUNT(*) BY service_item',
         options: {
-          chart: { type: 'bar' },
-          // type:'category' lets drilldown replace axis labels with date names instead of inheriting item names
+          chart: { type: 'column' },
           xAxis: { type: 'category' },
-          yAxis: { min: 0, title: { text: 'Total Jobs' } },
-          series: [{
-            type: 'bar', name: 'Total Jobs', color: TEAL,
-            data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: `jo11d:${k}` })),
+          yAxis: { min: 0, title: { text: 'Jobs' } },
+          series: [{ type: 'column', name: 'Jobs', color: TEAL,
+            data: hours24.map((h) => ({
+              name: hl(h),
+              y: Object.values(jo11Him[String(h)] ?? {}).reduce((a, b) => a + b, 0),
+              drilldown: `jo11i:${h}`,
+            })),
             dataLabels: { enabled: true },
           }],
-          plotOptions: { bar: { dataLabels: { enabled: true } } },
+          plotOptions: { column: { dataLabels: { enabled: true } } },
           drilldown: {
-            series: topItems.map(([k]) => {
-              if (idm && allDates.length > 0) {
-                return {
-                  id: `jo11d:${k}`,
-                  name: `${k} — Daily Trend`,
-                  type: 'bar', color: ORANGE,
-                  dataLabels: { enabled: true },
-                  data: allDates.map((date) => ({ name: date, y: idm[k]?.[date] ?? 0 })),
-                };
-              }
-              const deptData = Object.entries(itemDeptMap[k] ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
-              return {
-                id: `jo11d:${k}`,
-                name: `${k} — By Department`,
-                type: 'bar', color: ORANGE,
-                dataLabels: { enabled: true },
-                data: deptData.map(([dept, cnt]) => ({ name: dept, y: cnt })),
-              };
-            }),
+            series: hours24.map((h) => ({
+              id: `jo11i:${h}`,
+              name: `${hl(h)} — Top Service Items`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: Object.entries(jo11Him[String(h)] ?? {})
+                .sort(([, a], [, b]) => b - a).slice(0, 10)
+                .map(([item, cnt]) => ({ name: item, y: cnt })),
+            })),
           },
         },
       });
@@ -4839,23 +4907,45 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     if (!isJo || isCorp) return null;
     const sum = data.summary as HotelSummary;
     const hm = (sum.jo_hour_delayed_map ?? {}) as Record<string, number>;
+    const dim = (sum.jo_hour_delayed_item_map ?? {}) as Record<string, Record<string, number>>;
+    const hasItems = Object.keys(dim).length > 0;
     const hours24 = Array.from({ length: 24 }, (_, i) => i);
     const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    const ORANGE = '#C2410C', BLUE = '#1D4ED8';
     return {
       id: 'jo-01', filterable: false,
-      title: t('chart_titles_jo.jo-01', '🟢 24-Hour Delayed Job Distribution'),
-      note: t('chart_notes_jo.jo-01', 'Delayed jobs (delay > 0) by hour of day (00:00–23:00); bar height and label show the delayed order count.'),
-      formula: 'COUNT(*) WHERE delay > 0 GROUP BY HOUR(created_datetime)',
+      title: t('chart_titles_jo.jo-01', '🟢 24-Hour Delayed Job Distribution → Top Service Items'),
+      note: t('chart_notes_jo.jo-01', 'Delayed jobs (delay > 0) by hour of day (00:00–23:00). Click an hour to drill into the top 10 delayed service items for that hour.'),
+      formula: 'COUNT(*) WHERE delay > 0 GROUP BY HOUR(created_datetime); drilldown: TOP 10 COUNT(*) BY service_item',
       options: {
         chart: { type: 'column' },
         legend: { enabled: false },
         xAxis: { type: 'category', title: { text: 'Hour of Day' } },
         yAxis: { min: 0, title: { text: 'Delayed Orders' } },
-        series: [{ type: 'column', name: 'Delayed Orders', color: '#C2410C',
-          data: hours24.map((h) => ({ name: hl(h), y: hm[String(h)] ?? 0 })),
+        series: [{ type: 'column', name: 'Delayed Orders', color: ORANGE,
+          data: hours24.map((h) => ({
+            name: hl(h),
+            y: hm[String(h)] ?? 0,
+            drilldown: hasItems && dim[String(h)] ? `jo01i:${h}` : undefined,
+          })),
           dataLabels: { enabled: true },
         }],
         plotOptions: { column: { dataLabels: { enabled: true } } },
+        ...(hasItems ? {
+          drilldown: {
+            series: hours24
+              .filter((h) => dim[String(h)])
+              .map((h) => ({
+                id: `jo01i:${h}`,
+                name: `${hl(h)} — Top Delayed Service Items`,
+                type: 'column', color: BLUE,
+                dataLabels: { enabled: true },
+                data: Object.entries(dim[String(h)] ?? {})
+                  .sort(([, a], [, b]) => b - a).slice(0, 10)
+                  .map(([item, cnt]) => ({ name: item, y: cnt })),
+              })),
+          },
+        } : {}),
       },
     };
   }, [isJo, isCorp, data.summary, t]);
@@ -4917,7 +5007,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       .slice(0, 10);
     if (cats.length === 0) return null;
     return {
-      id: 'jo-02', filterable: false,
+      // Code swapped with jo-11: this chart displays code jo-11 but stays in the jo-02 EAC slot
+      id: 'jo-11', filterable: false,
       title: t('chart_titles_jo.jo-02', '🟢 Top Service Item Category → 24-Hour Job Distribution'),
       note: t('chart_notes_jo.jo-02', 'Top 10 service item categories ranked by total job count (column). Click a category to drill into its 24-hour distribution.'),
       formula: 'COUNT(*) BY service_item_category; drilldown: COUNT(*) BY HOUR(created_datetime)',
@@ -4985,8 +5076,10 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   // Partition core charts
   const IM_OPERATIONAL_IDS = new Set(['im-46', 'im-47', 'im-48', 'im-49', 'im-50', 'im-51', 'im-52', 'im-53', 'im-54', 'im-55', 'im-56']);
   const IM_COMPARISON_IDS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-64', 'im-65']);
+  // The hour-items chart carries code jo-02 but occupies the stored jo-11 grid slot
+  const joGridSlotOf = (id: string) => (id === 'jo-02' ? 'jo-11' : id);
   const injectedJoById = new Map([
-    ...hotelJo2728Charts.map((c) => [c.id, c] as [string, ChartDef]),
+    ...hotelJo2728Charts.map((c) => [joGridSlotOf(c.id), c] as [string, ChartDef]),
     ...(hotelJo06Chart ? [['jo-06', hotelJo06Chart] as [string, ChartDef]] : []),
   ]);
   const storedJoIds = new Set(localizedCharts.map((c) => c.id));
@@ -4995,7 +5088,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         // Injected charts replace their stored counterpart in place (keeps jo-11 between jo-10 and jo-12)
         ...localizedCharts.map((c) => injectedJoById.get(c.id) ?? c),
         // Charts that only exist client-side (e.g. jo-27/jo-28 on legacy rows) go at the end
-        ...hotelJo2728Charts.filter((c) => !storedJoIds.has(c.id)),
+        ...hotelJo2728Charts.filter((c) => !storedJoIds.has(joGridSlotOf(c.id))),
       ]
     : localizedCharts.filter(c => IM_OPERATIONAL_IDS.has(c.id));
   const comparisonCharts = isJo ? [] : localizedCharts.filter(c => {
@@ -5027,7 +5120,12 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   }, [isCorp, isJo, activeChainEntries]);
 
   // c05(eac[4]) ↔ c02(eac[1])  and  c13(operationalCharts[6]) ↔ c06(eac[5])
-  const injectedJoEac = new Map([hotelJo01Chart, hotelJo02Chart, hotelJo03Chart].filter((c): c is ChartDef => !!c).map((c) => [c.id, c]));
+  // hotelJo02Chart carries code jo-11 but still replaces the stored jo-02 EAC slot
+  const injectedJoEac = new Map<string, ChartDef>([
+    ...(hotelJo01Chart ? [['jo-01', hotelJo01Chart] as [string, ChartDef]] : []),
+    ...(hotelJo02Chart ? [['jo-02', hotelJo02Chart] as [string, ChartDef]] : []),
+    ...(hotelJo03Chart ? [['jo-03', hotelJo03Chart] as [string, ChartDef]] : []),
+  ]);
   const reorderedEac = [...localizedEac].map((c) => injectedJoEac.get(c.id) ?? c);
   const reorderedOperational = [...operationalCharts];
   if (!isJo && reorderedEac.length > 5 && reorderedOperational.length > 6) {

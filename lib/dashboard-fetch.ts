@@ -614,6 +614,39 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           entry.summary.location_map = locationByHotel[entry.hotel_code] ?? entry.summary.location_map ?? {};
         }
       }
+      // jo_status_dur_bkt_map: status → durBucket → completed count (live from jo_records)
+      if (hotelCodes.length > 0) {
+        type DurRow = { hotel_code: string | null; job_status: string | null; actual_duration: number | null };
+        const JO_DUR_ORDER = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
+        function joDurBucket(min: number): string {
+          if (min < 15) return '< 15 min';
+          if (min < 30) return '15–30 min';
+          if (min < 60) return '30–60 min';
+          if (min < 120) return '1–2 h';
+          if (min < 240) return '2–4 h';
+          if (min < 480) return '4–8 h';
+          return '8+ h';
+        }
+        const durBatch = await supabase
+          .from('jo_records')
+          .select('hotel_code, job_status, actual_duration')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<DurRow[]>;
+        const statusDurByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        for (const r of durBatch.data ?? []) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          const status = (r.job_status ?? '').trim() || 'Unknown';
+          const dur = Number(r.actual_duration);
+          if (!hotel || !Number.isFinite(dur) || dur < 0) continue;
+          const bkt = joDurBucket(dur);
+          if (!statusDurByHotel[hotel]) statusDurByHotel[hotel] = {};
+          if (!statusDurByHotel[hotel][status]) statusDurByHotel[hotel][status] = {};
+          statusDurByHotel[hotel][status][bkt] = (statusDurByHotel[hotel][status][bkt] ?? 0) + 1;
+        }
+        for (const entry of chainEntries) {
+          entry.summary.jo_status_dur_bkt_map = statusDurByHotel[entry.hotel_code] ?? entry.summary.jo_status_dur_bkt_map ?? {};
+        }
+        void JO_DUR_ORDER; // referenced in DashboardClient
+      }
     } else if (String(moduleCode ?? '').toLowerCase() === 'im') {
       type JoLiveRow = {
         hotel_code: string | null;

@@ -10,7 +10,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.87** (as of 2026-06-27) |
+| Version | **v1.0.88** (as of 2026-07-04) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` |
@@ -267,6 +267,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.88** | 2026-07-04 | JO chart redesigns (hotel + corp): **cjo-02** → "Hotel Job Volume → Job Status → 24-Hour Distribution" (2-level column drilldown from `status_map` + `jo_status_hour_map`); **cjo-15** → "Hotel Job Volume → Job Status → Completed Duration Distribution" (2-level drilldown; new `jo_status_dur_bkt_map` computed live from `jo_records.actual_duration` in `fetchCorpDashboard`); **cjo-27** ↔ **cjo-03** content swap — cjo-03 = "Hotel Jobs → 24-Hour Distribution → Top 10 Service Items" (3-level drilldown from `jo_hour_item_map`) shown early, cjo-27 = SLA Compliance by Hotel shown late (post-build array swap); hotel **jo-01** → "24-Hour Delayed Job Distribution → Top Service Items" (hour → top-10 delayed items drilldown; new `jo_hour_delayed_item_map` in finalize accumulator + `HotelSummary` + `scripts/backfill_jo_hour_delayed_item_map.mjs` run on local DB, 10 hotels); hotel **jo-02** = category → 24-h chart (EAC slot) and grid hour → top-items chart traded display codes only (`joGridSlotOf` + explicit `injectedJoEac` keys keep both charts in place); fix `/api/ai/charts/list` 500 — `created_at.localeCompare` crashed on pg `Date` objects, now compares via `getTime()`; i18n titles/notes/BV updated all 4 langs |
 | **v1.0.87** | 2026-06-27 | Theme picker rebuilt as card layout (avatar badge + name + description + 4-color swatch row, 300px panel, accent border on active); **Color Ink Wash** replaced with **Jade & Ink** (`jade-ink`) — jade-green sidebar (`#0C4A3E`), rice-paper surfaces, jade/gold/deep-blue palette, Chinese cultural character; `AppThemeOption` type + `initials`/`description` fields + `getThemeSwatches()` helper added to `lib/theme.ts` |
 | **v1.0.86** | 2026-06-27 | Two new app UI themes added to `lib/theme.ts`: **Chromatic Ink Wash** (`chromatic-ink`) — deep sumi-ink sidebar, rice-paper cream surfaces, saturated pigment palette (teal `#1F5E57`, vermillion `#C84030`, amber `#D08830`); **Color Ink Wash** (`color-ink`) — lighter paper, brighter pigments, warm dark-brown sidebar (teal `#0E7A6A`, coral `#D44C30`); both with full light + dark variants; `AppThemeName`, `APP_THEME_OPTIONS`, `getAppThemeTokens` updated |
 | **v1.0.85** | 2026-06-27 | Hotel IM im-04 redesign: **im-04** → "🟣 VIP vs Non-VIP → 24-Hour Distribution" (column-drilldown: VIP and Non-VIP totals → click to 24-hour distribution per group; new `im_vip_hour_map` in `ImAcc` + `HotelSummary` + finalize route; `scripts/backfill_im_vip_hour_map.mjs` run on local DB for 5 hotels); i18n title/note/BV/formula updated all 4 langs |

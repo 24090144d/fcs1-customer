@@ -113,12 +113,16 @@ export interface HotelSummary {
   jo_cat_hour_map?:      Record<string, Record<string, number>>;
   // jo-27/cjo-27: job status → hour → count
   jo_status_hour_map?:   Record<string, Record<string, number>>;
+  // cjo-15: job status → duration bucket → completed count (live from jo_records)
+  jo_status_dur_bkt_map?: Record<string, Record<string, number>>;
   // jo-28/cjo-28 (legacy): escalation group → hour → count (field empty in current data)
   jo_escgroup_hour_map?: Record<string, Record<string, number>>;
   // jo-28/cjo-28: overdue jobs (delay > 0) → item category → hour → count
   jo_overdue_cat_hour_map?: Record<string, Record<string, number>>;
   // cjo-12: delayed jobs (delay > 0) → hour → count (per hotel, for 24-h drilldown)
   jo_hour_delayed_map?:     Record<string, number>;
+  // jo-01: delayed jobs (delay > 0) → hour → service item → count
+  jo_hour_delayed_item_map?: Record<string, Record<string, number>>;
   // cjo-14: timeout jobs → hour → count (per hotel, for 24-h drilldown)
   jo_hour_timeout_map?:     Record<string, number>;
   // jo-11: service item → date (YYYY-MM-DD) → count

@@ -10,6 +10,31 @@ import type { CoRow } from '@/types/csv';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
+function localHour(d: Date, tz: string): number {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const h = parseInt(s, 10);
+    if (!Number.isNaN(h)) return h === 24 ? 0 : h;
+  } catch {
+    // fall through
+  }
+  return d.getUTCHours();
+}
+
+async function getOrganizationTimezone(
+  supabase: ReturnType<typeof createAdminClient>,
+  chainCode?: string | null,
+): Promise<string> {
+  const code = String(chainCode ?? '').trim().toUpperCase();
+  if (!code) return 'UTC';
+  const result = await supabase
+    .from('organizations')
+    .select('timezone')
+    .ilike('organization_code', code)
+    .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
+  return result.data?.timezone ?? 'UTC';
+}
+
 function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' | 'co_dashboard_json' {
   const mod = String(moduleCode ?? '').toLowerCase();
   if (mod === 'jo') return 'jo_dashboard_json';
@@ -69,6 +94,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
     }
     const data = result.data?.generated_json ?? null;
     if (!data) return null;
+    const timezone = await getOrganizationTimezone(supabase, data.meta.chain_code);
 
     if (isJo && hotelCode) {
       const currentKpis = Array.isArray(data.kpis) ? [...data.kpis] : [];
@@ -91,15 +117,31 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
         };
         return {
           ...data,
+          meta: {
+            ...data.meta,
+            timezone,
+          },
           kpis: currentKpis,
         } as DashboardJson;
       }
     }
 
     if (isCo && hotelCode) {
-      return data as CoDashboardJson;
+      return {
+        ...data,
+        meta: {
+          ...data.meta,
+          timezone,
+        },
+      } as CoDashboardJson;
     }
-    return data;
+    return {
+      ...data,
+      meta: {
+        ...data.meta,
+        timezone,
+      },
+    } as DashboardJson;
   } catch (error) {
     console.error('[dashboard/fetchDashboard] unexpected failure', { hotelCode, moduleCode, error });
     return null;
@@ -448,6 +490,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
   if (!chainCode) return { data: null, chainEntries: [] };
   try {
     const supabase = createAdminClient();
+    const orgTimezone = await getOrganizationTimezone(supabase, chainCode);
     const isMo = String(moduleCode ?? '').toLowerCase() === 'mo';
     const isCo = String(moduleCode ?? '').toLowerCase() === 'co';
     type DashRow = { generated_json: DashboardJson; created_at: string };
@@ -503,18 +546,36 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
       type SrcRow = {
         hotel_code: string | null;
         department: string | null;
+        incident_category: string | null;
         source_of_complaint: string | null;
         incident_item_name: string | null;
         booking_source: string | null;
+        created_date: string | null;
+        incident_datetime: string | null;
+        investigation_updated_on_2: string | null;
       };
       const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
       if (hotelCodes.length > 0) {
+        const orgRes = await supabase
+          .from('organizations')
+          .select('timezone')
+          .ilike('organization_code', chainCode.toUpperCase())
+          .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
+        const orgTimezone = orgRes.data?.timezone ?? 'UTC';
         const mapByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const deptCategoryByHotel: Record<string, Record<string, Record<string, number>>> = {};
         const itemByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const categoryItemByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const hourByHotel: Record<string, Record<string, number>> = {};
+        const hourCategoryByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const hourDeptByHotel: Record<string, Record<string, Record<string, number>>> = {};
+        const hourCategoryItemByHotel: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+        const hourDeptItemByHotel: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+        const itemDurationByHotel: Record<string, Record<string, { sum: number; count: number }>> = {};
         const bookingByHotel: Record<string, Record<string, number>> = {};
         const batch = await supabase
           .from('im_records')
-          .select('hotel_code, department, source_of_complaint, incident_item_name, booking_source')
+          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_2')
           .in('hotel_code', hotelCodes) as unknown as SbResult<SrcRow[]>;
         const rows = batch.data ?? [];
         for (const r of rows) {
@@ -522,15 +583,58 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           if (!hotel) continue;
           const deptRaw = r.department;
           const dept = deptRaw === null || deptRaw === undefined || String(deptRaw).trim() === '' ? 'Unknown Department' : String(deptRaw);
+          const catRaw = r.incident_category;
+          const cat = catRaw === null || catRaw === undefined || String(catRaw).trim() === '' ? 'Uncategorized' : String(catRaw);
           const src = r.source_of_complaint === null ? 'Unknown' : String(r.source_of_complaint);
           const itemRaw = r.incident_item_name;
           const item = itemRaw === null || itemRaw === undefined || String(itemRaw).trim() === '' ? 'Unknown Item' : String(itemRaw);
           if (!mapByHotel[hotel]) mapByHotel[hotel] = {};
           if (!mapByHotel[hotel][dept]) mapByHotel[hotel][dept] = {};
           mapByHotel[hotel][dept][src] = (mapByHotel[hotel][dept][src] ?? 0) + 1;
+          if (!deptCategoryByHotel[hotel]) deptCategoryByHotel[hotel] = {};
+          if (!deptCategoryByHotel[hotel][dept]) deptCategoryByHotel[hotel][dept] = {};
+          deptCategoryByHotel[hotel][dept][cat] = (deptCategoryByHotel[hotel][dept][cat] ?? 0) + 1;
           if (!itemByHotel[hotel]) itemByHotel[hotel] = {};
           if (!itemByHotel[hotel][dept]) itemByHotel[hotel][dept] = {};
           itemByHotel[hotel][dept][item] = (itemByHotel[hotel][dept][item] ?? 0) + 1;
+          if (!categoryItemByHotel[hotel]) categoryItemByHotel[hotel] = {};
+          if (!categoryItemByHotel[hotel][cat]) categoryItemByHotel[hotel][cat] = {};
+          categoryItemByHotel[hotel][cat][item] = (categoryItemByHotel[hotel][cat][item] ?? 0) + 1;
+          const rawDate = r.incident_datetime ?? r.created_date;
+          if (rawDate) {
+            const d = new Date(rawDate);
+            if (!Number.isNaN(d.getTime())) {
+              const hour = String(localHour(d, orgTimezone));
+              if (!hourByHotel[hotel]) hourByHotel[hotel] = {};
+              hourByHotel[hotel][hour] = (hourByHotel[hotel][hour] ?? 0) + 1;
+              if (!hourCategoryByHotel[hotel]) hourCategoryByHotel[hotel] = {};
+              if (!hourCategoryByHotel[hotel][hour]) hourCategoryByHotel[hotel][hour] = {};
+              hourCategoryByHotel[hotel][hour][cat] = (hourCategoryByHotel[hotel][hour][cat] ?? 0) + 1;
+              if (!hourDeptByHotel[hotel]) hourDeptByHotel[hotel] = {};
+              if (!hourDeptByHotel[hotel][hour]) hourDeptByHotel[hotel][hour] = {};
+              hourDeptByHotel[hotel][hour][dept] = (hourDeptByHotel[hotel][hour][dept] ?? 0) + 1;
+              if (!hourCategoryItemByHotel[hotel]) hourCategoryItemByHotel[hotel] = {};
+              if (!hourCategoryItemByHotel[hotel][hour]) hourCategoryItemByHotel[hotel][hour] = {};
+              if (!hourCategoryItemByHotel[hotel][hour][cat]) hourCategoryItemByHotel[hotel][hour][cat] = {};
+              hourCategoryItemByHotel[hotel][hour][cat][item] = (hourCategoryItemByHotel[hotel][hour][cat][item] ?? 0) + 1;
+              if (!hourDeptItemByHotel[hotel]) hourDeptItemByHotel[hotel] = {};
+              if (!hourDeptItemByHotel[hotel][hour]) hourDeptItemByHotel[hotel][hour] = {};
+              if (!hourDeptItemByHotel[hotel][hour][dept]) hourDeptItemByHotel[hotel][hour][dept] = {};
+              hourDeptItemByHotel[hotel][hour][dept][item] = (hourDeptItemByHotel[hotel][hour][dept][item] ?? 0) + 1;
+            }
+          }
+          const endRaw = r.investigation_updated_on_2;
+          if (rawDate && endRaw) {
+            const start = new Date(rawDate).getTime();
+            const end = new Date(endRaw).getTime();
+            const hours = (end - start) / 3_600_000;
+            if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
+              if (!itemDurationByHotel[hotel]) itemDurationByHotel[hotel] = {};
+              if (!itemDurationByHotel[hotel][item]) itemDurationByHotel[hotel][item] = { sum: 0, count: 0 };
+              itemDurationByHotel[hotel][item].sum += hours;
+              itemDurationByHotel[hotel][item].count += 1;
+            }
+          }
           const bookingRaw = r.booking_source;
           const booking = bookingRaw === null || bookingRaw === undefined ? 'Unknown' : String(bookingRaw);
           if (!bookingByHotel[hotel]) bookingByHotel[hotel] = {};
@@ -539,7 +643,18 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
 
         for (const entry of chainEntries) {
           entry.summary.dept_source_map = mapByHotel[entry.hotel_code] ?? entry.summary.dept_source_map ?? {};
+          entry.summary.dept_category_map = deptCategoryByHotel[entry.hotel_code] ?? entry.summary.dept_category_map ?? {};
           entry.summary.dept_item_map = itemByHotel[entry.hotel_code] ?? entry.summary.dept_item_map ?? {};
+          entry.summary.category_item_map = categoryItemByHotel[entry.hotel_code] ?? entry.summary.category_item_map ?? {};
+          entry.summary.im_hour_map = hourByHotel[entry.hotel_code] ?? entry.summary.im_hour_map ?? {};
+          entry.summary.im_hour_category_map = hourCategoryByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_map ?? {};
+          entry.summary.im_hour_dept_map = hourDeptByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_map ?? {};
+          entry.summary.im_hour_category_item_map = hourCategoryItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_item_map ?? {};
+          entry.summary.im_hour_dept_item_map = hourDeptItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_item_map ?? {};
+          const durations = itemDurationByHotel[entry.hotel_code] ?? {};
+          entry.summary.im_item_duration_map = Object.fromEntries(
+            Object.entries(durations).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count : 0]),
+          );
           entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
         }
       }
@@ -757,17 +872,18 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         const coTemplate = template as CoDashboardJson;
         const corpCoData: CoDashboardJson = {
           ...coTemplate,
-          meta: {
-            ...coTemplate.meta,
-            source_name: `${chainCode.toUpperCase()} Corp`,
-            chain_code: chainCode.toUpperCase(),
-            hotel_code: 'CORP',
-            hotel_name: 'Corp',
-            total_records: scopedTotalRecords,
-            date_range: { min: scopedDateMin, max: scopedDateMax },
-            generated_at: new Date().toISOString(),
-            schema: 'co-v1',
-          },
+        meta: {
+          ...coTemplate.meta,
+          source_name: `${chainCode.toUpperCase()} Corp`,
+          chain_code: chainCode.toUpperCase(),
+          hotel_code: 'CORP',
+          hotel_name: 'Corp',
+          timezone: orgTimezone,
+          total_records: scopedTotalRecords,
+          date_range: { min: scopedDateMin, max: scopedDateMax },
+          generated_at: new Date().toISOString(),
+          schema: 'co-v1',
+        },
           kpis: coTemplate.kpis ?? [],
           eac: coTemplate.eac ?? [],
           charts: coTemplate.charts ?? [],
@@ -807,6 +923,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           chain_code: chainCode.toUpperCase(),
           hotel_code: 'CORP',
           hotel_name: 'Corp',
+          timezone: orgTimezone,
           total_records: scopedTotalRecords,
           date_range: { min: scopedDateMin, max: scopedDateMax },
           generated_at: new Date().toISOString(),
@@ -860,6 +977,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         chain_code: chainCode.toUpperCase(),
         hotel_code: 'CORP',
         hotel_name: 'Corp',
+        timezone: orgTimezone,
         total_records: totalRecords,
         date_range: { min: dateMin, max: dateMax },
         generated_at: new Date().toISOString(),

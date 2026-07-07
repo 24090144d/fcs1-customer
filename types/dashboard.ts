@@ -68,8 +68,13 @@ export interface HotelSummary {
   dept_map:      Record<string, number>;
   category_map:  Record<string, number>;
   item_map:      Record<string, number>;
+  category_item_map?: Record<string, Record<string, number>>;
   dept_item_map: Record<string, Record<string, number>>;
   dept_category_map: Record<string, Record<string, number>>;
+  im_hour_category_map?: Record<string, Record<string, number>>; // hour -> category -> count
+  im_hour_dept_map?: Record<string, Record<string, number>>; // hour -> department -> count
+  im_hour_category_item_map?: Record<string, Record<string, Record<string, number>>>; // hour -> category -> item -> count
+  im_hour_dept_item_map?: Record<string, Record<string, Record<string, number>>>; // hour -> department -> item -> count
   week_map:      Record<string, number>;
   week_source_map: Record<string, Record<string, number>>;
   dept_source_map: Record<string, Record<string, number>>;
@@ -162,6 +167,7 @@ interface DashboardMeta<TSchema extends DashboardSchema> {
   hotel_code:    string;
   hotel_name:    string;
   country_code:  string;
+  timezone?:     string;
   total_records: number;
   date_range:    { min: string | null; max: string | null };
   generated_at:  string;
@@ -176,6 +182,7 @@ export interface ImDashboardJson {
     hotel_code:    string;
     hotel_name:    string;
     country_code:  string;
+    timezone?:     string;
     total_records: number;
     date_range:    { min: string | null; max: string | null };
     generated_at:  string;

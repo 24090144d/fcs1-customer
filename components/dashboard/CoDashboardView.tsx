@@ -102,6 +102,24 @@ function parseDate(value: string): Date | null {
   return parseLocalDateKey(value);
 }
 
+function localHour(date: Date, timeZone: string): number {
+  try {
+    const text = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone }).format(date);
+    const hour = parseInt(text, 10);
+    if (!Number.isNaN(hour)) return hour === 24 ? 0 : hour;
+  } catch {
+    // fall through
+  }
+  return date.getUTCHours();
+}
+
+function hourFromSource(source: string | null | undefined, timeZone: string): number | null {
+  if (!source) return null;
+  const date = new Date(source);
+  if (Number.isNaN(date.getTime())) return null;
+  return localHour(date, timeZone);
+}
+
 function toDateKey(value: string | null | undefined): string {
   const text = normText(value);
   if (!text) return '';
@@ -686,7 +704,7 @@ function buildDeltaLineSeries(values: number[]): Array<Highcharts.PointOptionsOb
   });
 }
 
-function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
+function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string): ChartDef[] {
   const clause = buildFilterClause(filters);
   const suffix = chartTitleSuffix(filters);
   const allRows = filteredRows;
@@ -807,18 +825,13 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   const completionHourCategories = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
   const completionHourCounts = Array.from({ length: 24 }, (_, hour) => completedRows.filter((row) => {
     const source = row.completed_time ?? row.start_time ?? row.created_date;
-    if (!source) return false;
-    const date = new Date(source);
-    if (Number.isNaN(date.getTime())) return false;
-    return date.getHours() === hour;
+    return hourFromSource(source, timeZone) === hour;
   }).length);
   const hourFloorCreditMap = new Map<string, number>();
   for (const row of completedRows) {
     const source = row.completed_time ?? row.start_time ?? row.created_date;
-    if (!source) continue;
-    const date = new Date(source);
-    if (Number.isNaN(date.getTime())) continue;
-    const hour = date.getHours();
+    const hour = hourFromSource(source, timeZone);
+    if (hour === null) continue;
     const floor = normText(row.floor) || 'Unknown';
     const key = `${hour}::${floor}`;
     const credit = typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
@@ -855,9 +868,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   const hourDurBucketCounts = Array.from({ length: 24 }, (_, hour) => {
     const hourRows = completedRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!src) return false;
-      const d = new Date(src);
-      return !Number.isNaN(d.getTime()) && d.getHours() === hour;
+      return hourFromSource(src, timeZone) === hour;
     });
     return durationBins.map((bin) =>
       hourRows.filter((row) => {
@@ -871,9 +882,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   const allHourRows24 = Array.from({ length: 24 }, (_, h) =>
     allRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!src) return false;
-      const d = new Date(src);
-      return !Number.isNaN(d.getTime()) && d.getHours() === h;
+      return hourFromSource(src, timeZone) === h;
     })
   );
   const allHourCounts24 = allHourRows24.map((rows) => rows.length);
@@ -933,9 +942,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   const delayedHourRows = Array.from({ length: 24 }, (_, h) =>
     delayedRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!src) return false;
-      const d = new Date(src);
-      return !Number.isNaN(d.getTime()) && d.getHours() === h;
+      return hourFromSource(src, timeZone) === h;
     })
   );
   const delayedHourCounts = delayedHourRows.map((rows) => rows.length);
@@ -958,9 +965,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       name: label,
       y: rows.filter((r) => {
         const src = r.completed_time ?? r.start_time ?? r.created_date;
-        if (!src) return false;
-        const d = new Date(src);
-        return !Number.isNaN(d.getTime()) && d.getHours() === h;
+        return hourFromSource(src, timeZone) === h;
       }).length,
     }));
   const _g2ByDur = (rows: CoRow[]) =>
@@ -1019,13 +1024,8 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       agg.roomTypeDur.get(roomType)!.push(dur);
     }
     const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
-    if (hourSource) {
-      const d = new Date(hourSource);
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours();
-        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
-      }
-    }
+    const h = hourFromSource(hourSource, timeZone);
+    if (h !== null) agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
   }
   const co39Primary: Array<{ name: string; y: number; drilldown: string }> = [];
   const co39Dd: DdSeriesLocal[] = [];
@@ -1089,13 +1089,8 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
       agg.roomTypeDur.get(roomType)!.push(dur);
     }
     const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
-    if (hourSource) {
-      const d = new Date(hourSource);
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours();
-        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
-      }
-    }
+    const h = hourFromSource(hourSource, timeZone);
+    if (h !== null) agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
   }
   const co41Primary: Array<{ name: string; y: number; drilldown: string }> = [];
   const co41Dd: DdSeriesLocal[] = [];
@@ -2148,7 +2143,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   ];
 }
 
-function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
+function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string): ChartDef[] {
   const clause = buildFilterClause(filters);
   const suffix = chartTitleSuffix(filters);
   const allRows = filteredRows;
@@ -2236,15 +2231,12 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       hotelRoomTypeCreditMap.get(hotel)!.set(roomType, (hotelRoomTypeCreditMap.get(hotel)!.get(roomType) ?? 0) + credit);
 
       const source = row.completed_time ?? row.start_time ?? row.created_date;
-      if (source) {
-        const date = new Date(source);
-        if (!Number.isNaN(date.getTime())) {
-          const hour = date.getHours();
-          if (!hotelCompletionHourCreditMap.has(hotel)) hotelCompletionHourCreditMap.set(hotel, new Map<number, number>());
-          hotelCompletionHourCreditMap.get(hotel)!.set(hour, (hotelCompletionHourCreditMap.get(hotel)!.get(hour) ?? 0) + credit);
-          if (!hotelCompletionHourCountMap.has(hotel)) hotelCompletionHourCountMap.set(hotel, new Map<number, number>());
-          hotelCompletionHourCountMap.get(hotel)!.set(hour, (hotelCompletionHourCountMap.get(hotel)!.get(hour) ?? 0) + 1);
-        }
+      const hour = hourFromSource(source, timeZone);
+      if (hour !== null) {
+        if (!hotelCompletionHourCreditMap.has(hotel)) hotelCompletionHourCreditMap.set(hotel, new Map<number, number>());
+        hotelCompletionHourCreditMap.get(hotel)!.set(hour, (hotelCompletionHourCreditMap.get(hotel)!.get(hour) ?? 0) + credit);
+        if (!hotelCompletionHourCountMap.has(hotel)) hotelCompletionHourCountMap.set(hotel, new Map<number, number>());
+        hotelCompletionHourCountMap.get(hotel)!.set(hour, (hotelCompletionHourCountMap.get(hotel)!.get(hour) ?? 0) + 1);
       }
     }
 
@@ -2314,9 +2306,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   for (let _h = 0; _h < 24; _h++) {
     const _rows = completedRows.filter((row) => {
       const _src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!_src) return false;
-      const _d = new Date(_src);
-      return !Number.isNaN(_d.getTime()) && _d.getHours() === _h;
+      return hourFromSource(_src, timeZone) === _h;
     });
     hourDurBuckets.set(_h, [
       _rows.filter(r => { const v = toMinutes(r); return Number.isFinite(v) && v < 15; }).length,
@@ -2350,9 +2340,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   const ccoAllHourRows24 = Array.from({ length: 24 }, (_, h) =>
     allRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!src) return false;
-      const d = new Date(src);
-      return !Number.isNaN(d.getTime()) && d.getHours() === h;
+      return hourFromSource(src, timeZone) === h;
     })
   );
   const ccoAllHourCounts24 = ccoAllHourRows24.map((rows) => rows.length);
@@ -2416,9 +2404,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   const ccoDelayedHourRows = Array.from({ length: 24 }, (_, h) =>
     ccoDelayedRows.filter((row) => {
       const src = row.completed_time ?? row.start_time ?? row.created_date;
-      if (!src) return false;
-      const d = new Date(src);
-      return !Number.isNaN(d.getTime()) && d.getHours() === h;
+      return hourFromSource(src, timeZone) === h;
     })
   );
   const ccoDelayedHourCounts = ccoDelayedHourRows.map((rows) => rows.length);
@@ -2441,9 +2427,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       name: label,
       y: rows.filter((r) => {
         const src = r.completed_time ?? r.start_time ?? r.created_date;
-        if (!src) return false;
-        const d = new Date(src);
-        return !Number.isNaN(d.getTime()) && d.getHours() === h;
+        return hourFromSource(src, timeZone) === h;
       }).length,
     }));
   const _ccog2ByDur = (rows: CoRow[]) =>
@@ -2504,13 +2488,8 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       agg.roomTypeDur.get(roomType)!.push(dur);
     }
     const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
-    if (hourSource) {
-      const d = new Date(hourSource);
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours();
-        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
-      }
-    }
+    const h = hourFromSource(hourSource, timeZone);
+    if (h !== null) agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
   }
   // Flatten into Highcharts drilldown series for both charts (index-based ids; names may contain colons)
   type DdSeries = { id: string; name: string; type: 'column'; color: string; dataLabels: { enabled: boolean; format?: string }; data: Array<{ name: string; y: number; drilldown?: string }> };
@@ -2607,13 +2586,8 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       agg.roomTypeDur.get(roomType)!.push(dur);
     }
     const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
-    if (hourSource) {
-      const d = new Date(hourSource);
-      if (!Number.isNaN(d.getTime())) {
-        const h = d.getHours();
-        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
-      }
-    }
+    const h = hourFromSource(hourSource, timeZone);
+    if (h !== null) agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
   }
   const cco45Primary: Array<{ name: string; y: number; drilldown: string }> = [];
   const cco45Dd: DdSeries[] = [];
@@ -2745,9 +2719,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
           name: label,
           y: completedRows.filter((row) => {
             const src = row.completed_time ?? row.start_time ?? row.created_date;
-            if (!src) return false;
-            const d = new Date(src);
-            return !Number.isNaN(d.getTime()) && d.getHours() === hour;
+            return hourFromSource(src, timeZone) === hour;
           }).length,
           drilldown: `cco-hour:${hour}`,
         })),
@@ -3738,6 +3710,7 @@ export function CoDashboardView({
   const { t } = useI18n();
   const { theme } = useTheme();
   const [dark, setDark] = useState(false);
+  const orgTimezone = data.meta.timezone ?? 'UTC';
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
   const [filtersOpen, setFiltersOpen] = useState(!isCorp);
   const [filters, setFilters] = useState<CoFilters>(() => {
@@ -3794,7 +3767,7 @@ export function CoDashboardView({
     return clause;
   }, [filters, isCorp, hotelFilter]);
   const kpis = useMemo(() => buildKpis(scopedRows, previousRows, filters), [scopedRows, previousRows, filters]);
-  const charts = useMemo(() => (isCorp ? buildCorpCharts(scopedRows, filters) : buildCharts(scopedRows, filters)), [scopedRows, filters, isCorp]);
+  const charts = useMemo(() => (isCorp ? buildCorpCharts(scopedRows, filters, orgTimezone) : buildCharts(scopedRows, filters, orgTimezone)), [scopedRows, filters, isCorp, orgTimezone]);
   const localizedKpis = useMemo(() => kpis.map((kpi) => ({
     ...kpi,
     label: t(`kpi_labels_co.${kpi.id}`, kpi.label),

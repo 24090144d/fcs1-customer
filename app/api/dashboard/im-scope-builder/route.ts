@@ -5,6 +5,7 @@ type ImRow = {
   created_date: string | null;
   incident_datetime: string | null;
   investigation_updated_on_1: string | null;
+  investigation_updated_on_2: string | null;
   incident_status: string | null;
   severity: string | null;
   vip_code: string | null;
@@ -45,6 +46,17 @@ function toDateOnly(v: string | null | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
+function localHour(d: Date, tz: string): number {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const h = parseInt(s, 10);
+    if (!Number.isNaN(h)) return h === 24 ? 0 : h;
+  } catch {
+    // fall through
+  }
+  return d.getUTCHours();
+}
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -58,9 +70,16 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
+    const orgRes = await supabase
+      .from('organizations')
+      .select('timezone')
+      .eq('id', organizationId)
+      .maybeSingle() as unknown as { data: { timezone: string | null } | null; error: { message: string } | null };
+    const orgTimezone = orgRes.data?.timezone ?? 'UTC';
+
     const q = await supabase
       .from('im_records')
-      .select('created_date, incident_datetime, investigation_updated_on_1, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location')
+      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location')
       .eq('organization_id', organizationId) as unknown as { data: ImRow[] | null; error: { message: string } | null };
 
     if (q.error) return NextResponse.json({ error: q.error.message }, { status: 500 });
@@ -89,6 +108,7 @@ export async function GET(req: NextRequest) {
     const location_map: Record<string, number> = {};
     const dept_category_map: Record<string, Record<string, number>> = {};
     const category_item_map: Record<string, Record<string, number>> = {};
+    const dept_category_item_map: Record<string, Record<string, Record<string, number>>> = {};
     const item_location_map: Record<string, Record<string, number>> = {};
     const room_item_map: Record<string, Record<string, number>> = {};
     const status_dept_map: Record<string, Record<string, number>> = {};
@@ -98,6 +118,12 @@ export async function GET(req: NextRequest) {
     const category_status_map: Record<string, Record<string, number>> = {};
     const vip_item_map: Record<string, Record<string, number>> = { VIP: {}, 'Non-VIP': {} };
     const vip_category_map: Record<string, Record<string, number>> = { VIP: {}, 'Non-VIP': {} };
+    const category_duration_map: Record<string, { sum: number; count: number }> = {};
+    const category_item_duration_map: Record<string, Record<string, { sum: number; count: number }>> = {};
+    const hour_category_map: Record<string, Record<string, number>> = {};
+    const hour_dept_map: Record<string, Record<string, number>> = {};
+    const hour_category_item_map: Record<string, Record<string, Record<string, number>>> = {};
+    const hour_dept_item_map: Record<string, Record<string, Record<string, number>>> = {};
 
     let total = 0;
     let completed = 0;
@@ -136,6 +162,9 @@ export async function GET(req: NextRequest) {
       location_map[location] = (location_map[location] ?? 0) + 1;
       if (!dept_category_map[dept]) dept_category_map[dept] = {};
       dept_category_map[dept][cat] = (dept_category_map[dept][cat] ?? 0) + 1;
+      if (!dept_category_item_map[dept]) dept_category_item_map[dept] = {};
+      if (!dept_category_item_map[dept][cat]) dept_category_item_map[dept][cat] = {};
+      dept_category_item_map[dept][cat][item] = (dept_category_item_map[dept][cat][item] ?? 0) + 1;
       if (!category_item_map[cat]) category_item_map[cat] = {};
       category_item_map[cat][item] = (category_item_map[cat][item] ?? 0) + 1;
       if (!item_location_map[item]) item_location_map[item] = {};
@@ -152,6 +181,8 @@ export async function GET(req: NextRequest) {
       severity_category_map[sev][cat] = (severity_category_map[sev][cat] ?? 0) + 1;
       if (!category_status_map[cat]) category_status_map[cat] = {};
       category_status_map[cat][status] = (category_status_map[cat][status] ?? 0) + 1;
+      if (!category_duration_map[cat]) category_duration_map[cat] = { sum: 0, count: 0 };
+      if (!category_item_duration_map[cat]) category_item_duration_map[cat] = {};
       const vipSeg = isVip(r.vip_code) ? 'VIP' : 'Non-VIP';
       vip_item_map[vipSeg][item] = (vip_item_map[vipSeg][item] ?? 0) + 1;
       vip_category_map[vipSeg][cat] = (vip_category_map[vipSeg][cat] ?? 0) + 1;
@@ -180,8 +211,19 @@ export async function GET(req: NextRequest) {
 
       const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
       if (dt && !Number.isNaN(dt.getTime())) {
-        const h = dt.getHours();
+        const h = localHour(dt, orgTimezone);
         hour_map[h] = (hour_map[h] ?? 0) + 1;
+        const hourKey = String(h);
+        if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};
+        hour_category_map[hourKey][cat] = (hour_category_map[hourKey][cat] ?? 0) + 1;
+        if (!hour_dept_map[hourKey]) hour_dept_map[hourKey] = {};
+        hour_dept_map[hourKey][dept] = (hour_dept_map[hourKey][dept] ?? 0) + 1;
+        if (!hour_category_item_map[hourKey]) hour_category_item_map[hourKey] = {};
+        if (!hour_category_item_map[hourKey][cat]) hour_category_item_map[hourKey][cat] = {};
+        hour_category_item_map[hourKey][cat][item] = (hour_category_item_map[hourKey][cat][item] ?? 0) + 1;
+        if (!hour_dept_item_map[hourKey]) hour_dept_item_map[hourKey] = {};
+        if (!hour_dept_item_map[hourKey][dept]) hour_dept_item_map[hourKey][dept] = {};
+        hour_dept_item_map[hourKey][dept][item] = (hour_dept_item_map[hourKey][dept][item] ?? 0) + 1;
       }
 
       const day = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
@@ -214,6 +256,18 @@ export async function GET(req: NextRequest) {
         b.by_category[cat] = (b.by_category[cat] ?? 0) + 1;
       }
 
+      const end = r.investigation_updated_on_2 ? new Date(r.investigation_updated_on_2) : null;
+      if (dt && end && !Number.isNaN(end.getTime()) && end.getTime() >= dt.getTime()) {
+        const hours = (end.getTime() - dt.getTime()) / 3_600_000;
+        if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
+          category_duration_map[cat].sum += hours;
+          category_duration_map[cat].count += 1;
+          if (!category_item_duration_map[cat][item]) category_item_duration_map[cat][item] = { sum: 0, count: 0 };
+          category_item_duration_map[cat][item].sum += hours;
+          category_item_duration_map[cat][item].count += 1;
+        }
+      }
+
       const rk = `${r.room_no ?? 'unknown'}|${cat}|${item}`;
       repeatKeyCount[rk] = (repeatKeyCount[rk] ?? 0) + 1;
     }
@@ -232,8 +286,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       total, completed, cancelled, pending, vip_total, vip_completed, vip_cancelled, severity_sum, repeat_count,
       status_map, severity_map, category_map, item_map, source_map, booking_map, dept_map, room_map, location_map,
-      dept_category_map, category_item_map, item_location_map, room_item_map, status_dept_map, source_dept_map,
+      dept_category_map, category_item_map, dept_category_item_map, item_location_map, room_item_map, status_dept_map, source_dept_map,
       location_dept_map, severity_category_map, category_status_map, vip_item_map, vip_category_map,
+      category_duration_map: Object.fromEntries(Object.entries(category_duration_map).map(([cat, v]) => [cat, v.count > 0 ? v.sum / v.count : 0])),
+      category_item_duration_map: Object.fromEntries(Object.entries(category_item_duration_map).map(([cat, items]) => [cat, Object.fromEntries(Object.entries(items).map(([itemName, v]) => [itemName, v.count > 0 ? v.sum / v.count : 0]))])),
+      hour_category_map,
+      hour_dept_map,
+      hour_category_item_map,
+      hour_dept_item_map,
       avg_first_response, peak_hour, peak_hour_share, hour_map,
       raw_daily: Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date)),
     });
@@ -242,4 +302,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-

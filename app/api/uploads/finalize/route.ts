@@ -410,6 +410,7 @@ interface ImAcc {
   statusMap:     Record<string, number>;
   severityMap:   Record<string, number>;
   categoryMap:   Record<string, number>;
+  categoryItemMap: Record<string, Record<string, number>>;
   itemMap:       Record<string, number>;
   roomMap:       Record<string, number>;
   deptMap:       Record<string, number>;
@@ -436,6 +437,10 @@ interface ImAcc {
   deptSourceMap: Record<string, Record<string, number>>; // dept -> source -> count
   deptCatMap:    Record<string, Record<string, number>>; // dept → category → count
   deptItemMap:   Record<string, Record<string, number>>; // dept → incident item → count
+  hourCatMap:    Record<number, Record<string, number>>; // hour → category → count
+  hourDeptMap:   Record<number, Record<string, number>>; // hour → department → count
+  hourCatItemMap: Record<number, Record<string, Record<string, number>>>; // hour → category → item → count
+  hourDeptItemMap: Record<number, Record<string, Record<string, number>>>; // hour → department → item → count
   vipDeptMap:    Record<string, number>;
   vipHourMap:    Record<number, number>;
   repeatMap:     Map<string, number>;
@@ -448,13 +453,13 @@ function newImAcc(): ImAcc {
     total: 0, completed: 0, cancelled: 0, severitySum: 0,
     vipTotal: 0, vipCompleted: 0, vipCancelled: 0,
     firstResponseSum: 0, firstResponseCount: 0,
-    statusMap: {}, severityMap: {}, categoryMap: {}, itemMap: {}, roomMap: {},
+    statusMap: {}, severityMap: {}, categoryMap: {}, categoryItemMap: {}, itemMap: {}, roomMap: {},
     deptMap: {}, sourceMap: {}, hourMap: {}, weekMap: {},
     bookingMap: {},
     dailyMap: {}, monthMap: {}, weekdayMap: {},
     catStatusMap: {}, catSevMap: {}, catDailyMap: {}, itemDailyMap: {}, itemDurationMap: {}, itemCompletedMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
     weekSourceMap: {},
-    statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, vipDeptMap: {}, vipHourMap: {},
+    statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, hourCatMap: {}, hourDeptMap: {}, hourCatItemMap: {}, hourDeptItemMap: {}, vipDeptMap: {}, vipHourMap: {},
     repeatMap: new Map(),
     nightsBkts: { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5+': 0 },
     repeatCount: 0,
@@ -503,6 +508,8 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
   inc(acc.catStatusMap[category], status   || null);
   if (!acc.catSevMap[category])   acc.catSevMap[category]   = {};
   inc(acc.catSevMap[category],    severity || null);
+  if (!acc.categoryItemMap[category]) acc.categoryItemMap[category] = {};
+  inc(acc.categoryItemMap[category], item || null);
 
   if (!acc.statusDeptMap[status]) acc.statusDeptMap[status] = {};
   inc(acc.statusDeptMap[status], dept || null);
@@ -582,6 +589,21 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
       if (!acc.wdMonthMap[monthKey]) acc.wdMonthMap[monthKey] = {};
       acc.wdMonthMap[monthKey][wd] = (acc.wdMonthMap[monthKey][wd] ?? 0) + 1;
 
+      if (!acc.hourCatMap[hr]) acc.hourCatMap[hr] = {};
+      inc(acc.hourCatMap[hr], category || null);
+      if (!acc.hourDeptMap[hr]) acc.hourDeptMap[hr] = {};
+      inc(acc.hourDeptMap[hr], dept || null);
+      if (!acc.hourCatItemMap[hr]) acc.hourCatItemMap[hr] = {};
+      if (category) {
+        if (!acc.hourCatItemMap[hr][category]) acc.hourCatItemMap[hr][category] = {};
+        inc(acc.hourCatItemMap[hr][category], item || null);
+      }
+      if (!acc.hourDeptItemMap[hr]) acc.hourDeptItemMap[hr] = {};
+      if (dept) {
+        if (!acc.hourDeptItemMap[hr][dept]) acc.hourDeptItemMap[hr][dept] = {};
+        inc(acc.hourDeptItemMap[hr][dept], item || null);
+      }
+
       if (!acc.catDailyMap[category]) acc.catDailyMap[category] = {};
       acc.catDailyMap[category][dayKey] = (acc.catDailyMap[category][dayKey] ?? 0) + 1;
 
@@ -592,11 +614,11 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
         const closedRaw = toStr(rr.investigation_updated_on_2);
         if (closedRaw) {
           const t2 = new Date(closedRaw).getTime();
-          const t1 = new Date(dayKey).getTime();
-          const days = (t2 - t1) / 86_400_000;
-          if (days >= 0 && days < 3650) {
+          const t1 = new Date(rawDate).getTime();
+          const hours = (t2 - t1) / 3_600_000;
+          if (hours >= 0 && hours < 3650 * 24) {
             if (!acc.itemDurationMap[item]) acc.itemDurationMap[item] = { sum: 0, count: 0 };
-            acc.itemDurationMap[item].sum += days;
+            acc.itemDurationMap[item].sum += hours;
             acc.itemDurationMap[item].count++;
           }
         }
@@ -1291,9 +1313,14 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
     status_map:   acc.statusMap,
     dept_map:     acc.deptMap,
     category_map: acc.categoryMap,
+    category_item_map: acc.categoryItemMap,
     item_map:     acc.itemMap,
     dept_item_map: acc.deptItemMap,
     dept_category_map: acc.deptCatMap,
+    im_hour_category_map: Object.fromEntries(Object.entries(acc.hourCatMap).map(([h, v]) => [String(h), v])),
+    im_hour_dept_map: Object.fromEntries(Object.entries(acc.hourDeptMap).map(([h, v]) => [String(h), v])),
+    im_hour_category_item_map: Object.fromEntries(Object.entries(acc.hourCatItemMap).map(([h, catMap]) => [String(h), Object.fromEntries(Object.entries(catMap).map(([cat, itemMap]) => [cat, itemMap]))])),
+    im_hour_dept_item_map: Object.fromEntries(Object.entries(acc.hourDeptItemMap).map(([h, deptMap]) => [String(h), Object.fromEntries(Object.entries(deptMap).map(([dept, itemMap]) => [dept, itemMap]))])),
     week_map:     acc.weekMap,
     im_item_date_map: acc.itemDailyMap,
     im_item_duration_map: Object.fromEntries(

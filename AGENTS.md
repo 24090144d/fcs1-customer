@@ -1,7 +1,7 @@
 # FCS1 Customer — Agent Guide
 
 Shared instruction set for all AI coding agents (Claude Code, Codex, Gemini CLI, etc.).
-Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patterns and deeper technical notes.
+Read this before writing any code. See `CLAUDE.md` for deep technical patterns (Highcharts/i18n/config-panel details) — still agent-agnostic despite the filename. This project's primary day-to-day development has moved to Codex; this file (`AGENTS.md`) is the authoritative shared starting point for any agent.
 
 ---
 
@@ -9,17 +9,36 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.70** (released 2026-06-13) |
+| Version | **v1.0.89** (released 2026-07-07) |
 | Branch | `main` |
-| Previous version | v1.0.42 |
+| Local dev | `npm run dev` → `http://localhost:3010` |
+| Previous version | v1.0.88 |
+
+**Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
 ---
 
 ## Start Here
 
-- Read `CLAUDE.md` first for Claude Code sessions.
+- Read this file (`AGENTS.md`) first, regardless of agent.
+- Read `CLAUDE.md` for deep technical patterns (Highcharts drilldown gotchas, i18n conventions, config-panel wiring).
 - Read `docs/co-dev-handoff.md` when resuming CO-specific work.
 - Use `main` as the only release branch unless the user explicitly requests a temporary branch or worktree.
+- No Claude-specific browser-preview tooling exists outside Claude Code. To verify UI changes in another agent: start the dev server (`npm run dev`), open `http://localhost:3010` in a regular browser, and manually navigate the sidebar (chain → module → hotel/corp) to the affected view. `npx tsc --noEmit` remains the authoritative compile gate on Windows regardless of agent (`next build` fails locally on Windows due to an unrelated symlink issue — see CLAUDE.md).
+
+---
+
+## Section Structure: KPI / Simple Charts / Long Charts
+
+All four modules (CO first, then JO/MO/IM) render dashboards in exactly three top-level sections, in this order — do not add others:
+
+1. **KPI** — `kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3`
+2. **Simple Charts** — `chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4` (2 per row) — everything lives here by default
+3. **Long Charts** — `chart-grid-long mt-5 grid grid-cols-1 gap-4` (1 per row) — reserved for deep multi-level drilldowns; membership is opt-in per chart id, moved in only on explicit request
+
+Each section is headed by a shared `SectionHead` component (label + horizontal rule). **`SectionHead` must include `mb-3`** on its wrapping div — this is the only thing separating the label from the cards below (grids use `mt-0`/`mt-5`, not a top margin). `CoDashboardView.tsx` and `DashboardClient.tsx` each keep their **own copy** of `SectionHead` — if you touch one, mirror the change in the other.
+
+Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHART_IDS`, `JO_LONG_CHART_IDS`, `IM_LONG_CHART_IDS` in `DashboardClient.tsx`; `LONG_CHART_IDS` in `CoDashboardView.tsx`), all currently empty. Move a chart id into the set + bump its list cap to `N = 50` only when the user names that specific chart — never batch-move charts speculatively.
 
 ---
 
@@ -38,6 +57,21 @@ Read this before writing any code. See `CLAUDE.md` for Claude Code-specific patt
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.89** | 2026-07-07 | JO/MO/IM restructured to the same KPI / Simple Charts / Long Charts section pattern CO already had (see "Section Structure" above); sub-headers ("Executive Charts", "Drilldown charts", "Chain Comparison", "Performance Gauges", "Corp Comparison Top 10", "Builder Charts", etc.) removed, charts flattened into one Simple Charts grid per scope; new `MO_LONG_CHART_IDS`/`JO_LONG_CHART_IDS`/`IM_LONG_CHART_IDS` sets (empty) + `splitLongCharts` helper in `DashboardClient.tsx`; every hardcoded chart-list cap (`topN`/`.slice(0, N)`) in JO/MO/IM builder code normalized to `N = 24`; fixed spacing bug where `DashboardClient.tsx`'s `SectionHead` was missing `mb-3` vs `CoDashboardView.tsx`'s copy; `AGENTS.md`/`CLAUDE.md` synced and repositioned for a Codex-primary workflow |
+| **v1.0.88** | 2026-07-04 | JO chart redesigns (hotel + corp): cjo-02 → 2-level column drilldown (Job Status → 24-Hour Distribution); cjo-15 → 2-level drilldown (Job Status → Completed Duration Distribution, new `jo_status_dur_bkt_map`); cjo-27 ↔ cjo-03 content swap; hotel jo-01 → hour → top-10 delayed items drilldown (new `jo_hour_delayed_item_map`); hotel jo-02 category/grid chart display-code fix; fix `/api/ai/charts/list` 500 (`created_at.localeCompare` on pg `Date` → `.getTime()`); i18n all 4 langs |
+| **v1.0.87** | 2026-06-27 | Theme picker rebuilt as card layout; **Color Ink Wash** replaced with **Jade & Ink** (`jade-ink`) — jade-green sidebar, rice-paper surfaces, jade/gold/deep-blue palette; `AppThemeOption` type + `getThemeSwatches()` added to `lib/theme.ts` |
+| **v1.0.86** | 2026-06-27 | Two new app UI themes: **Chromatic Ink Wash** (`chromatic-ink`) and **Color Ink Wash** (`color-ink`), both light+dark variants; `lib/theme.ts` updated |
+| **v1.0.85** | 2026-06-27 | Hotel IM im-04 redesign: VIP vs Non-VIP → 24-Hour Distribution column-drilldown; new `im_vip_hour_map`; `scripts/backfill_im_vip_hour_map.mjs`; i18n all 4 langs |
+| **v1.0.84** | 2026-06-26 | 24-hour distribution timezone fix: backfill scripts now use `localHour(d, orgTimezone)` / `AT TIME ZONE org_timezone` instead of system-local/hardcoded UTC; local DB re-backfilled (7 hotels, Asia/Hong_Kong) |
+| **v1.0.83** | 2026-06-26 | Hotel JO jo-02 redesign: Top Service Item Category → 24-Hour Job Distribution column-drilldown; new `jo_cat_hour_map`; i18n all 4 langs |
+| **v1.0.82** | 2026-06-26 | Hotel JO jo-06 redesign: Job Status by 24-Hour Job Distribution bar-drilldown from `jo_status_hour_map`; i18n all 4 langs |
+| **v1.0.81** | 2026-06-25 | Hotel JO jo-01/jo-03 client-side redesigns (24-Hour Delayed Distribution; Top Service Items → Completed Duration Distribution, new `jo_item_dur_bkt_map`); removed v1.0.70 jo-01↔jo-05 swap; i18n all 4 langs |
+| **v1.0.80** | 2026-06-20 | JO/MO/CO chart footer notes annotated with Good/Watch/Bad or Healthy/Warning benchmark lines, all 255 notes × 4 langs, via idempotent `scripts/annotate_chart_benchmarks.mjs`; system-settings save now also routes through POST (Vercel blocked bare PUT) |
+| **v1.0.79** | 2026-06-20 | Fix Configuration > System timezone save: removed `updated_at` from organizations UPDATE (column absent in Neon production) |
+| **v1.0.78** | 2026-06-20 | Corp MO cmo-09/10/11 redesigned to mirror hotel mo-09/10/11 for chain data (duration distribution, 24-hour distribution, top-10 >24h defects), each with per-hotel drilldown; i18n all 4 langs |
+| **v1.0.73** | 2026-06-19 | Hotel MO mo-01/mo-02 redesigned as donut drilldowns (Top 10 Category by Status; Status by Department); new `cat_status_map`; `scripts/backfill_mo_cat_status_map.mjs`; i18n all 4 langs; corp cmo-* untouched |
+| **v1.0.72** | 2026-06-19 | Hotel MO charts rebuilt: `buildHotelMoCharts` emits real mo-01..mo-12 client-side (replaces legacy im-46..im-69 leak from `buildImJson`); fixes hotel + My Hotel dashboards; world map now loads for mo-06 |
+| **v1.0.71** | 2026-06-19 | My Hotel MO charts fix: positional fallback in embed mode when stored MO data has legacy im-NN ids; cim-20 dual-axis column+line; gauge color/border tweaks |
 | **v1.0.69** | 2026-06-13 | cjo-07 → treemap "Top Service Items (Chain)": aggregates item_map across all hotels, top 30 tiles, useHTML labels; i18n all 4 langs |
 | **v1.0.68** | 2026-06-13 | cjo-07 xAxis `type:'category'`: drilldown X axis shows top 10 service item names (was inheriting hotel codes) |
 | **v1.0.67** | 2026-06-13 | jo-11 primary xAxis `type:'category'` fix — drilldown dates replace item names on Y axis correctly |

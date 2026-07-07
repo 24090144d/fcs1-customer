@@ -45,6 +45,12 @@ interface KpiCardModel {
 }
 
 const REPORT_VARIANT = 'ACSR';
+// Multi-level drilldown charts rendered full-width (1 per row) in the "Long Charts" section.
+const LONG_CHART_IDS = new Set([
+  'co-06', 'co-22', 'co-24', 'co-26', 'co-27', 'co-30', 'co-33', 'co-36', 'co-39', 'co-40', 'co-41', 'co-42',
+  'cco-25', 'cco-27', 'cco-29', 'cco-30',
+  'cco-33', 'cco-36', 'cco-39', 'cco-42', 'cco-43', 'cco-44', 'cco-45', 'cco-46',
+]);
 const DEFAULT_FILTERS: CoFilters = {
   dateFrom: '',
   dateTo: '',
@@ -747,7 +753,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   const statusEntries = topEntries(statusMap, 20);
   const stayStatusEntries = topEntries(stayStatusMap, 20);
   const floorEntries = topEntries(floorMap, 20);
-  const roomTypeEntries = topEntries(roomTypeMap, 20);
+  const roomTypeEntries = topEntries(roomTypeMap, 50);
   const statusDrilldownSeries = statusEntries.map(([statusName]) => {
     const roomTypeBucket = statusRoomTypeMap.get(statusName) ?? new Map<string, number>();
     const roomTypeEntriesForStatus = topEntries(Object.fromEntries(roomTypeBucket.entries()), 20);
@@ -911,7 +917,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   });
   const durBinAttendant = durBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.attendant) || 'Unknown Attendant');
-    return topEntries(m, 15).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
   const durBinCleaningType = durBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.cleaning_type) || 'Unknown');
@@ -919,7 +925,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   });
   const durBinRoomType = durBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.room_type) || 'Unknown Room Type');
-    return topEntries(m, 20).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
 
   // co-25-27: 24-Hour Delayed Order distribution drilldown dimensions
@@ -939,11 +945,11 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   });
   const delayedHourAttendant = delayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.attendant) || 'Unknown Attendant');
-    return topEntries(m, 15).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
   const delayedHourRoomType = delayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.room_type) || 'Unknown Room Type');
-    return topEntries(m, 20).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
 
   // co-28-39: Dimension → 24-Hour / Cleaning Duration drilldowns
@@ -967,7 +973,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     .map(([name, total]) => ({ name, total, drill: _g1ByHour(allRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
   const dim24hCS = topEntries(groupCount(allRows, rowStatus), 20)
     .map(([name, total]) => ({ name, total, drill: _g1ByHour(allRows.filter((r) => rowStatus(r) === name)) }));
-  const dim24hRT = topEntries(groupCount(allRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 20)
+  const dim24hRT = topEntries(groupCount(allRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
     .map(([name, total]) => ({ name, total, drill: _g1ByHour(allRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
   const dim24hOTD = [
     { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _g1ByHour(completedRows.filter(isOnTime)) },
@@ -975,14 +981,14 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
   ];
   const dim24hCT = topEntries(groupCount(allRows, (r) => normText(r.cleaning_type) || 'Unknown'), 20)
     .map(([name, total]) => ({ name, total, drill: _g1ByHour(allRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
-  const dim24hAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 10)
+  const dim24hAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 50)
     .map(([name, total]) => ({ name, total, drill: _g1ByHour(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
 
   const dimDurSS = topEntries(groupCount(completedRows, (r) => normText(r.stay_status) || 'Unknown'), 20)
     .map(([name, total]) => ({ name, total, drill: _g2ByDur(completedRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
   const dimDurCS = topEntries(groupCount(completedRows, rowStatus), 20)
     .map(([name, total]) => ({ name, total, drill: _g2ByDur(completedRows.filter((r) => rowStatus(r) === name)) }));
-  const dimDurRT = topEntries(groupCount(completedRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 20)
+  const dimDurRT = topEntries(groupCount(completedRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
     .map(([name, total]) => ({ name, total, drill: _g2ByDur(completedRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
   const dimDurOTD = [
     { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _g2ByDur(completedRows.filter(isOnTime)) },
@@ -992,6 +998,147 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     .map(([name, total]) => ({ name, total, drill: _g2ByDur(completedRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
   const dimDurAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 10)
     .map(([name, total]) => ({ name, total, drill: _g2ByDur(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
+
+  // ── co-39 / co-40: Floor → Attendant nested aggregation ────────────────────
+  type DdSeriesLocal = { id: string; name: string; type: 'column'; color: string; dataLabels: { enabled: boolean; format?: string }; data: Array<{ name: string; y: number; drilldown?: string }> };
+  type Co39AttAgg = { count: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
+  const co39FloorAtt = new Map<string, Map<string, Co39AttAgg>>();
+  for (const row of completedRows) {
+    const floor = normText(row.floor) || 'Unknown Floor';
+    const att = normText(row.attendant) || 'Unknown Attendant';
+    if (!co39FloorAtt.has(floor)) co39FloorAtt.set(floor, new Map());
+    const attMap = co39FloorAtt.get(floor)!;
+    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    const agg = attMap.get(att)!;
+    agg.count += 1;
+    const dur = toMinutes(row);
+    if (Number.isFinite(dur)) {
+      agg.durations.push(dur);
+      const roomType = normText(row.room_type) || 'Unknown Room Type';
+      if (!agg.roomTypeDur.has(roomType)) agg.roomTypeDur.set(roomType, []);
+      agg.roomTypeDur.get(roomType)!.push(dur);
+    }
+    const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
+    if (hourSource) {
+      const d = new Date(hourSource);
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours();
+        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
+      }
+    }
+  }
+  const co39Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const co39Dd: DdSeriesLocal[] = [];
+  const co40Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const co40Dd: DdSeriesLocal[] = [];
+  const CO_L1 = '#ea580c', CO_L2 = '#1D4ED8';
+  const floorSorted = Array.from(co39FloorAtt.entries())
+    .map(([floor, attMap]) => {
+      let n = 0;
+      for (const a of attMap.values()) n += a.count;
+      return { floor, attMap, n };
+    })
+    .sort((a, b) => b.n - a.n || a.floor.localeCompare(b.floor))
+    .slice(0, 50);
+  floorSorted.forEach(({ floor, attMap, n }, iIdx) => {
+    co39Primary.push({ name: floor, y: n, drilldown: `co39i:${iIdx}` });
+    co40Primary.push({ name: floor, y: n, drilldown: `co40i:${iIdx}` });
+    const attSorted = Array.from(attMap.entries())
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+      .slice(0, 50);
+    const att39Data: DdSeriesLocal['data'] = [];
+    const att40Data: DdSeriesLocal['data'] = [];
+    attSorted.forEach(([att, agg], aIdx) => {
+      att39Data.push({ name: att, y: agg.count, drilldown: `co39a:${iIdx}:${aIdx}` });
+      att40Data.push({ name: att, y: agg.count, drilldown: `co40a:${iIdx}:${aIdx}` });
+      const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+      const rtData = Array.from(agg.roomTypeDur.entries())
+        .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+        .sort((a, b) => b.y - a.y)
+        .slice(0, 50);
+      co39Dd.push({
+        id: `co39a:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+        type: 'column', color: CO_L2, dataLabels: { enabled: true, format: '{point.y}' },
+        data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+      });
+      co40Dd.push({
+        id: `co40a:${iIdx}:${aIdx}`, name: `${att} — 24-Hour Cleaning Distribution`,
+        type: 'column', color: CO_L2, dataLabels: { enabled: true, format: '{point.y}' },
+        data: Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: agg.hourCount.get(h) ?? 0 })),
+      });
+    });
+    co39Dd.push({ id: `co39i:${iIdx}`, name: `${floor} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att39Data });
+    co40Dd.push({ id: `co40i:${iIdx}`, name: `${floor} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att40Data });
+  });
+
+  // ── co-41 / co-42: Inspector → Attendant nested aggregation ────────────────
+  const co41InspAtt = new Map<string, Map<string, Co39AttAgg>>();
+  for (const row of completedRows) {
+    const insp = normText(row.supervisor) || 'Unknown Inspector';
+    const att = normText(row.attendant) || 'Unknown Attendant';
+    if (!co41InspAtt.has(insp)) co41InspAtt.set(insp, new Map());
+    const attMap = co41InspAtt.get(insp)!;
+    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    const agg = attMap.get(att)!;
+    agg.count += 1;
+    const dur = toMinutes(row);
+    if (Number.isFinite(dur)) {
+      agg.durations.push(dur);
+      const roomType = normText(row.room_type) || 'Unknown Room Type';
+      if (!agg.roomTypeDur.has(roomType)) agg.roomTypeDur.set(roomType, []);
+      agg.roomTypeDur.get(roomType)!.push(dur);
+    }
+    const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
+    if (hourSource) {
+      const d = new Date(hourSource);
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours();
+        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
+      }
+    }
+  }
+  const co41Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const co41Dd: DdSeriesLocal[] = [];
+  const co42Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const co42Dd: DdSeriesLocal[] = [];
+  const inspSorted = Array.from(co41InspAtt.entries())
+    .map(([insp, attMap]) => {
+      let n = 0;
+      for (const a of attMap.values()) n += a.count;
+      return { insp, attMap, n };
+    })
+    .sort((a, b) => b.n - a.n || a.insp.localeCompare(b.insp))
+    .slice(0, 50);
+  inspSorted.forEach(({ insp, attMap, n }, iIdx) => {
+    co41Primary.push({ name: insp, y: n, drilldown: `co41i:${iIdx}` });
+    co42Primary.push({ name: insp, y: n, drilldown: `co42i:${iIdx}` });
+    const attSorted = Array.from(attMap.entries())
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+      .slice(0, 50);
+    const att41Data: DdSeriesLocal['data'] = [];
+    const att42Data: DdSeriesLocal['data'] = [];
+    attSorted.forEach(([att, agg], aIdx) => {
+      att41Data.push({ name: att, y: agg.count, drilldown: `co41a:${iIdx}:${aIdx}` });
+      att42Data.push({ name: att, y: agg.count, drilldown: `co42a:${iIdx}:${aIdx}` });
+      const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+      const rtData = Array.from(agg.roomTypeDur.entries())
+        .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+        .sort((a, b) => b.y - a.y)
+        .slice(0, 50);
+      co41Dd.push({
+        id: `co41a:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+        type: 'column', color: CO_L2, dataLabels: { enabled: true, format: '{point.y}' },
+        data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+      });
+      co42Dd.push({
+        id: `co42a:${iIdx}:${aIdx}`, name: `${att} — 24-Hour Cleaning Distribution`,
+        type: 'column', color: CO_L2, dataLabels: { enabled: true, format: '{point.y}' },
+        data: Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: agg.hourCount.get(h) ?? 0 })),
+      });
+    });
+    co41Dd.push({ id: `co41i:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att41Data });
+    co42Dd.push({ id: `co42i:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att42Data });
+  });
 
   return [
     makeChartBase(
@@ -1850,9 +1997,9 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     ),
     makeChartBase(
       'co-33',
-      'Top 10 Attendants → 24-Hour Cleaning Distribution',
-      `Top 10 attendants by completed orders with drilldown into 24-hour completion pattern. ${suffix}.`,
-      `COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN HOUR(any_time) WHERE ${clause}`,
+      'Top 50 Attendants → 24-Hour Cleaning Distribution',
+      `Top 50 attendants by completed orders with drilldown into 24-hour completion pattern. ${suffix}.`,
+      `COUNT(*) GROUP BY attendant TOP 50 DRILLDOWN HOUR(any_time) WHERE ${clause}`,
       {
         chart: { type: 'column' }, title: { text: undefined },
         xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
@@ -1940,17 +2087,62 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] {
     ),
     makeChartBase(
       'co-39',
-      'Top 10 Attendants → Cleaning Duration Distribution',
-      `Top 10 attendants by completed orders with drilldown into cleaning duration distribution. ${suffix}.`,
-      `COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN duration_bin WHERE ${clause}`,
+      'Floor → Room Attendant → Average Cleaning Duration',
+      `Completed orders per floor. Click a floor to see its room attendants, and an attendant to see average cleaning duration (mins) overall and by room type. ${suffix}.`,
+      `COUNT(*) GROUP BY floor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type WHERE ${clause}`,
       {
         chart: { type: 'column' }, title: { text: undefined },
-        xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
+        xAxis: { type: 'category' as const },
+        yAxis: { title: { text: 'Completed Orders / Avg Minutes' } },
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+        series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: co39Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+        drilldown: { series: co39Dd as unknown as Highcharts.SeriesOptionsType[] },
+      },
+    ),
+    makeChartBase(
+      'co-40',
+      'Floor → Room Attendant → 24-Hour Cleaning Distribution',
+      `Completed orders per floor. Click a floor to see its room attendants, and an attendant to see their 24-hour cleaning completion distribution. ${suffix}.`,
+      `COUNT(*) GROUP BY floor DRILLDOWN attendant DRILLDOWN HOUR(completed_time) WHERE ${clause}`,
+      {
+        chart: { type: 'column' }, title: { text: undefined },
+        xAxis: { type: 'category' as const },
         yAxis: { title: { text: 'Completed Orders' } },
         plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-        series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: dimDurAtt.map((d, i) => ({ name: d.name, y: d.total, drilldown: `co-dimattdr:${i}` })) }],
-        drilldown: { series: dimDurAtt.map((d, i) => ({ id: `co-dimattdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+        series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: co40Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+        drilldown: { series: co40Dd as unknown as Highcharts.SeriesOptionsType[] },
+      },
+    ),
+    makeChartBase(
+      'co-41',
+      'Inspector → Room Attendant → Average Cleaning Duration',
+      `Completed orders per inspector. Click an inspector to see their room attendants, and an attendant to see average cleaning duration (mins) overall and by room type. ${suffix}.`,
+      `COUNT(*) GROUP BY supervisor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type WHERE ${clause}`,
+      {
+        chart: { type: 'column' }, title: { text: undefined },
+        xAxis: { type: 'category' as const },
+        yAxis: { title: { text: 'Completed Orders / Avg Minutes' } },
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+        series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: co41Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+        drilldown: { series: co41Dd as unknown as Highcharts.SeriesOptionsType[] },
+      },
+    ),
+    makeChartBase(
+      'co-42',
+      'Inspector → Room Attendant → 24-Hour Cleaning Distribution',
+      `Completed orders per inspector. Click an inspector to see their room attendants, and an attendant to see their 24-hour cleaning completion distribution. ${suffix}.`,
+      `COUNT(*) GROUP BY supervisor DRILLDOWN attendant DRILLDOWN HOUR(completed_time) WHERE ${clause}`,
+      {
+        chart: { type: 'column' }, title: { text: undefined },
+        xAxis: { type: 'category' as const },
+        yAxis: { title: { text: 'Completed Orders' } },
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+        series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: co42Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+        drilldown: { series: co42Dd as unknown as Highcharts.SeriesOptionsType[] },
       },
     ),
   ];
@@ -2205,7 +2397,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   });
   const ccoDurBinAttendant = ccoDurBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.attendant) || 'Unknown Attendant');
-    return topEntries(m, 15).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
   const ccoDurBinCleaningType = ccoDurBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.cleaning_type) || 'Unknown');
@@ -2213,7 +2405,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   });
   const ccoDurBinRoomType = ccoDurBinRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.room_type) || 'Unknown Room Type');
-    return topEntries(m, 20).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
   const ccoDurBinCounts = _durBucketFns.map((fn) =>
     completedRows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && fn(v); }).length
@@ -2236,11 +2428,11 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   });
   const ccoDelayedHourAttendant = ccoDelayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.attendant) || 'Unknown Attendant');
-    return topEntries(m, 15).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
   const ccoDelayedHourRoomType = ccoDelayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.room_type) || 'Unknown Room Type');
-    return topEntries(m, 20).map(([name, y]) => ({ name, y }));
+    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
 
   // cco-31-42: Dimension → 24-Hour / Cleaning Duration drilldowns
@@ -2264,7 +2456,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
     .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
   const ccoDim24hCS = topEntries(groupCount(allRows, rowStatus), 12)
     .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => rowStatus(r) === name)) }));
-  const ccoDim24hRT = topEntries(groupCount(allRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 12)
+  const ccoDim24hRT = topEntries(groupCount(allRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
     .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
   const ccoDim24hOTD = [
     { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _ccog1ByHour(completedRows.filter(isOnTime)) },
@@ -2272,14 +2464,14 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   ];
   const ccoDim24hCT = topEntries(groupCount(allRows, (r) => normText(r.cleaning_type) || 'Unknown'), 12)
     .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
-  const ccoDim24hAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 10)
+  const ccoDim24hAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 50)
     .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
 
   const ccoDimDurSS = topEntries(groupCount(completedRows, (r) => normText(r.stay_status) || 'Unknown'), 12)
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
   const ccoDimDurCS = topEntries(groupCount(completedRows, rowStatus), 12)
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => rowStatus(r) === name)) }));
-  const ccoDimDurRT = topEntries(groupCount(completedRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 12)
+  const ccoDimDurRT = topEntries(groupCount(completedRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
   const ccoDimDurOTD = [
     { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _ccog2ByDur(completedRows.filter(isOnTime)) },
@@ -2287,8 +2479,202 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
   ];
   const ccoDimDurCT = topEntries(groupCount(completedRows, (r) => normText(r.cleaning_type) || 'Unknown'), 12)
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
-  const ccoDimDurAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 10)
+  const ccoDimDurAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 50)
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
+
+  // ── cco-43 / cco-44: Hotel → Floor → Attendant nested aggregation ──────────
+  type CcoAttAgg = { count: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
+  const ccoHotelFloorAtt = new Map<string, Map<string, Map<string, CcoAttAgg>>>();
+  for (const row of completedRows) {
+    const hotel = normText(row.hotel_code) || 'Unknown Hotel';
+    const floor = normText(row.floor) || 'Unknown Floor';
+    const att = normText(row.attendant) || 'Unknown Attendant';
+    if (!ccoHotelFloorAtt.has(hotel)) ccoHotelFloorAtt.set(hotel, new Map());
+    const floorMap = ccoHotelFloorAtt.get(hotel)!;
+    if (!floorMap.has(floor)) floorMap.set(floor, new Map());
+    const attMap = floorMap.get(floor)!;
+    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    const agg = attMap.get(att)!;
+    agg.count += 1;
+    const dur = toMinutes(row);
+    if (dur !== null && Number.isFinite(dur)) {
+      agg.durations.push(dur);
+      const roomType = normText(row.room_type) || 'Unknown Room Type';
+      if (!agg.roomTypeDur.has(roomType)) agg.roomTypeDur.set(roomType, []);
+      agg.roomTypeDur.get(roomType)!.push(dur);
+    }
+    const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
+    if (hourSource) {
+      const d = new Date(hourSource);
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours();
+        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
+      }
+    }
+  }
+  // Flatten into Highcharts drilldown series for both charts (index-based ids; names may contain colons)
+  type DdSeries = { id: string; name: string; type: 'column'; color: string; dataLabels: { enabled: boolean; format?: string }; data: Array<{ name: string; y: number; drilldown?: string }> };
+  const cco43Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const cco43Dd: DdSeries[] = [];
+  const cco44Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const cco44Dd: DdSeries[] = [];
+  const CCO_L1 = '#ea580c', CCO_L2 = '#B45309', CCO_L3 = '#1D4ED8';
+  // Natural floor order (L1, L2, ... L27) instead of alphabetical/count order; unknowns sort last.
+  const naturalFloorCompare = (a: string, b: string): number => {
+    if (a === 'Unknown Floor') return b === 'Unknown Floor' ? 0 : 1;
+    if (b === 'Unknown Floor') return -1;
+    const na = Number(a.replace(/\D+/g, ''));
+    const nb = Number(b.replace(/\D+/g, ''));
+    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+    return a.localeCompare(b);
+  };
+  const ccoHotelsSorted = Array.from(ccoHotelFloorAtt.entries())
+    .map(([hotel, floorMap]) => {
+      let n = 0;
+      for (const attMap of floorMap.values()) for (const a of attMap.values()) n += a.count;
+      return { hotel, floorMap, n };
+    })
+    .sort((a, b) => b.n - a.n || a.hotel.localeCompare(b.hotel))
+    .slice(0, 50);
+  ccoHotelsSorted.forEach(({ hotel, floorMap, n }, hIdx) => {
+    cco43Primary.push({ name: hotel, y: n, drilldown: `cco43h:${hIdx}` });
+    cco44Primary.push({ name: hotel, y: n, drilldown: `cco44h:${hIdx}` });
+    const floorSorted = Array.from(floorMap.entries())
+      .map(([floor, attMap]) => {
+        let m = 0;
+        for (const a of attMap.values()) m += a.count;
+        return { floor, attMap, m };
+      })
+      .sort((a, b) => b.m - a.m || a.floor.localeCompare(b.floor))
+      .slice(0, 50)
+      .sort((a, b) => naturalFloorCompare(a.floor, b.floor));
+    const insp43Data: DdSeries['data'] = [];
+    const insp44Data: DdSeries['data'] = [];
+    floorSorted.forEach(({ floor, attMap, m }, iIdx) => {
+      insp43Data.push({ name: floor, y: m, drilldown: `cco43i:${hIdx}:${iIdx}` });
+      insp44Data.push({ name: floor, y: m, drilldown: `cco44i:${hIdx}:${iIdx}` });
+      const attSorted = Array.from(attMap.entries())
+        .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+        .slice(0, 50);
+      const att43Data: DdSeries['data'] = [];
+      const att44Data: DdSeries['data'] = [];
+      attSorted.forEach(([att, agg], aIdx) => {
+        att43Data.push({ name: att, y: agg.count, drilldown: `cco43a:${hIdx}:${iIdx}:${aIdx}` });
+        att44Data.push({ name: att, y: agg.count, drilldown: `cco44a:${hIdx}:${iIdx}:${aIdx}` });
+        // cco-43 leaf: average cleaning duration (mins) per room type, with overall avg first
+        const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+        const rtData = Array.from(agg.roomTypeDur.entries())
+          .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+          .sort((a, b) => b.y - a.y)
+          .slice(0, 50);
+        cco43Dd.push({
+          id: `cco43a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
+          data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+        });
+        // cco-44 leaf: 24-hour cleaning distribution
+        cco44Dd.push({
+          id: `cco44a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — 24-Hour Cleaning Distribution`,
+          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
+          data: Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: agg.hourCount.get(h) ?? 0 })),
+        });
+      });
+      cco43Dd.push({ id: `cco43i:${hIdx}:${iIdx}`, name: `${floor} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att43Data });
+      cco44Dd.push({ id: `cco44i:${hIdx}:${iIdx}`, name: `${floor} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att44Data });
+    });
+    cco43Dd.push({ id: `cco43h:${hIdx}`, name: `${hotel} — Floors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp43Data });
+    cco44Dd.push({ id: `cco44h:${hIdx}`, name: `${hotel} — Floors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp44Data });
+  });
+
+  // ── cco-45 / cco-46: Hotel → Inspector → Attendant nested aggregation ──────
+  const ccoHotelInspAtt = new Map<string, Map<string, Map<string, CcoAttAgg>>>();
+  for (const row of completedRows) {
+    const hotel = normText(row.hotel_code) || 'Unknown Hotel';
+    const insp = normText(row.supervisor) || 'Unknown Inspector';
+    const att = normText(row.attendant) || 'Unknown Attendant';
+    if (!ccoHotelInspAtt.has(hotel)) ccoHotelInspAtt.set(hotel, new Map());
+    const inspMap = ccoHotelInspAtt.get(hotel)!;
+    if (!inspMap.has(insp)) inspMap.set(insp, new Map());
+    const attMap = inspMap.get(insp)!;
+    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    const agg = attMap.get(att)!;
+    agg.count += 1;
+    const dur = toMinutes(row);
+    if (dur !== null && Number.isFinite(dur)) {
+      agg.durations.push(dur);
+      const roomType = normText(row.room_type) || 'Unknown Room Type';
+      if (!agg.roomTypeDur.has(roomType)) agg.roomTypeDur.set(roomType, []);
+      agg.roomTypeDur.get(roomType)!.push(dur);
+    }
+    const hourSource = row.completed_time ?? row.start_time ?? row.created_date;
+    if (hourSource) {
+      const d = new Date(hourSource);
+      if (!Number.isNaN(d.getTime())) {
+        const h = d.getHours();
+        agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
+      }
+    }
+  }
+  const cco45Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const cco45Dd: DdSeries[] = [];
+  const cco46Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+  const cco46Dd: DdSeries[] = [];
+  const ccoInspHotelsSorted = Array.from(ccoHotelInspAtt.entries())
+    .map(([hotel, inspMap]) => {
+      let n = 0;
+      for (const attMap of inspMap.values()) for (const a of attMap.values()) n += a.count;
+      return { hotel, inspMap, n };
+    })
+    .sort((a, b) => b.n - a.n || a.hotel.localeCompare(b.hotel))
+    .slice(0, 50);
+  ccoInspHotelsSorted.forEach(({ hotel, inspMap, n }, hIdx) => {
+    cco45Primary.push({ name: hotel, y: n, drilldown: `cco45h:${hIdx}` });
+    cco46Primary.push({ name: hotel, y: n, drilldown: `cco46h:${hIdx}` });
+    const inspSorted = Array.from(inspMap.entries())
+      .map(([insp, attMap]) => {
+        let m = 0;
+        for (const a of attMap.values()) m += a.count;
+        return { insp, attMap, m };
+      })
+      .sort((a, b) => b.m - a.m || a.insp.localeCompare(b.insp))
+      .slice(0, 50);
+    const insp45Data: DdSeries['data'] = [];
+    const insp46Data: DdSeries['data'] = [];
+    inspSorted.forEach(({ insp, attMap, m }, iIdx) => {
+      insp45Data.push({ name: insp, y: m, drilldown: `cco45i:${hIdx}:${iIdx}` });
+      insp46Data.push({ name: insp, y: m, drilldown: `cco46i:${hIdx}:${iIdx}` });
+      const attSorted = Array.from(attMap.entries())
+        .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+        .slice(0, 50);
+      const att45Data: DdSeries['data'] = [];
+      const att46Data: DdSeries['data'] = [];
+      attSorted.forEach(([att, agg], aIdx) => {
+        att45Data.push({ name: att, y: agg.count, drilldown: `cco45a:${hIdx}:${iIdx}:${aIdx}` });
+        att46Data.push({ name: att, y: agg.count, drilldown: `cco46a:${hIdx}:${iIdx}:${aIdx}` });
+        // cco-45 leaf: average cleaning duration (mins) per room type, with overall avg first
+        const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+        const rtData = Array.from(agg.roomTypeDur.entries())
+          .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+          .sort((a, b) => b.y - a.y)
+          .slice(0, 50);
+        cco45Dd.push({
+          id: `cco45a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
+          data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+        });
+        // cco-46 leaf: 24-hour cleaning distribution
+        cco46Dd.push({
+          id: `cco46a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — 24-Hour Cleaning Distribution`,
+          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
+          data: Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: agg.hourCount.get(h) ?? 0 })),
+        });
+      });
+      cco45Dd.push({ id: `cco45i:${hIdx}:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att45Data });
+      cco46Dd.push({ id: `cco46i:${hIdx}:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att46Data });
+    });
+    cco45Dd.push({ id: `cco45h:${hIdx}`, name: `${hotel} — Inspectors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp45Data });
+    cco46Dd.push({ id: `cco46h:${hIdx}`, name: `${hotel} — Inspectors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp46Data });
+  });
 
   const make = (id: string, title: string, note: string, formula: string, options: Highcharts.Options): ChartDef =>
     makeChartBase(id, title, `${note} ${suffix}.`, `${formula} WHERE ${clause}`, options);
@@ -2902,7 +3288,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimct24h:${i}` })) }],
       drilldown: { series: ccoDim24hCT.map((d, i) => ({ id: `cco-dimct24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco-36', 'Top 10 Attendants → 24-Hour Cleaning Distribution', 'Top 10 attendants by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN HOUR(any_time)', {
+    make('cco-36', 'Top 50 Attendants → 24-Hour Cleaning Distribution', 'Top 50 attendants by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY attendant TOP 50 DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2956,7 +3342,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimctdr:${i}` })) }],
       drilldown: { series: ccoDimDurCT.map((d, i) => ({ id: `cco-dimctdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
     }),
-    make('cco-42', 'Top 10 Attendants → Cleaning Duration Distribution', 'Top 10 attendants by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY attendant TOP 10 DRILLDOWN duration_bin', {
+    make('cco-42', 'Top 50 Attendants → Cleaning Duration Distribution', 'Top 50 attendants by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY attendant TOP 50 DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
       xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
       yAxis: { title: { text: 'Completed Orders' } },
@@ -2964,6 +3350,42 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters): ChartDef[] 
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurAtt.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimattdr:${i}` })) }],
       drilldown: { series: ccoDimDurAtt.map((d, i) => ({ id: `cco-dimattdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+    }),
+    make('cco-43', 'Hotel → Floor → Room Attendant → Average Cleaning Duration', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see its room attendants, and an attendant to see average cleaning duration (mins) overall and by room type', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
+      chart: { type: 'column' }, title: { text: undefined },
+      xAxis: { type: 'category' as const },
+      yAxis: { title: { text: 'Completed Orders / Avg Minutes' } },
+      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco43Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+      drilldown: { series: cco43Dd as unknown as Highcharts.SeriesOptionsType[] },
+    }),
+    make('cco-44', 'Hotel → Floor → Room Attendant → 24-Hour Cleaning Distribution', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see its room attendants, and an attendant to see their 24-hour cleaning completion distribution', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN attendant DRILLDOWN HOUR(completed_time)', {
+      chart: { type: 'column' }, title: { text: undefined },
+      xAxis: { type: 'category' as const },
+      yAxis: { title: { text: 'Completed Orders' } },
+      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco44Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+      drilldown: { series: cco44Dd as unknown as Highcharts.SeriesOptionsType[] },
+    }),
+    make('cco-45', 'Hotel → Inspector → Room Attendant → Average Cleaning Duration (by Room Type)', 'Completed orders per hotel. Click a hotel to see its inspectors, an inspector to see their room attendants, and an attendant to see average cleaning duration (mins) overall and by room type', 'COUNT(*) GROUP BY hotel DRILLDOWN supervisor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
+      chart: { type: 'column' }, title: { text: undefined },
+      xAxis: { type: 'category' as const },
+      yAxis: { title: { text: 'Completed Orders / Avg Minutes' } },
+      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco45Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+      drilldown: { series: cco45Dd as unknown as Highcharts.SeriesOptionsType[] },
+    }),
+    make('cco-46', 'Hotel → Inspector → Room Attendant → 24-Hour Cleaning Distribution', 'Completed orders per hotel. Click a hotel to see its inspectors, an inspector to see their room attendants, and an attendant to see their 24-hour cleaning completion distribution', 'COUNT(*) GROUP BY hotel DRILLDOWN supervisor DRILLDOWN attendant DRILLDOWN HOUR(completed_time)', {
+      chart: { type: 'column' }, title: { text: undefined },
+      xAxis: { type: 'category' as const },
+      yAxis: { title: { text: 'Completed Orders' } },
+      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco46Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
+      drilldown: { series: cco46Dd as unknown as Highcharts.SeriesOptionsType[] },
     }),
   ];
 }
@@ -3140,6 +3562,30 @@ function EmptyChartCard({
   );
 }
 
+function SectionHead({ label, dark }: { label: string; dark: boolean }) {
+  const { theme } = useTheme();
+  const tokens = getAppThemeTokens(theme, dark);
+  return (
+    <div className="print-section-head flex items-center gap-4 mb-3">
+      <span
+        className="font-mono uppercase shrink-0"
+        style={{
+          fontSize:      '0.625rem',
+          letterSpacing: '0.18em',
+          color: tokens.dashboard.sectionLabel,
+        }}
+      >
+        {label}
+      </span>
+      <div
+        className="flex-1 h-px"
+        style={{ background: tokens.dashboard.sectionRule }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
 function CorpCoPerformanceTable({
   rows,
   dark,
@@ -3205,7 +3651,7 @@ function CorpCoPerformanceTable({
 
   return (
     <div
-      className="chart-card flex flex-col overflow-hidden md:col-span-2"
+      className="chart-card flex flex-col overflow-hidden"
       style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: '12px' }}
     >
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3 shrink-0">
@@ -3370,6 +3816,9 @@ export function CoDashboardView({
   }, []);
   const visibleKpis   = useMemo(() => applyMyDashFilter(localizedKpis,   myDash?.kpis,   (id) => dashConfig.kpis[id]   !== false), [localizedKpis,   dashConfig, myDash]);
   const visibleCharts = useMemo(() => applyMyDashFilter(localizedCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [localizedCharts, dashConfig, myDash]);
+  // "Long Charts" — deep multi-level drilldowns that read better at full width, one per row.
+  const simpleCharts = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => !LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
+  const longCharts   = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
 
   const hasFilteredData = scopedRows.length > 0;
   const dataQuality = useMemo(() => {
@@ -3692,6 +4141,7 @@ export function CoDashboardView({
         </div>
 
         <section className="kpi-print-section">
+          <SectionHead label={t('dashboard_ui.section_kpi', 'KPI')} dark={dark} />
           <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             {visibleKpis.map((kpi) => (
               <CoKpiCard key={kpi.id} kpi={kpi} dark={dark} empty={!hasFilteredData} showDelta={false} />
@@ -3705,8 +4155,9 @@ export function CoDashboardView({
         </section>
 
         <section>
+          <SectionHead label={t('dashboard_ui.section_simple_charts', 'Simple Charts')} dark={dark} />
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {visibleCharts.map((chart, index) => (
+            {simpleCharts.map(({ chart, index }) => (
               hasFilteredData ? (
                 <HcChart
                   key={chart.id}
@@ -3725,15 +4176,42 @@ export function CoDashboardView({
                 />
               )
             ))}
-            {isCorp && (
-              <CorpCoPerformanceTable
-                rows={scopedRows}
-                dark={dark}
-                codeLabel={`CCO-${String(charts.length + 1).padStart(2, '0')}`}
-              />
-            )}
           </div>
         </section>
+
+        {(longCharts.length > 0 || isCorp) && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_long_charts', 'Long Charts')} dark={dark} />
+            <div className="chart-grid-long mt-5 grid grid-cols-1 gap-4">
+              {longCharts.map(({ chart, index }) => (
+                hasFilteredData ? (
+                  <HcChart
+                    key={chart.id}
+                    def={chart}
+                    dark={dark}
+                    index={index + 1}
+                    codeLabel={`${isCorp ? 'CCO' : 'CO'}-${String(index + 1).padStart(2, '0')}`}
+                  />
+                ) : (
+                  <EmptyChartCard
+                    key={chart.id}
+                    title={chart.title}
+                    note={chart.note}
+                    formula={chart.formula}
+                    dark={dark}
+                  />
+                )
+              ))}
+              {isCorp && (
+                <CorpCoPerformanceTable
+                  rows={scopedRows}
+                  dark={dark}
+                  codeLabel={`CCO-${String(charts.length + 1).padStart(2, '0')}`}
+                />
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -104,10 +104,10 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       'kpi_notes_co',
     ),
     charts: [
-      // Hotel-level charts  co-01 … co-39
-      ...items(seq('co-', 1, 39), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
-      // Corp-level charts  cco-01 … cco-42
-      ...items(seq('cco-', 1, 42), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
+      // Hotel-level charts  co-01 … co-42
+      ...items(seq('co-', 1, 42), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
+      // Corp-level charts  cco-01 … cco-46
+      ...items(seq('cco-', 1, 46), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
     ],
   },
 

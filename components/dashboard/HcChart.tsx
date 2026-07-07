@@ -301,7 +301,11 @@ function makeTheme(tokens: ReturnType<typeof getAppThemeTokens>): Highcharts.Opt
   return {
     colors: palette,
     chart: {
-      backgroundColor:     'transparent',
+      // Explicit (not 'transparent') so native Highcharts fullscreen — which
+      // detaches the chart container from the themed card wrapper — still
+      // renders the correct theme surface instead of the browser's default
+      // black fullscreen backdrop.
+      backgroundColor:     tokens.chart.cardBg,
       plotBackgroundColor: 'transparent',
       style: {
         fontFamily: "'Manrope', system-ui, sans-serif",

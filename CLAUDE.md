@@ -3,6 +3,8 @@
 Primary guide for Claude Code sessions on this repository.
 Read this file before touching any code. The rules here override default behaviour.
 
+**Multi-agent project.** `AGENTS.md` is the shared entry point read by every coding agent (Claude Code, Codex, Gemini CLI, etc.) — read it first. This file holds Claude-Code-specific depth (exact patterns, code snippets); keep both in sync when either changes.
+
 ---
 
 ## Project Identity
@@ -10,10 +12,12 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.0.88** (as of 2026-07-04) |
+| Version | **v1.0.89** (as of 2026-07-07) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
-| Local dev | `http://localhost:3010` |
+| Local dev | `http://localhost:3010` (`npm run dev`) |
+
+**Local-only testing rule:** only test against localhost. Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
 ---
 
@@ -203,6 +207,45 @@ dataLabels: {
 
 ---
 
+## Section Structure: KPI / Simple Charts / Long Charts
+
+All four modules (CO, then JO/MO/IM) render dashboards in three top-level sections, in this order:
+
+1. **KPI** — `kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3`
+2. **Simple Charts** — `chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4` (2 charts per row)
+3. **Long Charts** — `chart-grid-long mt-5 grid grid-cols-1 gap-4` (1 chart per row; for deep multi-level drilldowns that read better full-width)
+
+Each section is headed by the shared `SectionHead` component and wrapped in the same outer container:
+```tsx
+<div className="px-6 pt-1 pb-5 space-y-7 max-w-screen-2xl mx-auto">
+  <section className="kpi-print-section">
+    <SectionHead label={t('dashboard_ui.section_kpi', 'KPI')} dark={dark} />
+    <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">...</div>
+  </section>
+  <section>
+    <SectionHead label={t('dashboard_ui.section_simple_charts', 'Simple Charts')} dark={dark} />
+    <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">...</div>
+  </section>
+  {/* Long Charts section conditionally rendered when its list is non-empty (or always, for corp views that also render a performance table there) */}
+</div>
+```
+
+**`SectionHead` must include `mb-3`** on its outer div (`"print-section-head flex items-center gap-4 mb-3"`). This is the only thing separating the label/rule from the cards below it (the grid itself uses `mt-0`/`mt-5`, not a top margin against the label). `CoDashboardView.tsx` and `DashboardClient.tsx` each define their **own copy** of `SectionHead` — if you add spacing/style changes to one, mirror them in the other or the modules will visibly drift apart again (this happened once: `DashboardClient.tsx`'s copy was missing `mb-3`, causing JO/MO/IM section labels to sit flush against the cards while CO had a 12px gap).
+
+**No other sub-section headers.** JO/MO/IM used to have additional named sub-groups inside "Simple Charts" (e.g. "Executive Charts", "Over the time charts", "Drilldown charts", "Operation Analysis", "Corp Comparison Top 10", "Chain Comparison", "Time Patterns", "Performance Gauges", "Builder Charts"). These have all been flattened — every chart array for a given scope is concatenated and rendered in one shared "Simple Charts" grid, no intermediate `SectionHead`. Do not reintroduce sub-headers; if a chart family needs visual separation, that's what "Long Charts" is for.
+
+**Long Charts membership** is controlled by an id `Set` per module, all currently **empty** (charts move in only on an explicit "move X into Long Charts" request, one at a time — do not batch-move charts speculatively):
+- CO: `LONG_CHART_IDS` in `CoDashboardView.tsx`
+- MO: `MO_LONG_CHART_IDS` in `DashboardClient.tsx`, split via `splitLongCharts(charts, ids)` into `{ simple, long }`
+- JO: `JO_LONG_CHART_IDS` in `DashboardClient.tsx`
+- IM: `IM_LONG_CHART_IDS` in `DashboardClient.tsx`
+
+For MO the split is a real `simple`/`long` partition of one chart array. For JO/IM (which combine several previously-separate chart arrays into one flat list), `joLongCharts`/`imLongCharts` are computed by concatenating all the source arrays and filtering by `LONG_CHART_IDS.has(c.id)` — the Simple Charts grid does not currently exclude long-flagged charts from its own map calls (harmless while the sets are empty; when moving a chart into Long, also strip it out of the Simple Charts render so it isn't shown twice).
+
+Every hardcoded chart list-size cap (`topN(map, N)` / `.slice(0, N)`) in JO/MO/IM builder code has been normalized to **N = 24** (Simple Charts) as a baseline; charts moved into Long Charts should bump their own cap to **N = 50**, mirroring the CO precedent. Excluded from this normalization: `topN(..., 1)` single-item lookups (KPI concentration metrics, not chart lists), the `im-46` `999`-vs-`24` "show all" ternary branch, and date-string `.slice(0, 7)`/`.slice(0, 10)` calls (unrelated to list caps).
+
+---
+
 ## Chart Data Patterns
 
 ### groupCount / topEntries (CO module)
@@ -260,6 +303,8 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 6. **Treemap ≠ drilldown module.** Use `point.events.click` + `chart.addSeries` pattern (not `drilldown:`) for column→treemap transitions.
 7. **BV vs Formula mode.** `formulaPath` pointing to `chart_bv_XX` = BV mode. Pointing to `chart_formulas_XX` = formula mode. Do not mix within a module.
 8. **useHTML for treemap labels.** Always add `useHTML: true` when the format string contains HTML tags.
+9. **Local-only testing.** Never push, deploy, or commit unless the user explicitly asks in the current turn — a prior approval does not carry forward.
+10. **Section structure.** Every dashboard is KPI → Simple Charts → Long Charts only. No extra named sub-sections inside Simple Charts (see "Section Structure" above).
 
 ---
 
@@ -267,6 +312,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.89** | 2026-07-07 | JO/MO/IM restructured to the same KPI / Simple Charts / Long Charts section pattern CO already had (see "Section Structure" section above); sub-headers like "Executive Charts", "Drilldown charts", "Chain Comparison", "Performance Gauges", etc. removed — charts flattened into one Simple Charts grid per scope; new `MO_LONG_CHART_IDS`/`JO_LONG_CHART_IDS`/`IM_LONG_CHART_IDS` sets (all empty) + `splitLongCharts` helper in `DashboardClient.tsx`; every hardcoded chart-list cap (`topN`/`.slice(0, N)`) in JO/MO/IM builder code normalized to `N = 24`; fixed a spacing bug where `DashboardClient.tsx`'s own `SectionHead` was missing `mb-3` (present in `CoDashboardView.tsx`'s copy), which made JO/MO/IM section labels sit flush against KPI/chart cards instead of CO's ~12px gap; `AGENTS.md`/`CLAUDE.md` synced and repositioned for a Codex-primary workflow |
 | **v1.0.88** | 2026-07-04 | JO chart redesigns (hotel + corp): **cjo-02** → "Hotel Job Volume → Job Status → 24-Hour Distribution" (2-level column drilldown from `status_map` + `jo_status_hour_map`); **cjo-15** → "Hotel Job Volume → Job Status → Completed Duration Distribution" (2-level drilldown; new `jo_status_dur_bkt_map` computed live from `jo_records.actual_duration` in `fetchCorpDashboard`); **cjo-27** ↔ **cjo-03** content swap — cjo-03 = "Hotel Jobs → 24-Hour Distribution → Top 10 Service Items" (3-level drilldown from `jo_hour_item_map`) shown early, cjo-27 = SLA Compliance by Hotel shown late (post-build array swap); hotel **jo-01** → "24-Hour Delayed Job Distribution → Top Service Items" (hour → top-10 delayed items drilldown; new `jo_hour_delayed_item_map` in finalize accumulator + `HotelSummary` + `scripts/backfill_jo_hour_delayed_item_map.mjs` run on local DB, 10 hotels); hotel **jo-02** = category → 24-h chart (EAC slot) and grid hour → top-items chart traded display codes only (`joGridSlotOf` + explicit `injectedJoEac` keys keep both charts in place); fix `/api/ai/charts/list` 500 — `created_at.localeCompare` crashed on pg `Date` objects, now compares via `getTime()`; i18n titles/notes/BV updated all 4 langs |
 | **v1.0.87** | 2026-06-27 | Theme picker rebuilt as card layout (avatar badge + name + description + 4-color swatch row, 300px panel, accent border on active); **Color Ink Wash** replaced with **Jade & Ink** (`jade-ink`) — jade-green sidebar (`#0C4A3E`), rice-paper surfaces, jade/gold/deep-blue palette, Chinese cultural character; `AppThemeOption` type + `initials`/`description` fields + `getThemeSwatches()` helper added to `lib/theme.ts` |
 | **v1.0.86** | 2026-06-27 | Two new app UI themes added to `lib/theme.ts`: **Chromatic Ink Wash** (`chromatic-ink`) — deep sumi-ink sidebar, rice-paper cream surfaces, saturated pigment palette (teal `#1F5E57`, vermillion `#C84030`, amber `#D08830`); **Color Ink Wash** (`color-ink`) — lighter paper, brighter pigments, warm dark-brown sidebar (teal `#0E7A6A`, coral `#D44C30`); both with full light + dark variants; `AppThemeName`, `APP_THEME_OPTIONS`, `getAppThemeTokens` updated |

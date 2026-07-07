@@ -26,6 +26,21 @@ const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-02', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-07', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12'];
 const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-03'];
+
+// Multi-level drilldown charts rendered full-width (1 per row) in the "Long Charts" section.
+// Empty for now — charts get moved in via future incremental requests, same pattern as CO.
+const MO_LONG_CHART_IDS = new Set<string>([]);
+const JO_LONG_CHART_IDS = new Set<string>([]);
+const IM_LONG_CHART_IDS = new Set<string>([]);
+
+function splitLongCharts<T extends { id: string }>(charts: T[], longIds: Set<string>): { simple: T[]; long: T[] } {
+  const simple: T[] = [];
+  const long: T[] = [];
+  for (const c of charts) {
+    (longIds.has(c.id) ? long : simple).push(c);
+  }
+  return { simple, long };
+}
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
   { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
   { code: 'cim-02', id: 'cim-02', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
@@ -346,7 +361,7 @@ function buildBuilderOverride(def: ChartDef, fd: FilteredData | null, deptSummar
   }
   if (title.includes('department')) {
     const depMap = deptSummary?.dept_map ?? {};
-    const rows = Object.entries(depMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
+    const rows = Object.entries(depMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const categories = rows.map(([k]) => k);
     const values = rows.map(([, v]) => Number(v));
     if (categories.length === 0) return undefined;
@@ -389,7 +404,7 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
     sevDailyMap[sev][b.date] = (sevDailyMap[sev][b.date] ?? 0) + cnt;
   }
   const top5 = topCats.slice(0, 5);
-  const top10 = topCats.slice(0, 10);
+  const top10 = topCats.slice(0, 24);
 
   function catClosureRates(cats: string[]) {
     const statusDailyMap: Record<string, Record<string, number>> = {};
@@ -448,7 +463,7 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
       tooltip: { shared: true },
     });
     case 'im-43': case 'im-46': {
-      const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 10);
+      const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 24);
       return hcOpts({
         chart: { type: def.id === 'im-43' ? 'bar' : 'column' },
         xAxis: { categories: cats },
@@ -541,7 +556,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       // Collect all category keys across hotels, take top-6
       const allCatMap: Record<string, number> = {};
       for (const e of entries) for (const [k, v] of Object.entries(e.summary.category_map)) allCatMap[k] = (allCatMap[k] ?? 0) + v;
-      const topCats = Object.entries(allCatMap).sort(([,a],[,b])=>b-a).slice(0,6).map(([k])=>k);
+      const topCats = Object.entries(allCatMap).sort(([,a],[,b])=>b-a).slice(0,24).map(([k])=>k);
       return hcOpts({
         chart: { type: 'column' },
         xAxis: { categories: codes },
@@ -574,7 +589,7 @@ function buildChainOptions(id: string, entries: ChainEntry[]): Highcharts.Option
       // Top-5 depts across chain → stacked bar per hotel
       const allDeptMap: Record<string, number> = {};
       for (const e of entries) for (const [k, v] of Object.entries(e.summary.dept_map)) allDeptMap[k] = (allDeptMap[k] ?? 0) + v;
-      const topDepts = Object.entries(allDeptMap).sort(([,a],[,b])=>b-a).slice(0,5).map(([k])=>k);
+      const topDepts = Object.entries(allDeptMap).sort(([,a],[,b])=>b-a).slice(0,24).map(([k])=>k);
       if (topDepts.length === 0) return undefined;
       return hcOpts({
         chart: { type: 'column' },
@@ -623,10 +638,10 @@ function buildDepartmentScopedOptions(def: ChartDef, department: string, summary
   const deptCategoryMap = scoped?.category_map ?? summary.dept_category_map?.[department] ?? {};
   const deptItemMap = scoped?.item_map ?? summary.dept_item_map?.[department] ?? {};
   const topCats = Object.entries(deptCategoryMap).sort(([, a], [, b]) => b - a).map(([k]) => k);
-  const topItems = Object.entries(deptItemMap).sort(([, a], [, b]) => b - a).slice(0, 15).map(([k]) => k);
+  const topItems = Object.entries(deptItemMap).sort(([, a], [, b]) => b - a).slice(0, 24).map(([k]) => k);
 
   if (def.id === 'im-43' || def.id === 'im-46') {
-    const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 10);
+    const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 24);
     return hcOpts({
       chart: { type: def.id === 'im-43' ? 'bar' : 'column' },
       xAxis: { categories: cats },
@@ -647,7 +662,7 @@ function buildDepartmentScopedOptions(def: ChartDef, department: string, summary
   }
 
   if (def.id === 'cim-02') {
-    const cats = Object.entries(deptCategoryMap).sort(([, a], [, b]) => b - a).slice(0, 10).map(([k]) => k);
+    const cats = Object.entries(deptCategoryMap).sort(([, a], [, b]) => b - a).slice(0, 24).map(([k]) => k);
     const data = cats.map((cat, y) => [0, y, deptCategoryMap[cat] ?? 0]);
     return hcOpts({
       chart: { type: 'heatmap' },
@@ -774,7 +789,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       innerSize: '45%',
       data: Object.entries(((e.summary as { item_map?: Record<string, number> }).item_map) ?? e.summary.category_map ?? {})
         .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
+        .slice(0, 24)
         .map(([name, y]) => ({ name, y })),
     }));
     return hcOpts({
@@ -904,7 +919,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     const topHotels = entries
       .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
+      .slice(0, 24);
     if (topHotels.length === 0) return undefined;
 
     const drillSeries: Array<{
@@ -917,7 +932,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       const entry = entries.find((e) => e.hotel_code === h.hotel);
       const rows = Object.entries(entry?.summary.source_map ?? {})
         .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
+        .slice(0, 24)
         .map(([name, y]) => ({ name, y }));
       return {
         id: `h:${h.hotel}`,
@@ -955,7 +970,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       innerSize: '45%',
       data: Object.entries(e.summary.category_map ?? {})
         .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
+        .slice(0, 24)
         .map(([name, y]) => ({ name, y })),
     }));
     return hcOpts({
@@ -974,7 +989,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     const topHotels = entries
       .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
+      .slice(0, 24);
     if (topHotels.length === 0) return undefined;
     return hcOpts({
       chart: { type: 'pie' },
@@ -990,11 +1005,11 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
           const booking = (entry?.summary as { booking_map?: Record<string, number> } | undefined)?.booking_map ?? {};
           const primaryRows = Object.entries(booking)
             .sort(([, a], [, b]) => b - a)
-            .slice(0, 10)
+            .slice(0, 24)
             .map(([name, y]) => ({ name, y }));
           const sourceFallback = Object.entries(entry?.summary.source_map ?? {})
             .sort(([, a], [, b]) => b - a)
-            .slice(0, 10)
+            .slice(0, 24)
             .map(([name, y]) => ({ name, y }));
           const rows = primaryRows.length > 0
             ? primaryRows
@@ -1134,7 +1149,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   if (id === 'cim-15' || id === 'cim-18') {
     const depts = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.dept_map ?? {}))))
       .sort((a, b) => (entries.reduce((s, e) => s + (e.summary.dept_map[b] ?? 0), 0)) - (entries.reduce((s, e) => s + (e.summary.dept_map[a] ?? 0), 0)))
-      .slice(0, 10);
+      .slice(0, 24);
     const data: Array<[number, number, number]> = [];
     entries.forEach((e, x) => depts.forEach((d, y) => data.push([x, y, e.summary.dept_map[d] ?? 0])));
     return hcOpts({
@@ -1149,7 +1164,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   if (id === 'cim-16') {
     const root: Record<string, number> = {};
     for (const e of entries) for (const [k, v] of Object.entries(e.summary.item_map ?? e.summary.category_map ?? {})) root[k] = (root[k] ?? 0) + v;
-    const top = Object.entries(root).sort(([, a], [, b]) => b - a).slice(0, 10);
+    const top = Object.entries(root).sort(([, a], [, b]) => b - a).slice(0, 24);
     const cats = top.map(([k]) => k);
     const vals = top.map(([, v]) => v);
     const total = vals.reduce((s, v) => s + v, 0);
@@ -1172,7 +1187,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     // Always aggregate totals from item_map across ALL hotels
     const allItemTotals: Record<string, number> = {};
     for (const e of entries) for (const [k, v] of Object.entries(e.summary.item_map ?? {})) allItemTotals[k] = (allItemTotals[k] ?? 0) + Number(v);
-    const topItems: Array<[string, number]> = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 10);
+    const topItems: Array<[string, number]> = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 24);
     // Merge im_item_date_map from hotels that have it (for drilldown)
     const mergedIdm: Record<string, Record<string, number>> = {};
     let hasIdm = false;
@@ -1223,7 +1238,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       for (const [k, v] of Object.entries(e.summary.item_map ?? {})) allItemTotals[k] = (allItemTotals[k] ?? 0) + Number(v);
       for (const [k, v] of Object.entries(e.summary.im_item_completed_map ?? {})) allItemCompleted[k] = (allItemCompleted[k] ?? 0) + Number(v);
     }
-    const topItems = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 10);
+    const topItems = Object.entries(allItemTotals).sort(([, a], [, b]) => b - a).slice(0, 24);
     const hasCompleted = Object.keys(allItemCompleted).length > 0;
     return hcOpts({
       chart: { type: 'column' },
@@ -1281,12 +1296,12 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     for (const [k, v] of Object.entries(completedByMap)) allCompletedByDepts[k] = (allCompletedByDepts[k] ?? 0) + Number(v);
   }
 
-  const topCategories = topN(allCategories, 10).map(([k]) => k);
-  const topItems = topN(allItems, 10).map(([k]) => k);
-  const topDepts = topN(allDepts, 10).map(([k]) => k);
-  const topAssigned = topN(allAssignedDepts, 10).map(([k]) => k);
-  const topCreatedBy = topN(allCreatedByDepts, 10).map(([k]) => k);
-  const topCompletedBy = topN(allCompletedByDepts, 10).map(([k]) => k);
+  const topCategories = topN(allCategories, 24).map(([k]) => k);
+  const topItems = topN(allItems, 24).map(([k]) => k);
+  const topDepts = topN(allDepts, 24).map(([k]) => k);
+  const topAssigned = topN(allAssignedDepts, 24).map(([k]) => k);
+  const topCreatedBy = topN(allCreatedByDepts, 24).map(([k]) => k);
+  const topCompletedBy = topN(allCompletedByDepts, 24).map(([k]) => k);
   const weeks = Object.keys(weeklyTotals).sort();
 
   const make = (id: string, title: string, note: string, formula: string, options: Record<string, unknown>): ChartDef => ({
@@ -1337,7 +1352,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           type: 'pie',
           name: `${e.hotel_code} Top Service Categories`,
           innerSize: '45%',
-          data: topN(e.summary.category_map ?? {}, 10).map(([name, y]) => ({ name, y })),
+          data: topN(e.summary.category_map ?? {}, 24).map(([name, y]) => ({ name, y })),
         })),
       },
     }),
@@ -1420,7 +1435,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       const topItems: Array<[string, number]> = hasIdm
         ? Object.entries(mergedIdm)
             .map(([item, dm]): [string, number] => [item, Object.values(dm).reduce((a, c) => a + c, 0)])
-            .sort(([, a], [, b]) => b - a).slice(0, 10)
+            .sort(([, a], [, b]) => b - a).slice(0, 24)
         : (() => {
             const m: Record<string, number> = {};
             for (const e of entries) {
@@ -1428,7 +1443,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
                 m[item] = (m[item] ?? 0) + (cnt as number);
               }
             }
-            return Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, 10);
+            return Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, 24);
           })();
       const allDates = hasIdm
         ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(mergedIdm[k] ?? {})))).sort()
@@ -1692,19 +1707,19 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topCategories.map((cat) => ({ type: 'bar', name: cat, data: entries.map((e) => e.summary.category_map?.[cat] ?? 0) })),
     }),
     make('cjo-17', 'Top Service Items by Hotel', 'Compares top JO items across hotels.', 'COUNT(*) BY hotel_code, service_item', {
-      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topItems.slice(0, 6).map((item) => ({ type: 'bar', name: item, data: entries.map((e) => e.summary.item_map?.[item] ?? 0) })),
+      chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, plotOptions: { bar: { stacking: 'normal' } }, series: topItems.slice(0, 24).map((item) => ({ type: 'bar', name: item, data: entries.map((e) => e.summary.item_map?.[item] ?? 0) })),
     }),
     make('cjo-18', 'Department Load by Hotel', 'Department-origin JO load by hotel.', 'COUNT(*) BY hotel_code, department_name', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topDepts.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.dept_map?.[dept] ?? 0) })),
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topDepts.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.dept_map?.[dept] ?? 0) })),
     }),
     make('cjo-19', 'Assigned Department Load by Hotel', 'Assigned department comparison across hotels.', 'COUNT(*) BY hotel_code, assigned_to_department', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topAssigned.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.assigned_dept_map?.[dept] ?? 0) })),
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topAssigned.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.assigned_dept_map?.[dept] ?? 0) })),
     }),
     make('cjo-20', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
     }),
     make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 8).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
+      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
     }),
     // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
     make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items requested by VIP guests at that hour.', 'COUNT(*) WHERE is_vip BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
@@ -1743,7 +1758,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: {
           series: hours24.map((h) => {
-            const topItems = Object.entries(chainHourItem[h] ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 15);
+            const topItems = Object.entries(chainHourItem[h] ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 24);
             return {
               id: `cjo22h:${h}`,
               name: `${String(h).padStart(2, '0')}:00 — Top Service Items (VIP)`,
@@ -1918,7 +1933,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         // Level 2: Top 10 service items for each hour of this hotel
         for (const h of hours24) {
           const im = him[String(h)] ?? {};
-          const top10 = Object.entries(im).sort(([, a], [, b]) => b - a).slice(0, 10);
+          const top10 = Object.entries(im).sort(([, a], [, b]) => b - a).slice(0, 24);
           if (top10.length === 0) continue;
           cjo27DdSeries.push({
             id: `cjo27i:${e.hotel_code}:${h}`,
@@ -1994,7 +2009,7 @@ function SectionHead({ label, dark }: { label: string; dark: boolean }) {
   const { theme } = useTheme();
   const tokens = getAppThemeTokens(theme, dark);
   return (
-    <div className="print-section-head flex items-center gap-4">
+    <div className="print-section-head flex items-center gap-4 mb-3">
       <span
         className="font-mono uppercase shrink-0"
         style={{
@@ -2180,11 +2195,11 @@ function buildCorpMoKpis(summary: HotelSummary): KpiDef[] {
 function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, unknown> | null): ChartDef[] {
   if (entries.length === 0) return [];
   const hotelCodes = entries.map((e) => e.hotel_code);
-  const topCategories = topN(mergeRecords(entries.map((e) => e.summary.category_map ?? {})), 6).map(([k]) => k);
-  const topItems = topN(mergeRecords(entries.map((e) => e.summary.item_map ?? {})), 12);
+  const topCategories = topN(mergeRecords(entries.map((e) => e.summary.category_map ?? {})), 24).map(([k]) => k);
+  const topItems = topN(mergeRecords(entries.map((e) => e.summary.item_map ?? {})), 24);
   const allLocations = topN(
     mergeRecords(entries.map((e) => e.summary.location_map ?? {})),
-    8,
+    24,
   ).map(([k]) => k);
   const statusKeys = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.status_map ?? {})))).sort();
   const allDates = Array.from(new Set(entries.flatMap((e) => (e.raw_daily ?? []).map((d) => d.date)))).sort();
@@ -2202,7 +2217,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cmo-01', 'Total Work Orders by Hotel -> Top Category', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its top maintenance categories.', 'COUNT(*) BY hotel_code, then TOP category BY hotel_code WHERE type = MO', {
       chart: { type: 'pie' },
       series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo-cat:${e.hotel_code}` })) }],
-      drilldown: { series: entries.map((e) => ({ id: `cmo-cat:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Top Categories`, data: topN(e.summary.category_map ?? {}, 10).map(([name, y]) => ({ name, y })) })) },
+      drilldown: { series: entries.map((e) => ({ id: `cmo-cat:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Top Categories`, data: topN(e.summary.category_map ?? {}, 24).map(([name, y]) => ({ name, y })) })) },
     }),
     make('cmo-02', 'Total Work Orders by Hotel -> Job Status', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to drill into its status mix.', 'COUNT(*) BY hotel_code, then COUNT(*) BY job_status WITHIN hotel_code WHERE type = MO', {
       chart: { type: 'pie' },
@@ -2360,7 +2375,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           chainDefectTotals[defect] = (chainDefectTotals[defect] ?? 0) + total;
         }
       }
-      const top10 = topN(chainDefectTotals, 10);
+      const top10 = topN(chainDefectTotals, 24);
       return {
         chart: { type: 'bar' },
         xAxis: { type: 'category', title: { text: null } },
@@ -2419,15 +2434,15 @@ function buildHotelMoCharts(
   const statusCreatedDeptMap = summary.status_created_dept_map ?? {};
   const guestRelated = summary.vip_total ?? 0;
   const dates = (rawDaily ?? []).map((d) => d.date);
-  const topCats = topN(categoryMap, 10);
-  const topLocations = topN(locationMap, 12);
+  const topCats = topN(categoryMap, 24);
+  const topLocations = topN(locationMap, 24);
   const moItemDateMap = summary.mo_item_date_map ?? {};
   const moItemDurationMap = summary.mo_item_duration_map ?? {};
   const moDurDistMap = summary.mo_duration_dist_map ?? {};
   const moHourMap = summary.mo_hour_map ?? {};
   const moCatDurationMap = summary.mo_cat_duration_map ?? {};
   const moItem24hHourMap = summary.mo_item_24h_hour_map ?? {};
-  const topItems = topN(itemMap, 10);
+  const topItems = topN(itemMap, 24);
 
   const make = (id: string, options: Record<string, unknown>): ChartDef => ({
     id, title: id, note: '', formula: '', filterable: false, options,
@@ -2632,7 +2647,7 @@ function buildHotelMoCharts(
       const top24h: Array<[string, number]> = Object.entries(moItem24hHourMap)
         .map(([name, hm]): [string, number] => [name, Object.values(hm).reduce((a, c) => a + c, 0)])
         .sort(([, a], [, b]) => b - a)
-        .slice(0, 10);
+        .slice(0, 24);
       return {
         chart: { type: 'bar' },
         xAxis: { type: 'category', title: { text: null } },
@@ -2657,7 +2672,7 @@ function buildHotelMoCharts(
     // mo-12 — Top Assets / Defects (treemap)
     make('mo-12', {
       chart: { type: 'treemap' },
-      series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topN(itemMap, 15).map(([name, value]) => ({ name, value })) }],
+      series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topN(itemMap, 24).map(([name, value]) => ({ name, value })) }],
     }),
   ];
 }
@@ -3380,6 +3395,9 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
     }));
   }, [isCorp, corpActiveSummary, maintenanceType, isCo, t]);
 
+  const moVisibleCharts = useMemo(() => moVisCharts(isCorp ? corpMoCharts : scopedCharts), [isCorp, corpMoCharts, scopedCharts]);
+  const { simple: moSimpleCharts, long: moLongCharts } = useMemo(() => splitLongCharts(moVisibleCharts, MO_LONG_CHART_IDS), [moVisibleCharts]);
+
   let chartSequence = 0;
   const nextChartIndex = () => {
     chartSequence += 1;
@@ -3521,9 +3539,10 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
         </div>
       </div>
 
-      <div className="px-6 py-5 space-y-8">
-        <section>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="px-6 pt-1 pb-5 space-y-7 max-w-screen-2xl mx-auto">
+        <section className="kpi-print-section">
+          <SectionHead label={t('dashboard_ui.section_kpi', 'KPI')} dark={dark} />
+          <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             {moVisKpis(corpKpis ?? scopedKpis).map((kpi) => (
               <KpiCard key={`${maintenanceType}-${kpi.id}`} kpi={kpi} dark={dark} />
             ))}
@@ -3531,10 +3550,9 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
         </section>
 
         <section>
-          {!isCorp && <SectionHead label={`${moduleDisplay} Charts`} dark={dark} />}
-          {isCorp && <SectionHead label={corpBenchmarkChartsLabel} dark={dark} />}
+          <SectionHead label={t('dashboard_ui.section_simple_charts', 'Simple Charts')} dark={dark} />
           <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {moVisCharts(isCorp ? corpMoCharts : scopedCharts).map((def) => (
+            {moSimpleCharts.map((def) => (
               (() => {
                 const { override, fullPeriod } = chartOpts(def);
                 return (
@@ -3554,16 +3572,44 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
                 );
               })()
             ))}
-            {isCorp && (
-              <CorpMoPerformanceTable
-                entries={activeCorpEntries}
-                dark={dark}
-                index={nextChartIndex()}
-                maintenanceType={maintenanceType}
-              />
-            )}
           </div>
         </section>
+
+        {(moLongCharts.length > 0 || isCorp) && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_long_charts', 'Long Charts')} dark={dark} />
+            <div className="chart-grid-long mt-5 grid grid-cols-1 gap-4">
+              {moLongCharts.map((def) => (
+                (() => {
+                  const { override, fullPeriod } = chartOpts(def);
+                  return (
+                <HcChart
+                  key={`${maintenanceType}-${def.id}`}
+                  def={{
+                    ...def,
+                    title: def.title || `${maintenanceType} Chart`,
+                    note: def.note || `${maintenanceType} scoped chart`,
+                    formula: def.formula || `Source rows filtered by type = ${maintenanceType}`,
+                  }}
+                  dark={dark}
+                  overrideOptions={override}
+                  fullPeriod={fullPeriod}
+                  codeLabel={def.id}
+                />
+                  );
+                })()
+              ))}
+              {isCorp && (
+                <CorpMoPerformanceTable
+                  entries={activeCorpEntries}
+                  dark={dark}
+                  index={nextChartIndex()}
+                  maintenanceType={maintenanceType}
+                />
+              )}
+            </div>
+          </section>
+        )}
 
         <footer
           className="pt-6 flex items-center justify-between font-mono"
@@ -4146,9 +4192,9 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     const itemMap = s.item_map ?? {};
     const roomMap = (s as { room_map?: Record<string, number> }).room_map
       ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
-    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
-    const topItems = Object.entries(itemMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 15);
-    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
+    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
+    const topItems = Object.entries(itemMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
+    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const severityKeys = Object.keys(sevMap);
     const statusKeys = Object.keys(statusMap);
     const weekMap = fdAny?.weekMap ?? s.week_map ?? {};
@@ -4181,7 +4227,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           series: ['VIP', 'Non-VIP'].map((seg) => {
             const rows = Object.entries(deptScopedSummary?.vip_item_map?.[seg] ?? {})
               .sort(([, a], [, b]) => Number(b) - Number(a))
-              .slice(0, 10)
+              .slice(0, 24)
               .map(([name, y]) => ({ name, y: Number(y) }));
             return {
               id: `imd08:${seg}`,
@@ -4201,8 +4247,8 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         const topItems: Array<[string, number]> = hasIdm
           ? Object.entries(idm)
               .map(([item, dm]): [string, number] => [item, Object.values(dm).reduce((a, c) => a + c, 0)])
-              .sort(([, a], [, b]) => b - a).slice(0, 10)
-          : Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 10);
+              .sort(([, a], [, b]) => b - a).slice(0, 24)
+          : Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 24);
         const allDates = hasIdm
           ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm![k] ?? {})))).sort()
           : [];
@@ -4291,7 +4337,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         series: [{
           type: 'sankey',
           keys: ['from', 'to', 'weight'],
-          data: topItems.slice(0, 8).map(([item, v], i) => [Object.keys(s.dept_map ?? {})[i % Math.max(1, Object.keys(s.dept_map ?? {}).length)] ?? 'Dept', item, Number(v)]),
+          data: topItems.slice(0, 24).map(([item, v], i) => [Object.keys(s.dept_map ?? {})[i % Math.max(1, Object.keys(s.dept_map ?? {}).length)] ?? 'Dept', item, Number(v)]),
         }],
       }, 'imo49'),
       make('im-08', 'Category vs Status', 'bar', 'Stacked comparison of status mix across top incident categories.', 'COUNT by incident_category and incident_status', {
@@ -4385,10 +4431,10 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     const catMap = fdAny?.byCategory ?? s.category_map ?? {};
     const sevMap = fdAny?.bySeverity ?? s.severity_map ?? {};
     const statusMap = fdAny?.byStatus ?? s.status_map ?? {};
-    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
-    const topItems = Object.entries((deptScopedSummary?.item_map ?? s.item_map) ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 15);
+    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
+    const topItems = Object.entries((deptScopedSummary?.item_map ?? s.item_map) ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const roomMap = deptScopedSummary?.room_map ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
-    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
+    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const severityKeys = Object.keys(sevMap);
     const statusKeys = Object.keys(statusMap);
     const categoryItemMap = deptScopedSummary?.category_item_map ?? {};
@@ -4445,7 +4491,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd09:${cat}`,
             type: 'bar',
             name: `${cat} Items`,
-            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([k, v]) => [k, Number(v)]),
+            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
           })),
         },
       }, 'imd09'),
@@ -4461,7 +4507,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd13:${item}`,
             type: 'bar',
             name: `${item} Locations`,
-            data: Object.entries(itemLocationMap[item] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([k, v]) => [k, Number(v)]),
+            data: Object.entries(itemLocationMap[item] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
           })),
         },
       }, 'imd13'),
@@ -4495,7 +4541,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             type: 'bar',
             name: `${room} Items`,
             data: (() => {
-              const rows = Object.entries(roomItemMap[room] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([k, v]) => [k, Number(v)]);
+              const rows = Object.entries(roomItemMap[room] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]);
               return rows.length > 0 ? rows : [['No Item Data', 0]];
             })(),
           })),
@@ -4520,7 +4566,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
               data: (() => {
                 const rows = Object.entries(deptScopedSummary?.vip_item_map?.VIP ?? {})
                   .sort(([, a], [, b]) => Number(b) - Number(a))
-                  .slice(0, 10)
+                  .slice(0, 24)
                   .map(([name, y]) => [name, Number(y)]);
                 return rows.length > 0 ? rows : [['No Data', 0]];
               })(),
@@ -4532,7 +4578,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
               data: (() => {
                 const rows = Object.entries(deptScopedSummary?.vip_item_map?.['Non-VIP'] ?? {})
                   .sort(([, a], [, b]) => Number(b) - Number(a))
-                  .slice(0, 10)
+                  .slice(0, 24)
                   .map(([name, y]) => [name, Number(y)]);
                 return rows.length > 0 ? rows : [['No Data', 0]];
               })(),
@@ -4548,7 +4594,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd31:${cat}`,
             type: 'column',
             name: `${cat} Items`,
-            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([k, v]) => [k, Number(v)]),
+            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
           })),
         },
       }, 'imd31'),
@@ -4563,7 +4609,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd33:${k}`,
             type: 'pie',
             name: `${k} Categories`,
-            data: Object.entries(severityCategoryMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([name, y]) => ({ name, y: Number(y) })),
+            data: Object.entries(severityCategoryMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([name, y]) => ({ name, y: Number(y) })),
           })),
         },
       }, 'imd33'),
@@ -4578,7 +4624,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd35:${k}`,
             type: 'pie',
             name: `${k} Departments`,
-            data: Object.entries(statusDeptMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([name, y]) => ({ name, y: Number(y) })),
+            data: Object.entries(statusDeptMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([name, y]) => ({ name, y: Number(y) })),
           })),
         },
       }, 'imd35'),
@@ -4589,7 +4635,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           name: 'Incidents',
           data: Object.entries(deptScopedSummary?.source_map ?? s.source_map ?? {})
             .sort(([, a], [, b]) => Number(b) - Number(a))
-            .slice(0, 10)
+            .slice(0, 24)
             .map(([src, v]) => ({ name: src, y: Number(v), drilldown: `imd41:${src}` })),
         }],
         drilldown: {
@@ -4597,7 +4643,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             id: `imd41:${src}`,
             type: 'column',
             name: `${src} Departments`,
-            data: Object.entries(dm).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10).map(([k, v]) => [k, Number(v)]),
+            data: Object.entries(dm).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
           })),
         },
       }, 'imd41'),
@@ -4614,9 +4660,9 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     const sevKeys = Object.keys(activeFd?.bySeverity ?? s.severity_map ?? {});
     const deptKeys = Object.keys(s.dept_map ?? {});
     const sourceKeys = Object.keys(s.source_map ?? {});
-    const itemTop = Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 12);
+    const itemTop = Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const roomMapRaw = (deptScopedSummary?.room_map ?? (s as { room_map?: Record<string, number> }).room_map ?? {}) as Record<string, number>;
-    const roomTop = Object.entries(roomMapRaw).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 10);
+    const roomTop = Object.entries(roomMapRaw).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
     const bookingMap = (deptScopedSummary?.booking_map ?? s.booking_map ?? {}) as Record<string, number>;
 
     const make = (id: string, title: string, type: string, note: string, formula: string, options: Record<string, unknown>, _legacyKey?: string): ChartDef => ({
@@ -4652,7 +4698,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       make('im-35', 'Investigation Completion Quality', 'pie', 'Drilldown: Investigation Updated By 1 → Incident Case', 'Completion gauge proxy', {
         series: [{ type: 'pie', data: [{ y: s.total > 0 ? r1((s.completed / s.total) * 100) : 0 }] }],
       }, 'imo36'),
-      make('im-36', 'VIP Repeat Incident Analysis', 'heatmap', 'Drilldown: VIP Code → Incident Item Name → Incident Case', 'VIP repeat proxy heatmap', { xAxis: { categories: ['VIP', 'Non-VIP'] }, yAxis: { categories: itemTop.slice(0, 10).map(([k]) => k) }, colorAxis: { min: 0 }, series: [{ type: 'heatmap', data: itemTop.slice(0, 10).flatMap(([, v], yi) => [[0, yi, Math.round(v * 0.25)], [1, yi, Math.round(v * 0.75)]]) }] }, 'imd26'),
+      make('im-36', 'VIP Repeat Incident Analysis', 'heatmap', 'Drilldown: VIP Code → Incident Item Name → Incident Case', 'VIP repeat proxy heatmap', { xAxis: { categories: ['VIP', 'Non-VIP'] }, yAxis: { categories: itemTop.slice(0, 24).map(([k]) => k) }, colorAxis: { min: 0 }, series: [{ type: 'heatmap', data: itemTop.slice(0, 24).flatMap(([, v], yi) => [[0, yi, Math.round(v * 0.25)], [1, yi, Math.round(v * 0.75)]]) }] }, 'imd26'),
       make('im-37', 'Booking Source Risk Analysis', 'bubble', 'Drilldown: Booking Source → Severity → Incident Case', 'Booking source risk proxy', {
         xAxis: { categories: Object.keys(bookingMap).length > 0 ? Object.keys(bookingMap) : ['Unknown'] },
         series: [{
@@ -4662,7 +4708,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
             : [{ x: 0, y: 0, z: 1, name: 'Unknown' }],
         }],
       }, 'imo44'),
-      make('im-38', 'Corporate Guest Complaint Ranking', 'bar', 'Drilldown: Company Name → Incident Category → Incident Case', 'Corporate complaint proxy', { xAxis: { categories: sourceKeys.slice(0, 10) }, series: [{ name: 'Complaints', data: sourceKeys.slice(0, 10).map((k) => s.source_map?.[k] ?? 0) }] }, 'imo46'),
+      make('im-38', 'Corporate Guest Complaint Ranking', 'bar', 'Drilldown: Company Name → Incident Category → Incident Case', 'Corporate complaint proxy', { xAxis: { categories: sourceKeys.slice(0, 24) }, series: [{ name: 'Complaints', data: sourceKeys.slice(0, 24).map((k) => s.source_map?.[k] ?? 0) }] }, 'imo46'),
       make('im-39', 'Shift Handover Incident Analysis', 'xrange', 'Drilldown: Incident Hour → Department → Incident Case', 'Shift window proxy', { xAxis: { type: 'datetime' }, yAxis: { categories: ['Night', 'Morning', 'Afternoon'], reversed: true }, series: [{ type: 'xrange', data: [{ x: Date.UTC(2026, 0, 1, 0), x2: Date.UTC(2026, 0, 1, 8), y: 0 }, { x: Date.UTC(2026, 0, 1, 8), x2: Date.UTC(2026, 0, 1, 16), y: 1 }, { x: Date.UTC(2026, 0, 1, 16), x2: Date.UTC(2026, 0, 2, 0), y: 2 }] }] }, 'imo47'),
     ];
   }, [isCorp, isJo, data.summary, data.charts, fd, deptFd, deptScopedSummary, t]);
@@ -4889,7 +4935,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
               type: 'column', color: ORANGE,
               dataLabels: { enabled: true },
               data: Object.entries(jo11Him[String(h)] ?? {})
-                .sort(([, a], [, b]) => b - a).slice(0, 10)
+                .sort(([, a], [, b]) => b - a).slice(0, 24)
                 .map(([item, cnt]) => ({ name: item, y: cnt })),
             })),
           },
@@ -4941,7 +4987,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
                 type: 'column', color: BLUE,
                 dataLabels: { enabled: true },
                 data: Object.entries(dim[String(h)] ?? {})
-                  .sort(([, a], [, b]) => b - a).slice(0, 10)
+                  .sort(([, a], [, b]) => b - a).slice(0, 24)
                   .map(([item, cnt]) => ({ name: item, y: cnt })),
               })),
           },
@@ -4963,7 +5009,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       .map(([item, bm]): [string, number] => [item, Object.values(bm).reduce((a, b) => a + b, 0)])
       .filter(([, v]) => v > 0)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 10);
+      .slice(0, 24);
     if (topItems.length === 0) return null;
     return {
       id: 'jo-03', filterable: false,
@@ -5004,7 +5050,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       .map(([c, hm]): [string, number] => [c, Object.values(hm).reduce((a, b) => a + b, 0)])
       .filter(([, v]) => v > 0)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 10);
+      .slice(0, 24);
     if (cats.length === 0) return null;
     return {
       // Code swapped with jo-11: this chart displays code jo-11 but stays in the jo-02 EAC slot
@@ -5146,6 +5192,11 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   if (isJo && !isCorp && reorderedOperational.length >= 7) {
     [reorderedOperational[2], reorderedOperational[6]] = [reorderedOperational[6], reorderedOperational[2]];
   }
+
+  // "Long Charts" — deep multi-level drilldowns that read better at full width, one per row.
+  // Empty for now; future requests move specific chart ids into JO_LONG_CHART_IDS / IM_LONG_CHART_IDS.
+  const joLongCharts = [...reorderedEac, ...reorderedOperational, ...comparisonCharts, ...corpJoCharts].filter((c) => JO_LONG_CHART_IDS.has(c.id));
+  const imLongCharts = [...imHotelExecutiveCharts, ...imHotelOverTimeCharts, ...imHotelDrilldownCharts, ...imHotelOperationAnalysisCharts, ...corpImTopCharts].filter((c) => IM_LONG_CHART_IDS.has(c.id));
 
   // Global chart sequence index across all groups (no reset between sections)
   let chartSequence = 0;
@@ -5314,6 +5365,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
 
         {/* ── KPIs ──────────────────────────────────────────────────────────── */}
         <section className="kpi-print-section">
+          <SectionHead label={t('dashboard_ui.section_kpi', 'KPI')} dark={dark} />
           <div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
             {stdVisKpis(localizedKpis).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}
           </div>
@@ -5324,162 +5376,87 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           )}
         </section>
 
-        {/* ── Corp IM top charts ───────────────────────────────────────────── */}
-        {isCorp && !isJo && corpImTopCharts.length > 0 && (
-          <section>
-            <SectionHead label={'Corp Comparison Top 10'} dark={dark} />
-            <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {corpImTopCharts.map((def) => {
-                const { override, fullPeriod } = chartOpts(def);
-                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-              })}
+        {/* ── Simple Charts ────────────────────────────────────────────────── */}
+        <section>
+          <SectionHead label={t('dashboard_ui.section_simple_charts', 'Simple Charts')} dark={dark} />
+          <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isCorp && !isJo && stdVisCharts(corpImTopCharts).map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+            {isCorp && !isJo && corpImTopCharts.length > 0 && (
               <CorpImPerformanceTable
                 entries={activeChainEntries}
                 dark={dark}
                 index={corpImTopCharts.length + 1}
               />
-            </div>
-          </section>
-        )}
+            )}
 
-        {isCorp && isJo && corpJoCharts.length > 0 && (
-          <section>
-            <SectionHead label={t('dashboard_ui.corp_jo_benchmark_charts', 'Corp JO Benchmark Charts')} dark={dark} />
-            <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {stdVisCharts(corpJoCharts).map((def) => {
-                const { override, fullPeriod } = chartOpts(def);
-                return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-              })}
+            {isCorp && isJo && stdVisCharts(corpJoCharts).map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+            {isCorp && isJo && corpJoCharts.length > 0 && (
               <CorpJoPerformanceTable
                 entries={activeChainEntries}
                 dark={dark}
                 index={nextChartIndex()}
               />
-            </div>
-          </section>
-        )}
+            )}
 
-        {isBuilder ? (
+            {isBuilder && localizedCharts.map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+
+            {!isBuilder && !isCorp && !isJo && stdVisCharts([
+              ...imHotelExecutiveCharts,
+              ...imHotelOverTimeCharts,
+              ...imHotelDrilldownCharts,
+              ...imHotelOperationAnalysisCharts,
+            ]).map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+
+            {!isBuilder && !isCorp && isJo && stdVisCharts([...reorderedEac, ...reorderedOperational]).map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+
+            {!isBuilder && !isCorp && isJo && comparisonCharts.map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+
+            {!isBuilder && !isCorp && isJo && hourlyChart && (
+              <HcChart
+                key={hourlyChart.id}
+                def={hourlyChart}
+                dark={dark}
+                fullPeriod={false}
+                codeLabel={hourlyChart.id}
+              />
+            )}
+
+            {!isBuilder && !isCorp && isJo && gaugeCharts.map((def) => {
+              const { override, fullPeriod } = chartOpts(def);
+              return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
+            })}
+          </div>
+        </section>
+
+        {/* ── Long Charts ───────────────────────────────────────────────────── */}
+        {(isJo ? joLongCharts.length > 0 : imLongCharts.length > 0) && (
           <section>
-            <SectionHead label={'Builder Charts'} dark={dark} />
-            <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {localizedCharts.map((def) => {
+            <SectionHead label={t('dashboard_ui.section_long_charts', 'Long Charts')} dark={dark} />
+            <div className="chart-grid-long mt-5 grid grid-cols-1 gap-4">
+              {(isJo ? joLongCharts : imLongCharts).map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
             </div>
           </section>
-        ) : !isCorp && (
-          <>
-            {!isJo ? (
-              <>
-                <section>
-                  <SectionHead label={'Executive Charts'} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(imHotelExecutiveCharts).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-                <section>
-                  <SectionHead label={'Over the time charts'} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(imHotelOverTimeCharts).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-                <section>
-                  <SectionHead label={'Drilldown charts'} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(imHotelDrilldownCharts).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-                <section>
-                  <SectionHead label={'Operation Analysis'} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(imHotelOperationAnalysisCharts).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-              </>
-            ) : (
-              <>
-                <section>
-                  <SectionHead label={t('dashboard_ui.section_charts', 'Executive Analysis Charts')} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(reorderedEac).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-                <section>
-                  <SectionHead label={t('dashboard_ui.operational_jo', 'Operational Detail — JO View')} dark={dark} />
-                  <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stdVisCharts(reorderedOperational).map((def) => {
-                      const { override, fullPeriod } = chartOpts(def);
-                      return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                    })}
-                  </div>
-                </section>
-              </>
-            )}
-
-            {isJo && (
-            <section>
-              <SectionHead
-                label={hasChain ? `${t('dashboard_ui.chain_comparison', 'Chain Comparison')} — ${chainEntries.length} ${t('dashboard_ui.hotels', 'Hotels')}` : t('dashboard_ui.chain_comparison', 'Chain Comparison')}
-                dark={dark}
-              />
-              {!hasChain && (
-                <p className="mt-1.5 mb-4 font-mono" style={{ fontSize: '0.62rem', color: naText }}>
-                  {t('dashboard_ui.benchmarking_hint', 'Upload CSVs for other hotels in the same chain to enable cross-hotel benchmarking.')}
-                </p>
-              )}
-              <div className="chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {comparisonCharts.map((def) => {
-                  const { override, fullPeriod } = chartOpts(def);
-                  return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                })}
-              </div>
-            </section>
-            )}
-
-            {isJo && hourlyChart && (
-              <section>
-                <SectionHead label={t('dashboard_ui.time_patterns', 'Time Patterns')} dark={dark} />
-                <div className="chart-grid mt-4 grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <HcChart
-                    key={hourlyChart.id}
-                    def={hourlyChart}
-                    dark={dark}
-                    fullPeriod={false}
-                    codeLabel={hourlyChart.id}
-                  />
-                </div>
-              </section>
-            )}
-
-            {isJo && gaugeCharts.length > 0 && (
-              <section>
-                <SectionHead label={t('dashboard_ui.performance_gauges', 'Performance Gauges')} dark={dark} />
-                <div className="chart-grid mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {gaugeCharts.map((def) => {
-                    const { override, fullPeriod } = chartOpts(def);
-                    return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
-                  })}
-                </div>
-              </section>
-            )}
-          </>
         )}
 
         {false && !isCorp && !isJo && corpBenchmarkRows.length > 0 && (

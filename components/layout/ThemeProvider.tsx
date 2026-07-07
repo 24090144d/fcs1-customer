@@ -14,7 +14,7 @@ const STORAGE_KEY = 'fcs1-theme';
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<AppThemeName>('vintage');
+  const [theme, setThemeState] = useState<AppThemeName>('chromatic-ink');
 
   useEffect(() => {
     try {

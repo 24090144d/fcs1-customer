@@ -9,10 +9,10 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.90** (released 2026-07-08) |
+| Version | **v1.0.91** (released 2026-07-08) |
 | Branch | `main` |
 | Local dev | `npm run dev` → `http://localhost:3010` |
-| Previous version | v1.0.89 |
+| Previous version | v1.0.90 |
 
 **Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
@@ -57,6 +57,7 @@ Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHA
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.0.91** | 2026-07-08 | Default app UI theme changed from Vintage to **Chromatic Ink Wash** (`chromatic-ink`) — affects fresh sessions/browsers only (`components/layout/ThemeProvider.tsx` initial `useState`); users with a stored `fcs1-theme` localStorage preference are unaffected |
 | **v1.0.90** | 2026-07-08 | IM long-drilldown follow-up release: corp IM `cim-22`..`cim-26` and hotel IM `im-41`..`im-45` now resolve drilldown axis labels from the active level, use incident item names from database-backed summary maps instead of blank fallback buckets, and keep 24-hour-distribution charts aligned with the configured organization timezone; CO/IM fetch/meta plumbing updated so dashboard views receive timezone context consistently; i18n updated across all four languages |
 | **v1.0.89** | 2026-07-07 | JO/MO/IM restructured to the same KPI / Simple Charts / Long Charts section pattern CO already had (see "Section Structure" above); sub-headers ("Executive Charts", "Drilldown charts", "Chain Comparison", "Performance Gauges", "Corp Comparison Top 10", "Builder Charts", etc.) removed, charts flattened into one Simple Charts grid per scope; new `MO_LONG_CHART_IDS`/`JO_LONG_CHART_IDS`/`IM_LONG_CHART_IDS` sets (empty) + `splitLongCharts` helper in `DashboardClient.tsx`; every hardcoded chart-list cap (`topN`/`.slice(0, N)`) in JO/MO/IM builder code normalized to `N = 24`; fixed spacing bug where `DashboardClient.tsx`'s `SectionHead` was missing `mb-3` vs `CoDashboardView.tsx`'s copy; `AGENTS.md`/`CLAUDE.md` synced and repositioned for a Codex-primary workflow |
 | **v1.0.88** | 2026-07-04 | JO chart redesigns (hotel + corp): cjo-02 → 2-level column drilldown (Job Status → 24-Hour Distribution); cjo-15 → 2-level drilldown (Job Status → Completed Duration Distribution, new `jo_status_dur_bkt_map`); cjo-27 ↔ cjo-03 content swap; hotel jo-01 → hour → top-10 delayed items drilldown (new `jo_hour_delayed_item_map`); hotel jo-02 category/grid chart display-code fix; fix `/api/ai/charts/list` 500 (`created_at.localeCompare` on pg `Date` → `.getTime()`); i18n all 4 langs |

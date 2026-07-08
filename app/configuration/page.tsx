@@ -600,11 +600,15 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
       const res = await fetch('/api/admin/system-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timezone }),
+        body: JSON.stringify({ timezone, organization_name: orgName }),
       });
-      const d = await res.json() as { ok?: boolean; error?: string };
+      const d = await res.json() as { ok?: boolean; error?: string; organization_name?: string };
       if (!res.ok || d.error) { setIsError(true); setMsg(d.error ?? 'Save failed'); }
-      else { setIsError(false); setMsg('Saved. Re-upload CSV to recompute 24h charts with the new timezone.'); }
+      else {
+        setIsError(false);
+        setMsg('Saved. Re-upload CSV to recompute 24h charts with the new timezone.');
+        if (d.organization_name) setOrgName(d.organization_name);
+      }
     } catch (e) {
       setIsError(true); setMsg(String(e));
     } finally {
@@ -615,38 +619,59 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
   return (
     <div style={{ background: pal.panelBg, border: `1px solid ${pal.panelBorder}`, borderRadius: 10, padding: '20px 24px', marginBottom: 24 }}>
       <div style={{ fontWeight: 700, fontSize: '0.85rem', color: pal.accent, marginBottom: 14, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        System Settings{orgName ? ` — ${orgName}` : ''}
+        System Settings
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <label style={{ fontSize: '0.8rem', color: pal.muted, minWidth: 90 }}>Local Timezone</label>
-        {loading ? (
-          <span style={{ fontSize: '0.8rem', color: pal.muted }}>Loading…</span>
-        ) : (
-          <select
-            value={timezone}
-            onChange={e => { setTimezone(e.target.value); setMsg(''); }}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '0.8rem', color: pal.muted, minWidth: 90 }}>Organization Name</label>
+          {loading ? (
+            <span style={{ fontSize: '0.8rem', color: pal.muted }}>Loading…</span>
+          ) : (
+            <input
+              type="text"
+              value={orgName}
+              onChange={e => { setOrgName(e.target.value); setMsg(''); }}
+              placeholder="Organization name"
+              style={{
+                fontSize: '0.82rem', padding: '6px 10px', borderRadius: 6,
+                border: `1px solid ${pal.panelBorder}`, background: pal.inputBg,
+                color: pal.text, outline: 'none', minWidth: 220,
+              }}
+            />
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '0.8rem', color: pal.muted, minWidth: 90 }}>Local Timezone</label>
+          {loading ? (
+            <span style={{ fontSize: '0.8rem', color: pal.muted }}>Loading…</span>
+          ) : (
+            <select
+              value={timezone}
+              onChange={e => { setTimezone(e.target.value); setMsg(''); }}
+              style={{
+                fontSize: '0.82rem', padding: '6px 10px', borderRadius: 6,
+                border: `1px solid ${pal.panelBorder}`, background: pal.inputBg,
+                color: pal.text, outline: 'none', minWidth: 220,
+              }}
+            >
+              {COMMON_TIMEZONES.map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={save}
+            disabled={saving || loading}
             style={{
-              fontSize: '0.82rem', padding: '6px 10px', borderRadius: 6,
-              border: `1px solid ${pal.panelBorder}`, background: pal.inputBg,
-              color: pal.text, outline: 'none', minWidth: 220,
+              padding: '6px 16px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+              background: pal.accent, color: '#fff', border: 'none', opacity: (saving || loading) ? 0.6 : 1,
             }}
           >
-            {COMMON_TIMEZONES.map(tz => (
-              <option key={tz} value={tz}>{tz}</option>
-            ))}
-          </select>
-        )}
-        <button
-          onClick={save}
-          disabled={saving || loading}
-          style={{
-            padding: '6px 16px', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-            background: pal.accent, color: '#fff', border: 'none', opacity: (saving || loading) ? 0.6 : 1,
-          }}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
 
       {msg && (
@@ -656,7 +681,7 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
       )}
 
       <div style={{ marginTop: 10, fontSize: '0.74rem', color: pal.muted }}>
-        Used for 24-hour distribution charts (mo-10, mo-11, jo-23–jo-26, im hourMap). Takes effect on next CSV upload; run backfill scripts to recompute existing data.
+        Organization Name applies to all CSV hotel uploads on this portal. Timezone is used for 24-hour distribution charts (mo-10, mo-11, jo-23–jo-26, im hourMap). Timezone takes effect on next CSV upload; run backfill scripts to recompute existing data.
       </div>
     </div>
   );

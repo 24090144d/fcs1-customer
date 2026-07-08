@@ -33,32 +33,45 @@ export async function GET() {
   }
 }
 
-async function saveTimezone(req: NextRequest) {
+async function saveSettings(req: NextRequest) {
   try {
-    const body = await req.json() as { timezone?: string };
+    const body = await req.json() as { timezone?: string; organization_name?: string };
     const timezone = body.timezone?.trim();
-    if (!timezone) return NextResponse.json({ error: 'timezone is required' }, { status: 400 });
+    const organizationName = body.organization_name?.trim();
+    if (!timezone && !organizationName) {
+      return NextResponse.json({ error: 'timezone or organization_name is required' }, { status: 400 });
+    }
 
-    // Validate that the timezone is a valid IANA name
-    try { new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch {
-      return NextResponse.json({ error: `Invalid timezone: ${timezone}` }, { status: 400 });
+    if (timezone) {
+      // Validate that the timezone is a valid IANA name
+      try { new Intl.DateTimeFormat('en', { timeZone: timezone }); } catch {
+        return NextResponse.json({ error: `Invalid timezone: ${timezone}` }, { status: 400 });
+      }
     }
 
     const supabase = createAdminClient();
     const org = await getOrg(supabase);
     if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
 
+    const updates: { timezone?: string; organization_name?: string } = {};
+    if (timezone) updates.timezone = timezone;
+    if (organizationName) updates.organization_name = organizationName;
+
     const { error } = await supabase
       .from('organizations')
-      .update({ timezone })
+      .update(updates)
       .eq('id', org.id) as unknown as SbResult<null>;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, timezone });
+    return NextResponse.json({
+      ok: true,
+      timezone: timezone ?? org.timezone,
+      organization_name: organizationName ?? org.organization_name,
+    });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
 
-export async function PUT(req: NextRequest) { return saveTimezone(req); }
-export async function POST(req: NextRequest) { return saveTimezone(req); }
+export async function PUT(req: NextRequest) { return saveSettings(req); }
+export async function POST(req: NextRequest) { return saveSettings(req); }

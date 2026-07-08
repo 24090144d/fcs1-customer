@@ -33,6 +33,9 @@ const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-12', 'cmo-04', 'cm
 const MO_LONG_CHART_IDS = new Set<string>([]);
 const JO_LONG_CHART_IDS = new Set<string>([]);
 const IM_LONG_CHART_IDS = new Set<string>(['im-41', 'im-42', 'im-43', 'im-44', 'im-45']);
+// ⏰ 24-hour-of-day distribution charts — always full period (date filter ignored),
+// matching JO/MO's established behavior. Used only to control the FULL PERIOD badge.
+const IM_24H_CHART_IDS = new Set<string>(['im-04', 'im-44', 'im-45', 'cim-25', 'cim-26']);
 
 function splitLongCharts<T extends { id: string }>(charts: T[], longIds: Set<string>): { simple: T[]; long: T[] } {
   const simple: T[] = [];
@@ -69,8 +72,8 @@ const CORP_IM_LONG_MAP: Array<{ code: string; id: string; title: string; note: s
   { code: 'cim-22', id: 'cim-22', title: 'Hotel -> Incident Category -> Incident Items', note: 'Three-level hotel drilldown from total incident volume to category and item detail for deep root-cause review.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY category per hotel; Level 3 = COUNT(incident_case) BY item per category' },
   { code: 'cim-23', id: 'cim-23', title: 'Hotel -> Department -> Incident Category -> Incident Items', note: 'Four-level hotel drilldown from incident volume to department, category, and item detail for ownership tracing.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY department per hotel; Level 3 = COUNT(incident_case) BY category per department; Level 4 = COUNT(incident_case) BY item per category' },
   { code: 'cim-24', id: 'cim-24', title: 'Hotel -> Incident Category -> Top Average Completed Duration (Hour) by Incident Item', note: 'Three-level hotel drilldown focused on item-level completed duration in hours to expose slow items inside each category.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY category per hotel; Level 3 = AVG(completed_duration_hours) BY incident_item_name per category' },
-  { code: 'cim-25', id: 'cim-25', title: 'Hotel -> 24 Hour Distribution -> Incident Category -> Incident Items', note: 'Four-level hotel drilldown combining time-of-day demand with category and item detail for operational hotspots.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY hour per hotel; Level 3 = COUNT(incident_case) BY category per hour; Level 4 = COUNT(incident_case) BY item per category' },
-  { code: 'cim-26', id: 'cim-26', title: 'Hotel -> 24 Hour Distribution -> Department -> Incident Items', note: 'Four-level hotel drilldown combining time-of-day demand with department and item detail for staffing review.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY hour per hotel; Level 3 = COUNT(incident_case) BY department per hour; Level 4 = COUNT(incident_case) BY item per department' },
+  { code: 'cim-25', id: 'cim-25', title: '⏰ Hotel -> 24 Hour Distribution -> Incident Category -> Incident Items', note: 'Four-level hotel drilldown combining time-of-day demand with category and item detail for operational hotspots.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY hour per hotel; Level 3 = COUNT(incident_case) BY category per hour; Level 4 = COUNT(incident_case) BY item per category' },
+  { code: 'cim-26', id: 'cim-26', title: '⏰ Hotel -> 24 Hour Distribution -> Department -> Incident Items', note: 'Four-level hotel drilldown combining time-of-day demand with department and item detail for staffing review.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY hour per hotel; Level 3 = COUNT(incident_case) BY department per hour; Level 4 = COUNT(incident_case) BY item per department' },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -5316,7 +5319,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     }
     if (isCorp && !isJo && (CORP_IM_TOP_IDS.has(def.id) || CORP_IM_LONG_IDS.has(def.id))) {
       const corpOpts = buildCorpImOptions(def.id, activeChainEntries, worldMapData);
-      if (corpOpts) return { override: corpOpts, fullPeriod: false };
+      if (corpOpts) return { override: corpOpts, fullPeriod: filtered && IM_24H_CHART_IDS.has(def.id) };
     }
     if (CHAIN_CHARTS.has(def.id)) {
       const chainOpts = buildChainOptions(def.id, activeChainEntries);
@@ -5388,7 +5391,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       };
       return { override: gaugeOverride, fullPeriod: false };
     }
-    if (isImHotelCustomChart) return { fullPeriod: false };
+    if (isImHotelCustomChart) return { fullPeriod: filtered && IM_24H_CHART_IDS.has(def.id) };
     // Injected jo-11 options are already date-filtered in the useMemo when
     // jo_item_date_map exists; without the map it can only show all-time data.
     if (isJo && !isCorp && def.id === 'jo-11') {

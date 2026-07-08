@@ -16,6 +16,7 @@ type ImRow = {
   department: string | null;
   room_no: string | null;
   incident_location: string | null;
+  organization_id: string | null;
 };
 
 type DailyBucket = {
@@ -88,11 +89,10 @@ export async function GET(req: NextRequest) {
       .select('timezone')
       .ilike('organization_code', chain)
       .maybeSingle() as unknown as { data: { timezone: string | null } | null; error: { message: string } | null };
-    const orgTimezone = orgRes.data?.timezone ?? 'UTC';
 
     const q = await supabase
       .from('im_records')
-      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location')
+      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location, organization_id')
       .eq('chain_code', chain)
       .eq('hotel_code', hotel) as unknown as { data: ImRow[] | null; error: { message: string } | null };
 
@@ -100,11 +100,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: q.error.message }, { status: 500 });
     }
 
+    // Stage 1: chain-code match (authoritative — matches Configuration → System Settings).
+    // Stage 2: organization_id from this hotel's own records, as a fallback.
+    // Stage 3: hard default.
+    let orgTimezone = orgRes.data?.timezone ?? null;
+    if (!orgTimezone) {
+      const firstOrgId = (q.data ?? []).find((r) => r.organization_id)?.organization_id ?? null;
+      if (firstOrgId) {
+        const fallbackTz = await supabase
+          .from('organizations')
+          .select('timezone')
+          .eq('id', firstOrgId)
+          .maybeSingle() as unknown as { data: { timezone: string | null } | null };
+        orgTimezone = fallbackTz.data?.timezone ?? null;
+      }
+    }
+    orgTimezone = orgTimezone ?? 'Asia/Hong_Kong';
+
     const rows = (q.data ?? []).filter((r) => {
       const d = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
       if (!d) return false;
       if (from && d < from) return false;
       if (to && d > to) return false;
+      if (department !== 'ALL') {
+        const dep = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
+        if (dep !== department) return false;
+      }
+      return true;
+    });
+
+    // ⏰ 24-hour distribution fields (hour_map and friends) intentionally ignore
+    // the date-range filter, matching JO/MO's established behavior — they always
+    // reflect the full upload period, scoped only by the department filter.
+    const hourRows = (q.data ?? []).filter((r) => {
       if (department !== 'ALL') {
         const dep = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
         if (dep !== department) return false;
@@ -225,23 +253,6 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
-      if (dt && !Number.isNaN(dt.getTime())) {
-        const h = localHour(dt, orgTimezone);
-        hour_map[h] = (hour_map[h] ?? 0) + 1;
-        const hourKey = String(h);
-        if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};
-        hour_category_map[hourKey][cat] = (hour_category_map[hourKey][cat] ?? 0) + 1;
-        if (!hour_dept_map[hourKey]) hour_dept_map[hourKey] = {};
-        hour_dept_map[hourKey][dept] = (hour_dept_map[hourKey][dept] ?? 0) + 1;
-        if (!hour_category_item_map[hourKey]) hour_category_item_map[hourKey] = {};
-        if (!hour_category_item_map[hourKey][cat]) hour_category_item_map[hourKey][cat] = {};
-        hour_category_item_map[hourKey][cat][item] = (hour_category_item_map[hourKey][cat][item] ?? 0) + 1;
-        if (!hour_dept_item_map[hourKey]) hour_dept_item_map[hourKey] = {};
-        if (!hour_dept_item_map[hourKey][dept]) hour_dept_item_map[hourKey][dept] = {};
-        hour_dept_item_map[hourKey][dept][item] = (hour_dept_item_map[hourKey][dept][item] ?? 0) + 1;
-      }
-
       const day = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
       if (day) {
         if (!byDate.has(day)) {
@@ -272,8 +283,9 @@ export async function GET(req: NextRequest) {
         b.by_category[cat] = (b.by_category[cat] ?? 0) + 1;
       }
 
+      const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
       const end = r.investigation_updated_on_2 ? new Date(r.investigation_updated_on_2) : null;
-      if (dt && end && !Number.isNaN(end.getTime()) && end.getTime() >= dt.getTime()) {
+      if (dt && !Number.isNaN(dt.getTime()) && end && !Number.isNaN(end.getTime()) && end.getTime() >= dt.getTime()) {
         const hours = (end.getTime() - dt.getTime()) / 3_600_000;
         if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
           category_duration_map[cat].sum += hours;
@@ -286,6 +298,29 @@ export async function GET(req: NextRequest) {
 
       const rk = `${r.room_no ?? 'unknown'}|${cat}|${item}`;
       repeatKeyCount[rk] = (repeatKeyCount[rk] ?? 0) + 1;
+    }
+
+    // ⏰ 24-hour distribution — computed from hourRows (department-filtered only,
+    // date filter ignored) so it always reflects the full upload period.
+    for (const r of hourRows) {
+      const cat = (r.incident_category ?? 'Uncategorized').trim() || 'Uncategorized';
+      const item = (r.incident_item_name ?? 'Unknown Item').trim() || 'Unknown Item';
+      const dept = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
+      const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
+      if (!dt || Number.isNaN(dt.getTime())) continue;
+      const h = localHour(dt, orgTimezone);
+      hour_map[h] = (hour_map[h] ?? 0) + 1;
+      const hourKey = String(h);
+      if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};
+      hour_category_map[hourKey][cat] = (hour_category_map[hourKey][cat] ?? 0) + 1;
+      if (!hour_dept_map[hourKey]) hour_dept_map[hourKey] = {};
+      hour_dept_map[hourKey][dept] = (hour_dept_map[hourKey][dept] ?? 0) + 1;
+      if (!hour_category_item_map[hourKey]) hour_category_item_map[hourKey] = {};
+      if (!hour_category_item_map[hourKey][cat]) hour_category_item_map[hourKey][cat] = {};
+      hour_category_item_map[hourKey][cat][item] = (hour_category_item_map[hourKey][cat][item] ?? 0) + 1;
+      if (!hour_dept_item_map[hourKey]) hour_dept_item_map[hourKey] = {};
+      if (!hour_dept_item_map[hourKey][dept]) hour_dept_item_map[hourKey][dept] = {};
+      hour_dept_item_map[hourKey][dept][item] = (hour_dept_item_map[hourKey][dept][item] ?? 0) + 1;
     }
 
     const repeat_count = Object.values(repeatKeyCount).filter((v) => v > 1).reduce((s, v) => s + v, 0);

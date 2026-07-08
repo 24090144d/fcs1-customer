@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import type { UploadJobInsert, UploadedFileInsert, UploadMode, ModuleCodeDb } from '@/types';
 
-// Preferred fallback org when chain_code doesn't match any known organization_code.
-const DEFAULT_ORG_ID = 'b6a52445-70d4-4d41-9603-de410ba8265c';
-
 export interface CreateJobRequest {
   file_hash:    string;
   file_name:    string;
@@ -25,6 +22,16 @@ export interface CreateJobResponse {
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
+/**
+ * Resolve the organization for a new upload job.
+ * Stage 1: chain-code match on organizations.organization_code (lets a multi-chain
+ * deployment route uploads to a chain-specific org, if one exists).
+ * Stage 2: the single org configured in Configuration → System Settings — the
+ * oldest organizations row, same lookup getOrg() uses in the system-settings API.
+ * This is what makes "Organization Name" in Configuration apply to all CSV
+ * uploads on the portal: every deployment has exactly one org row in practice,
+ * so this is the org every upload ultimately lands on.
+ */
 async function resolveOrganizationId(
   supabase: ReturnType<typeof createAdminClient>,
   chain_code: string | null,
@@ -38,27 +45,13 @@ async function resolveOrganizationId(
     if (org?.id) return org.id;
   }
 
-  const { data: preferredDefault } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('id', DEFAULT_ORG_ID)
-    .maybeSingle() as unknown as SbResult<{ id: string }>;
-  if (preferredDefault?.id) return preferredDefault.id;
-
-  const { data: localOrg } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('organization_code', 'LOCAL')
-    .maybeSingle() as unknown as SbResult<{ id: string }>;
-  if (localOrg?.id) return localOrg.id;
-
-  const { data: anyOrg } = await supabase
+  const { data: configuredOrg } = await supabase
     .from('organizations')
     .select('id')
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle() as unknown as SbResult<{ id: string }>;
-  return anyOrg?.id ?? null;
+  return configuredOrg?.id ?? null;
 }
 
 export async function POST(req: NextRequest) {

@@ -41,9 +41,14 @@ const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'im_r
  * Resolve the org timezone live, at request time, so a Configuration →
  * System Settings change takes effect immediately across all modules
  * without needing a CSV re-upload or manual backfill.
- * Stage 1: organization_id UUID from the module's own record table (reliable),
- * resolved in a single JOIN round trip.
- * Stage 2: chain-code match on organizations.organization_code.
+ * Stage 1: chain-code match on organizations.organization_code — this is the
+ * authoritative method: it's what the hotel-level live IM route
+ * (app/api/dashboard/im-scope/route.ts) has always used, and per-hotel
+ * organization_id links can point to a stale/different org row than the one
+ * actually edited in Configuration → System Settings (organization_id is set
+ * once at CSV upload time and never re-linked when orgs are consolidated).
+ * Stage 2: organization_id UUID from the module's own record table, only as a
+ * fallback when no chain-code match exists.
  * Stage 3: hard default (UTC+8) per product decision.
  */
 async function resolveLiveTimezone(
@@ -52,6 +57,15 @@ async function resolveLiveTimezone(
   hotelCodes: string[],
   chainCode?: string | null,
 ): Promise<string> {
+  const code = String(chainCode ?? '').trim().toUpperCase();
+  if (code) {
+    const tzRes = await supabase
+      .from('organizations')
+      .select('timezone')
+      .ilike('organization_code', code)
+      .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
+    if (tzRes.data?.timezone) return tzRes.data.timezone;
+  }
   // `table` is always one of our own literal union values, never user input — safe to interpolate
   // after this allowlist check, and required here since the compat query builder has no join support.
   if (hotelCodes.length > 0 && TIMEZONE_TABLES.has(table)) {
@@ -63,17 +77,8 @@ async function resolveLiveTimezone(
       );
       if (joined.rows[0]?.timezone) return joined.rows[0].timezone;
     } catch {
-      // fall through to chain-code match
+      // fall through to hard default
     }
-  }
-  const code = String(chainCode ?? '').trim().toUpperCase();
-  if (code) {
-    const tzRes = await supabase
-      .from('organizations')
-      .select('timezone')
-      .ilike('organization_code', code)
-      .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
-    if (tzRes.data?.timezone) return tzRes.data.timezone;
   }
   return 'Asia/Hong_Kong';
 }
@@ -894,10 +899,10 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
       };
     }).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
 
-    // Resolve the org timezone live, at request time, from the module's own record
-    // table (organization_id UUID, reliable), falling back to chain-code match, then
-    // a hard default. This is what makes a Configuration → System Settings timezone
-    // change take effect immediately across JO/MO/CO/IM without a CSV re-upload.
+    // Resolve the org timezone live, at request time, matching the chain-code lookup
+    // that Configuration → System Settings and the hotel-level live IM route both use,
+    // so a timezone change takes effect immediately across JO/MO/CO/IM without a CSV
+    // re-upload — and so corp views agree with hotel-level views for the same hotel.
     const allHotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
     const orgTimezone = await resolveLiveTimezone(supabase, recordTable, allHotelCodes, chainCode);
 

@@ -60,6 +60,19 @@ const DEFAULT_FILTERS: CoFilters = {
   status: 'ALL',
 };
 
+// ⏰ 24-hour-of-day distribution charts — always computed from the full upload
+// period (date filter ignored), matching JO/MO's established behavior, so a
+// date-range selection never rescopes "time of day" charts. Other filters
+// (floor/attendant/room type/status/hotel) still apply normally.
+const CO_24H_CHART_IDS = new Set([
+  'co-04', 'co-15', 'co-16', 'co-17', 'co-18', 'co-19', 'co-20',
+  'co-25', 'co-26', 'co-27', 'co-28', 'co-29', 'co-30', 'co-31', 'co-32', 'co-33',
+  'co-40', 'co-42',
+  'cco-03', 'cco-18', 'cco-19', 'cco-20', 'cco-21', 'cco-22', 'cco-23',
+  'cco-28', 'cco-29', 'cco-30', 'cco-31', 'cco-32', 'cco-33', 'cco-34', 'cco-35', 'cco-36',
+  'cco-44', 'cco-46',
+]);
+
 function normText(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
@@ -3760,6 +3773,21 @@ export function CoDashboardView({
       : rows;
     return hotelScopedRows.filter((row) => matchesRow(row, filters));
   }, [rows, filters, isCorp, hotelFilter]);
+  // 24-hour distribution charts (⏰) intentionally ignore the date-range filter,
+  // matching JO/MO's existing behavior — they always show the full upload period,
+  // scoped only by the non-date filters (floor/attendant/room type/status/hotel).
+  const isDateFiltered = useMemo(() => {
+    const min = formatDateInput(data.meta.date_range.min);
+    const max = formatDateInput(data.meta.date_range.max);
+    return filters.dateFrom !== min || filters.dateTo !== max;
+  }, [filters.dateFrom, filters.dateTo, data.meta.date_range.min, data.meta.date_range.max]);
+  const hourFilters = useMemo(() => ({ ...filters, dateFrom: '', dateTo: '' }), [filters]);
+  const hourPeriodRows = useMemo(() => {
+    const hotelScopedRows = isCorp && hotelFilter !== 'ALL'
+      ? rows.filter((row) => normKey(row.hotel_code) === normKey(hotelFilter))
+      : rows;
+    return hotelScopedRows.filter((row) => matchesRow(row, hourFilters));
+  }, [rows, hourFilters, isCorp, hotelFilter]);
   const previousWindow = useMemo(() => previousRange(filters.dateFrom, filters.dateTo), [filters.dateFrom, filters.dateTo]);
   const previousRows = useMemo(() => {
     if (!previousWindow) return [];
@@ -3780,7 +3808,12 @@ export function CoDashboardView({
     return clause;
   }, [filters, isCorp, hotelFilter]);
   const kpis = useMemo(() => buildKpis(scopedRows, previousRows, filters), [scopedRows, previousRows, filters]);
-  const charts = useMemo(() => (isCorp ? buildCorpCharts(scopedRows, filters, orgTimezone) : buildCharts(scopedRows, filters, orgTimezone)), [scopedRows, filters, isCorp, orgTimezone]);
+  const dateScopedCharts = useMemo(() => (isCorp ? buildCorpCharts(scopedRows, filters, orgTimezone) : buildCharts(scopedRows, filters, orgTimezone)), [scopedRows, filters, isCorp, orgTimezone]);
+  const hourFullPeriodCharts = useMemo(() => (isCorp ? buildCorpCharts(hourPeriodRows, hourFilters, orgTimezone) : buildCharts(hourPeriodRows, hourFilters, orgTimezone)), [hourPeriodRows, hourFilters, isCorp, orgTimezone]);
+  const charts = useMemo(() => {
+    const fullById = new Map(hourFullPeriodCharts.map((c) => [c.id, c]));
+    return dateScopedCharts.map((c) => (CO_24H_CHART_IDS.has(c.id) ? (fullById.get(c.id) ?? c) : c));
+  }, [dateScopedCharts, hourFullPeriodCharts]);
   const localizedKpis = useMemo(() => kpis.map((kpi) => ({
     ...kpi,
     label: t(`kpi_labels_co.${kpi.id}`, kpi.label),
@@ -3887,7 +3920,7 @@ export function CoDashboardView({
       <>
         {visibleCharts.map((chart, index) => (
           hasFilteredData ? (
-            <HcChart key={chart.id} def={chart} dark={dark} index={index + 1} codeLabel={chart.id} />
+            <HcChart key={chart.id} def={chart} dark={dark} index={index + 1} codeLabel={chart.id} fullPeriod={isDateFiltered && CO_24H_CHART_IDS.has(chart.id)} />
           ) : (
             <EmptyChartCard key={chart.id} title={chart.title} note={chart.note} formula={chart.formula} dark={dark} />
           )
@@ -4151,6 +4184,7 @@ export function CoDashboardView({
                   dark={dark}
                   index={index + 1}
                   codeLabel={`${isCorp ? 'CCO' : 'CO'}-${String(index + 1).padStart(2, '0')}`}
+                  fullPeriod={isDateFiltered && CO_24H_CHART_IDS.has(chart.id)}
                 />
               ) : (
                 <EmptyChartCard
@@ -4182,6 +4216,7 @@ export function CoDashboardView({
                     dark={dark}
                     index={index + 1}
                     codeLabel={`${isCorp ? 'CCO' : 'CO'}-${String(index + 1).padStart(2, '0')}`}
+                    fullPeriod={isDateFiltered && CO_24H_CHART_IDS.has(chart.id)}
                   />
                 ) : (
                   <EmptyChartCard

@@ -5418,6 +5418,150 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   const footerBd    = themeTokens.dashboard.footerBorder;
   const naText      = themeTokens.dashboard.naText;
 
+  // ── Hotel-level jo-23..jo-26: always recomputed client-side from summary ──
+  // These are stored/baked at CSV-upload time, so hotels whose CSV was
+  // uploaded before the JO "no timezone conversion" fix (v1.0.95) still carry
+  // hour buckets shifted by the old (incorrect) org-timezone conversion. The
+  // corp cjo-23..26 charts are always live-recomputed and therefore always
+  // correct — rebuilding the hotel versions the same way (from data.summary,
+  // which fetchDashboard already live-refreshes via computeJoHourMaps) keeps
+  // hotel and corp consistent without needing a re-upload or backfill script.
+  const hotelJo2326Charts = useMemo<ChartDef[]>(() => {
+    if (!isJo || isCorp) return [];
+    const GREEN  = '#0F766E';
+    const ORANGE = '#C2410C';
+    const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
+    const hours24 = Array.from({ length: 24 }, (_, i) => i);
+    const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    const sum = data.summary as HotelSummary;
+
+    const hourCompH   = (sum.jo_hour_comp_map ?? {}) as Record<string, number>;
+    const hourCompBkt = (sum.jo_hour_comp_bkt_map ?? {}) as Record<string, Record<string, number>>;
+    const hourRespBkt = (sum.jo_hour_resp_bkt_map ?? {}) as Record<string, Record<string, number>>;
+    const hourEscH    = (sum.jo_hour_esc_map ?? {}) as Record<string, number>;
+    const hourEscBkt  = (sum.jo_hour_esc_bkt_map ?? {}) as Record<string, Record<string, number>>;
+    const hourSlaTot  = (sum.jo_hour_sla_total_map ?? {}) as Record<string, number>;
+    const hourCatTot  = (sum.jo_hour_sla_cat_total_map ?? {}) as Record<string, Record<string, number>>;
+    if (Object.keys(hourSlaTot).length === 0 && Object.keys(hourCompH).length === 0 && Object.keys(hourEscH).length === 0) return [];
+
+    const mkHourData = (vals: Record<string, number>, id: string) =>
+      hours24.map((h) => ({ name: hl(h), y: vals[String(h)] ?? 0, drilldown: `${id}:${h}` }));
+
+    const jo23: ChartDef = {
+      id: 'jo-23', filterable: false,
+      title: t('chart_titles_jo.jo-23', '24-Hour Completed Jobs Distribution → Completion Duration'),
+      note: t('chart_notes_jo.jo-23', 'Bars show completed jobs per creation hour. Click any bar to drill into the completion duration distribution for that hour.'),
+      formula: 'COUNT(completed) BY HOUR(created_datetime); drilldown: COUNT(*) BY completion_duration_bucket',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Completed Jobs' } },
+        series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
+          data: mkHourData(hourCompH, 'jo23h'),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: hours24.map((h) => ({
+            id: `jo23h:${h}`,
+            name: `${hl(h)} — Completion Duration`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => ({ name: b, y: hourCompBkt[String(h)]?.[b] ?? 0 })),
+          })),
+        },
+      },
+    };
+
+    const jo24: ChartDef = {
+      id: 'jo-24', filterable: false,
+      title: t('chart_titles_jo.jo-24', '24-Hour Acknowledged Jobs Distribution → Response Duration'),
+      note: t('chart_notes_jo.jo-24', 'Bars show acknowledged (responded) jobs per creation hour. Click any bar to drill into the response duration distribution for that hour.'),
+      formula: 'COUNT(acknowledged) BY HOUR(created_datetime); drilldown: COUNT(*) BY response_duration_bucket',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Acknowledged Jobs' } },
+        series: [{ type: 'column', name: 'Acknowledged Jobs', color: GREEN,
+          data: hours24.map((h) => ({
+            name: hl(h),
+            y: Object.values(hourRespBkt[String(h)] ?? {}).reduce((s, v) => s + v, 0),
+            drilldown: `jo24h:${h}`,
+          })),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: hours24.map((h) => ({
+            id: `jo24h:${h}`,
+            name: `${hl(h)} — Response Duration`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => ({ name: b, y: hourRespBkt[String(h)]?.[b] ?? 0 })),
+          })),
+        },
+      },
+    };
+
+    const jo25: ChartDef = {
+      id: 'jo-25', filterable: false,
+      title: t('chart_titles_jo.jo-25', '24-Hour Escalated Jobs Distribution → Overdue Duration'),
+      note: t('chart_notes_jo.jo-25', 'Bars show escalated jobs per creation hour. Click any bar to drill into the overdue (delay) duration distribution for that hour.'),
+      formula: 'COUNT(escalated) BY HOUR(created_datetime); drilldown: COUNT(*) BY delay_duration_bucket',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Escalated Jobs' } },
+        series: [{ type: 'column', name: 'Escalated Jobs', color: GREEN,
+          data: mkHourData(hourEscH, 'jo25h'),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: hours24.map((h) => ({
+            id: `jo25h:${h}`,
+            name: `${hl(h)} — Overdue Duration`,
+            type: 'column', color: ORANGE,
+            dataLabels: { enabled: true },
+            data: DUR.map((b) => ({ name: b, y: hourEscBkt[String(h)]?.[b] ?? 0 })),
+          })),
+        },
+      },
+    };
+
+    const jo26: ChartDef = {
+      id: 'jo-26', filterable: false,
+      title: t('chart_titles_jo.jo-26', '24-Hour Jobs Distribution → Top Item Category'),
+      note: t('chart_notes_jo.jo-26', 'Total jobs by hour of day. Click a bar to drill into the top service item categories for that hour.'),
+      formula: 'COUNT(*) BY HOUR(created_datetime); drilldown: COUNT(*) BY service_item_category',
+      options: {
+        chart: { type: 'column' },
+        xAxis: { type: 'category' },
+        yAxis: { min: 0, title: { text: 'Jobs' } },
+        series: [{ type: 'column', name: 'Jobs', color: GREEN,
+          data: mkHourData(hourSlaTot, 'jo26h'),
+          dataLabels: { enabled: true },
+        }],
+        plotOptions: { column: { dataLabels: { enabled: true } } },
+        drilldown: {
+          series: hours24.map((h) => {
+            const catTot = hourCatTot[String(h)] ?? {};
+            const cats = Object.keys(catTot).sort((a, b) => (catTot[b] ?? 0) - (catTot[a] ?? 0));
+            return {
+              id: `jo26h:${h}`,
+              name: `${hl(h)} — Top Item Category`,
+              type: 'column', color: ORANGE,
+              dataLabels: { enabled: true },
+              data: cats.map((cat) => ({ name: cat, y: catTot[cat] ?? 0 })),
+            };
+          }),
+        },
+      },
+    };
+
+    return [jo23, jo24, jo25, jo26];
+  }, [isJo, isCorp, data.summary, t]);
+
   // ── Hotel-level jo-27/jo-28: computed client-side from summary ────────────
   // These charts are pre-built by the finalize route for NEW uploads, but
   // existing DB rows were created before that code landed. We compute them
@@ -5713,6 +5857,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   // The hour-items chart carries code jo-02 but occupies the stored jo-11 grid slot
   const joGridSlotOf = (id: string) => (id === 'jo-02' ? 'jo-11' : id);
   const injectedJoById = new Map([
+    ...hotelJo2326Charts.map((c) => [c.id, c] as [string, ChartDef]),
     ...hotelJo2728Charts.map((c) => [joGridSlotOf(c.id), c] as [string, ChartDef]),
     ...(hotelJo06Chart ? [['jo-06', hotelJo06Chart] as [string, ChartDef]] : []),
   ]);

@@ -8,27 +8,6 @@ import { buildCoRow } from '@/lib/csv/coMapping';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Constructing Intl.DateTimeFormat is expensive; localHour() runs per CSV row during
-// finalize, so the formatter is cached per timezone rather than rebuilt each call.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(tz: string): Intl.DateTimeFormat {
-  let formatter = hourFormatterCache.get(tz);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-    hourFormatterCache.set(tz, formatter);
-  }
-  return formatter;
-}
-
-function localHour(d: Date, tz: string): number {
-  try {
-    const s = getHourFormatter(tz).format(d);
-    const h = parseInt(s, 10);
-    if (!isNaN(h)) return h === 24 ? 0 : h;
-  } catch { /* fall through */ }
-  return d.getUTCHours();
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE    = 1_000;
@@ -1611,7 +1590,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   }
 
   // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
-  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : localHour(d, timezone); })() : null;
+  // JO's CSV source stores created date-time as local wall-clock time already
+  // (not UTC) — read the hour directly, no timezone shift.
+  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getUTCHours(); })() : null;
   if (createdHour !== null) {
     acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
     // track service item count per hour for cjo-22
@@ -1705,7 +1686,7 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
     if (createdAt2) {
       const d2 = new Date(createdAt2);
       if (!isNaN(d2.getTime())) {
-        const h = localHour(d2, timezone);
+        const h = d2.getUTCHours();
         acc.vipHourCount[h] = (acc.vipHourCount[h] ?? 0) + 1;
         if (!acc.vipHourItemCount[h]) acc.vipHourItemCount[h] = {};
         acc.vipHourItemCount[h][item] = (acc.vipHourItemCount[h][item] ?? 0) + 1;
@@ -2407,7 +2388,9 @@ export async function POST(req: NextRequest) {
         const completedWithinSla = typeof deadlineVarianceMinutes === 'number' ? deadlineVarianceMinutes <= 0 : false;
         const isOverdue = !!deadlineAt && ((!completedAt && deadlineAt.getTime() < Date.now()) || (typeof deadlineVarianceMinutes === 'number' && deadlineVarianceMinutes > 0));
         const createdDate = createdAt ? createdAt.toISOString().slice(0, 10) : null;
-        const createdHour = createdAt ? localHour(createdAt, orgTimezone) : null;
+        // MO's CSV source stores created date-time as local wall-clock time already
+        // (not UTC) — read the hour directly, no timezone shift.
+        const createdHour = createdAt ? createdAt.getUTCHours() : null;
         const createdWeek = createdAt ? toWeekKey(createdAt) : null;
         const createdMonth = createdAt ? createdAt.toISOString().slice(0, 7) : null;
         const createdQuarter = createdAt ? `${createdAt.getUTCFullYear()}-Q${Math.floor(createdAt.getUTCMonth() / 3) + 1}` : null;

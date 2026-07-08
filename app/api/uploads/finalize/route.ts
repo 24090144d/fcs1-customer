@@ -8,9 +8,21 @@ import { buildCoRow } from '@/lib/csv/coMapping';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Constructing Intl.DateTimeFormat is expensive; localHour() runs per CSV row during
+// finalize, so the formatter is cached per timezone rather than rebuilt each call.
+const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
+function getHourFormatter(tz: string): Intl.DateTimeFormat {
+  let formatter = hourFormatterCache.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
+    hourFormatterCache.set(tz, formatter);
+  }
+  return formatter;
+}
+
 function localHour(d: Date, tz: string): number {
   try {
-    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const s = getHourFormatter(tz).format(d);
     const h = parseInt(s, 10);
     if (!isNaN(h)) return h === 24 ? 0 : h;
   } catch { /* fall through */ }

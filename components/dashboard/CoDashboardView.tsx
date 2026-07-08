@@ -102,9 +102,23 @@ function parseDate(value: string): Date | null {
   return parseLocalDateKey(value);
 }
 
+// Constructing Intl.DateTimeFormat is expensive; buildCharts/buildCorpCharts call
+// localHour() per-row across many 24-hour bucketing sections (tens of thousands of
+// calls for a single render), so the formatter must be cached per timezone rather
+// than rebuilt on every call — this was the source of a 30s+ render time regression.
+const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
+function getHourFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = hourFormatterCache.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone });
+    hourFormatterCache.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
 function localHour(date: Date, timeZone: string): number {
   try {
-    const text = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone }).format(date);
+    const text = getHourFormatter(timeZone).format(date);
     const hour = parseInt(text, 10);
     if (!Number.isNaN(hour)) return hour === 24 ? 0 : hour;
   } catch {
@@ -1134,7 +1148,6 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
     co41Dd.push({ id: `co41i:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att41Data });
     co42Dd.push({ id: `co42i:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: att42Data });
   });
-
   return [
     makeChartBase(
       'co-01',
@@ -4149,6 +4162,11 @@ export function CoDashboardView({
                 />
               )
             ))}
+            {simpleCharts.length === 0 && longCharts.length === 0 && (
+              <p className="col-span-2 font-mono text-center py-8" style={{ color: themeTokens.dashboard.metaSub, fontSize: '0.75rem' }}>
+                All charts are hidden. Go to <strong>Configuration → CO</strong> and click <strong>Select All</strong> to restore them.
+              </p>
+            )}
           </div>
         </section>
 

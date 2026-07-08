@@ -5,14 +5,28 @@
 
 import { unstable_noStore as noStore } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
+import { getPool } from '@/lib/db/supabaseCompat';
 import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
 import type { CoRow } from '@/types/csv';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
+// Constructing Intl.DateTimeFormat is expensive; the compute*HourMaps functions below
+// call localHour() per-row (potentially tens of thousands of times per request), so the
+// formatter must be cached per timezone rather than rebuilt on every call.
+const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
+function getHourFormatter(tz: string): Intl.DateTimeFormat {
+  let formatter = hourFormatterCache.get(tz);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
+    hourFormatterCache.set(tz, formatter);
+  }
+  return formatter;
+}
+
 function localHour(d: Date, tz: string): number {
   try {
-    const s = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(d);
+    const s = getHourFormatter(tz).format(d);
     const h = parseInt(s, 10);
     if (!Number.isNaN(h)) return h === 24 ? 0 : h;
   } catch {
@@ -21,18 +35,301 @@ function localHour(d: Date, tz: string): number {
   return d.getUTCHours();
 }
 
-async function getOrganizationTimezone(
+const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'im_records']);
+
+/**
+ * Resolve the org timezone live, at request time, so a Configuration →
+ * System Settings change takes effect immediately across all modules
+ * without needing a CSV re-upload or manual backfill.
+ * Stage 1: organization_id UUID from the module's own record table (reliable),
+ * resolved in a single JOIN round trip.
+ * Stage 2: chain-code match on organizations.organization_code.
+ * Stage 3: hard default (UTC+8) per product decision.
+ */
+async function resolveLiveTimezone(
   supabase: ReturnType<typeof createAdminClient>,
+  table: 'jo_records' | 'mo_records' | 'co_records' | 'im_records',
+  hotelCodes: string[],
   chainCode?: string | null,
 ): Promise<string> {
+  // `table` is always one of our own literal union values, never user input — safe to interpolate
+  // after this allowlist check, and required here since the compat query builder has no join support.
+  if (hotelCodes.length > 0 && TIMEZONE_TABLES.has(table)) {
+    try {
+      const pool = getPool();
+      const joined = await pool.query<{ timezone: string | null }>(
+        `SELECT o.timezone FROM "${table}" r JOIN organizations o ON o.id = r.organization_id WHERE r.hotel_code = ANY($1) AND r.organization_id IS NOT NULL LIMIT 1`,
+        [hotelCodes],
+      );
+      if (joined.rows[0]?.timezone) return joined.rows[0].timezone;
+    } catch {
+      // fall through to chain-code match
+    }
+  }
   const code = String(chainCode ?? '').trim().toUpperCase();
-  if (!code) return 'UTC';
-  const result = await supabase
-    .from('organizations')
-    .select('timezone')
-    .ilike('organization_code', code)
-    .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
-  return result.data?.timezone ?? 'UTC';
+  if (code) {
+    const tzRes = await supabase
+      .from('organizations')
+      .select('timezone')
+      .ilike('organization_code', code)
+      .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
+    if (tzRes.data?.timezone) return tzRes.data.timezone;
+  }
+  return 'Asia/Hong_Kong';
+}
+
+function parseDurationMinutes(raw: unknown): number | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const hh = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const ss = m[3] ? parseInt(m[3], 10) : 0;
+    return hh * 60 + mm + Math.floor(ss / 60);
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function joDurBucket(mins: number): string {
+  if (mins < 15) return '< 15 min';
+  if (mins < 30) return '15–30 min';
+  if (mins < 60) return '30–60 min';
+  if (mins < 120) return '1–2 h';
+  if (mins < 240) return '2–4 h';
+  if (mins < 480) return '4–8 h';
+  return '8+ h';
+}
+
+function isVipLike(v: string | null | undefined): boolean {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return !!s && s !== '-';
+}
+
+type JoHourSourceRow = {
+  job_status: string | null;
+  service_item_category: string | null;
+  service_item: string | null;
+  delay_duration: string | number | null;
+  escalation_group: string | null;
+  vip_code: string | null;
+  created_datetime: string | null;
+  acknowledged_datetime: string | null;
+  completed_datetime: string | null;
+};
+
+/** Recomputes every JO 24-hour-distribution map live, from raw jo_records, using the current org timezone. */
+function computeJoHourMaps(rows: JoHourSourceRow[], tz: string): Partial<HotelSummary> {
+  const hourCompleted: Record<string, number> = {};
+  const hourCompBkt: Record<string, Record<string, number>> = {};
+  const hourAcknowledged: Record<string, number> = {};
+  const hourRespBkt: Record<string, Record<string, number>> = {};
+  const hourEsc: Record<string, number> = {};
+  const hourEscBkt: Record<string, Record<string, number>> = {};
+  const hourSlaTotal: Record<string, number> = {};
+  const hourSlaComp: Record<string, number> = {};
+  const hourSlaCatTotal: Record<string, Record<string, number>> = {};
+  const hourSlaCatComp: Record<string, Record<string, number>> = {};
+  const statusHourMap: Record<string, Record<string, number>> = {};
+  const escGroupHourMap: Record<string, Record<string, number>> = {};
+  const overdueCatHourMap: Record<string, Record<string, number>> = {};
+  const catHourMap: Record<string, Record<string, number>> = {};
+  const hourDelayed: Record<string, number> = {};
+  const hourDelayedItem: Record<string, Record<string, number>> = {};
+  const hourTimeout: Record<string, number> = {};
+  const hourItemCount: Record<string, Record<string, number>> = {};
+  const vipHourCount: Record<string, number> = {};
+  const vipHourItemCount: Record<string, Record<string, number>> = {};
+
+  for (const r of rows) {
+    const statusRaw = (r.job_status ?? '').trim().toLowerCase();
+    const status = r.job_status ?? 'Unknown';
+    const category = r.service_item_category ?? 'Unknown';
+    const item = r.service_item ?? 'Unknown';
+    const completedFlag = statusRaw.includes('complete') || statusRaw.includes('close') || statusRaw.includes('done') || statusRaw.includes('finish');
+    const timeoutFlag = statusRaw.includes('timeout');
+    const delayMin = parseDurationMinutes(r.delay_duration);
+    const escalatedFlag = !!(r.escalation_group && String(r.escalation_group).trim()) || (delayMin !== null && delayMin > 0);
+
+    const createdAt = r.created_datetime ? new Date(r.created_datetime) : null;
+    const ackAt = r.acknowledged_datetime ? new Date(r.acknowledged_datetime) : null;
+    const completedAt = r.completed_datetime ? new Date(r.completed_datetime) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) continue;
+    const h = String(localHour(createdAt, tz));
+
+    hourSlaTotal[h] = (hourSlaTotal[h] ?? 0) + 1;
+    if (!hourItemCount[h]) hourItemCount[h] = {};
+    hourItemCount[h][item] = (hourItemCount[h][item] ?? 0) + 1;
+
+    let resolutionMin: number | null = null;
+    if (completedAt && !Number.isNaN(completedAt.getTime()) && completedAt.getTime() >= createdAt.getTime()) {
+      resolutionMin = (completedAt.getTime() - createdAt.getTime()) / 60_000;
+    }
+
+    if (completedFlag) {
+      hourCompleted[h] = (hourCompleted[h] ?? 0) + 1;
+      if (resolutionMin !== null) {
+        const bkt = joDurBucket(resolutionMin);
+        if (!hourCompBkt[h]) hourCompBkt[h] = {};
+        hourCompBkt[h][bkt] = (hourCompBkt[h][bkt] ?? 0) + 1;
+      }
+      const isSlaCompliant = !(delayMin !== null && delayMin > 0);
+      if (isSlaCompliant) hourSlaComp[h] = (hourSlaComp[h] ?? 0) + 1;
+      if (!hourSlaCatTotal[h]) hourSlaCatTotal[h] = {};
+      hourSlaCatTotal[h][category] = (hourSlaCatTotal[h][category] ?? 0) + 1;
+      if (isSlaCompliant) {
+        if (!hourSlaCatComp[h]) hourSlaCatComp[h] = {};
+        hourSlaCatComp[h][category] = (hourSlaCatComp[h][category] ?? 0) + 1;
+      }
+    }
+
+    if (ackAt && !Number.isNaN(ackAt.getTime()) && ackAt.getTime() >= createdAt.getTime()) {
+      const respMin = (ackAt.getTime() - createdAt.getTime()) / 60_000;
+      hourAcknowledged[h] = (hourAcknowledged[h] ?? 0) + 1;
+      const bkt = joDurBucket(respMin);
+      if (!hourRespBkt[h]) hourRespBkt[h] = {};
+      hourRespBkt[h][bkt] = (hourRespBkt[h][bkt] ?? 0) + 1;
+    }
+
+    if (escalatedFlag) {
+      hourEsc[h] = (hourEsc[h] ?? 0) + 1;
+      if (delayMin !== null) {
+        const bkt = joDurBucket(delayMin);
+        if (!hourEscBkt[h]) hourEscBkt[h] = {};
+        hourEscBkt[h][bkt] = (hourEscBkt[h][bkt] ?? 0) + 1;
+      }
+    }
+
+    const statusKey = (status || 'Unknown').trim();
+    if (!statusHourMap[statusKey]) statusHourMap[statusKey] = {};
+    statusHourMap[statusKey][h] = (statusHourMap[statusKey][h] ?? 0) + 1;
+
+    const escGroupKey = (r.escalation_group ?? '').toString().trim();
+    if (escGroupKey) {
+      if (!escGroupHourMap[escGroupKey]) escGroupHourMap[escGroupKey] = {};
+      escGroupHourMap[escGroupKey][h] = (escGroupHourMap[escGroupKey][h] ?? 0) + 1;
+    }
+
+    if (!catHourMap[category]) catHourMap[category] = {};
+    catHourMap[category][h] = (catHourMap[category][h] ?? 0) + 1;
+
+    if (delayMin !== null && delayMin > 0) {
+      if (!overdueCatHourMap[category]) overdueCatHourMap[category] = {};
+      overdueCatHourMap[category][h] = (overdueCatHourMap[category][h] ?? 0) + 1;
+      hourDelayed[h] = (hourDelayed[h] ?? 0) + 1;
+      if (!hourDelayedItem[h]) hourDelayedItem[h] = {};
+      hourDelayedItem[h][item] = (hourDelayedItem[h][item] ?? 0) + 1;
+    }
+
+    if (timeoutFlag) hourTimeout[h] = (hourTimeout[h] ?? 0) + 1;
+
+    if (isVipLike(r.vip_code)) {
+      vipHourCount[h] = (vipHourCount[h] ?? 0) + 1;
+      if (!vipHourItemCount[h]) vipHourItemCount[h] = {};
+      vipHourItemCount[h][item] = (vipHourItemCount[h][item] ?? 0) + 1;
+    }
+  }
+
+  return {
+    jo_hour_comp_map: hourCompleted,
+    jo_hour_comp_bkt_map: hourCompBkt,
+    jo_hour_resp_bkt_map: hourRespBkt,
+    jo_hour_esc_map: hourEsc,
+    jo_hour_esc_bkt_map: hourEscBkt,
+    jo_hour_sla_total_map: hourSlaTotal,
+    jo_hour_sla_comp_map: hourSlaComp,
+    jo_hour_sla_cat_total_map: hourSlaCatTotal,
+    jo_hour_sla_cat_comp_map: hourSlaCatComp,
+    jo_status_hour_map: statusHourMap,
+    jo_escgroup_hour_map: escGroupHourMap,
+    jo_overdue_cat_hour_map: overdueCatHourMap,
+    jo_cat_hour_map: catHourMap,
+    jo_hour_delayed_map: hourDelayed,
+    jo_hour_delayed_item_map: hourDelayedItem,
+    jo_hour_timeout_map: hourTimeout,
+    jo_hour_item_map: hourItemCount,
+    jo_vip_hour_map: vipHourCount,
+    jo_vip_hour_item_map: vipHourItemCount,
+  };
+}
+
+type MoHourSourceRow = {
+  created_datetime: string | null;
+  resolution_minutes: number | string | null;
+  defect: string | null;
+  asset: string | null;
+  job_order: string | null;
+};
+
+/** Recomputes MO's 24-hour-distribution maps live, from raw mo_records, using the current org timezone. */
+function computeMoHourMaps(rows: MoHourSourceRow[], tz: string): Partial<HotelSummary> {
+  const hourMap: Record<string, number> = {};
+  const item24hHourMap: Record<string, Record<string, number>> = {};
+  for (const r of rows) {
+    if (!r.created_datetime) continue;
+    const d = new Date(r.created_datetime);
+    if (Number.isNaN(d.getTime())) continue;
+    const h = String(localHour(d, tz));
+    hourMap[h] = (hourMap[h] ?? 0) + 1;
+    const resMin = r.resolution_minutes !== null ? Number(r.resolution_minutes) : null;
+    if (resMin !== null && Number.isFinite(resMin) && resMin >= 1440) {
+      const item = (r.defect && r.defect.trim()) || (r.asset && r.asset.trim()) || (r.job_order && r.job_order.trim()) || 'Unknown';
+      if (!item24hHourMap[item]) item24hHourMap[item] = {};
+      item24hHourMap[item][h] = (item24hHourMap[item][h] ?? 0) + 1;
+    }
+  }
+  return { mo_hour_map: hourMap, mo_item_24h_hour_map: item24hHourMap };
+}
+
+type ImHourSourceRow = {
+  department: string | null;
+  incident_category: string | null;
+  incident_item_name: string | null;
+  vip_code: string | null;
+  created_date: string | null;
+  incident_datetime: string | null;
+};
+
+/** Recomputes hotel-level IM 24-hour-distribution maps live, from raw im_records, using the current org timezone. */
+function computeImHourMaps(rows: ImHourSourceRow[], tz: string): Partial<HotelSummary> {
+  const hourMap: Record<string, number> = {};
+  const hourCategoryMap: Record<string, Record<string, number>> = {};
+  const hourDeptMap: Record<string, Record<string, number>> = {};
+  const hourCategoryItemMap: Record<string, Record<string, Record<string, number>>> = {};
+  const hourDeptItemMap: Record<string, Record<string, Record<string, number>>> = {};
+  const vipHourMap: Record<string, number> = {};
+  for (const r of rows) {
+    const rawDate = r.incident_datetime ?? r.created_date;
+    if (!rawDate) continue;
+    const d = new Date(rawDate);
+    if (Number.isNaN(d.getTime())) continue;
+    const h = String(localHour(d, tz));
+    const cat = r.incident_category ?? 'Unknown';
+    const dept = r.department ?? 'Unknown';
+    const item = r.incident_item_name ?? 'Unknown';
+    hourMap[h] = (hourMap[h] ?? 0) + 1;
+    if (!hourCategoryMap[h]) hourCategoryMap[h] = {};
+    hourCategoryMap[h][cat] = (hourCategoryMap[h][cat] ?? 0) + 1;
+    if (!hourDeptMap[h]) hourDeptMap[h] = {};
+    hourDeptMap[h][dept] = (hourDeptMap[h][dept] ?? 0) + 1;
+    if (!hourCategoryItemMap[h]) hourCategoryItemMap[h] = {};
+    if (!hourCategoryItemMap[h][cat]) hourCategoryItemMap[h][cat] = {};
+    hourCategoryItemMap[h][cat][item] = (hourCategoryItemMap[h][cat][item] ?? 0) + 1;
+    if (!hourDeptItemMap[h]) hourDeptItemMap[h] = {};
+    if (!hourDeptItemMap[h][dept]) hourDeptItemMap[h][dept] = {};
+    hourDeptItemMap[h][dept][item] = (hourDeptItemMap[h][dept][item] ?? 0) + 1;
+    if (isVipLike(r.vip_code)) vipHourMap[h] = (vipHourMap[h] ?? 0) + 1;
+  }
+  return {
+    im_hour_map: hourMap,
+    im_hour_category_map: hourCategoryMap,
+    im_hour_dept_map: hourDeptMap,
+    im_hour_category_item_map: hourCategoryItemMap,
+    im_hour_dept_item_map: hourDeptItemMap,
+    im_vip_hour_map: vipHourMap,
+  };
 }
 
 function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' | 'co_dashboard_json' {
@@ -94,18 +391,22 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
     }
     const data = result.data?.generated_json ?? null;
     if (!data) return null;
-    const timezone = await getOrganizationTimezone(supabase, data.meta.chain_code);
+    const isMo = normalizedModule === 'mo';
+    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : 'im_records';
+    const hotelUpper = hotelCode ? hotelCode.toUpperCase() : (data.meta.hotel_code ?? '').toUpperCase();
+    const timezone = await resolveLiveTimezone(supabase, recordTable, hotelUpper ? [hotelUpper] : [], data.meta.chain_code);
 
     if (isJo && hotelCode) {
+      type JoLiveKpiRow = JoHourSourceRow & { quantity: number | string | null };
+      const joResult = await supabase
+        .from('jo_records')
+        .select('quantity, job_status, service_item_category, service_item, delay_duration, escalation_group, vip_code, created_datetime, acknowledged_datetime, completed_datetime')
+        .eq('hotel_code', hotelUpper) as unknown as SbResult<JoLiveKpiRow[]>;
+      const joRows = joResult.data ?? [];
       const currentKpis = Array.isArray(data.kpis) ? [...data.kpis] : [];
       const totalQtyIdx = currentKpis.findIndex((k) => k.id === 'kpi_10');
       if (totalQtyIdx >= 0) {
-        type QtyRow = { quantity: number | string | null };
-        const qtyResult = await supabase
-          .from('jo_records')
-          .select('quantity')
-          .eq('hotel_code', hotelCode.toUpperCase()) as unknown as SbResult<QtyRow[]>;
-        const totalQuantity = (qtyResult.data ?? []).reduce((sum, row) => {
+        const totalQuantity = joRows.reduce((sum, row) => {
           const num = Number(row.quantity ?? 0);
           return sum + (Number.isFinite(num) ? num : 0);
         }, 0);
@@ -115,15 +416,48 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
           unit: 'qty',
           fmt: 'integer',
         };
-        return {
-          ...data,
-          meta: {
-            ...data.meta,
-            timezone,
-          },
-          kpis: currentKpis,
-        } as DashboardJson;
       }
+      const hourMaps = joRows.length > 0 ? computeJoHourMaps(joRows, timezone) : {};
+      return {
+        ...data,
+        meta: {
+          ...data.meta,
+          timezone,
+        },
+        kpis: currentKpis,
+        summary: { ...data.summary, ...hourMaps },
+      } as DashboardJson;
+    }
+
+    if (isMo && hotelCode) {
+      let moResult = await supabase
+        .from('mo_records')
+        .select('created_datetime, resolution_minutes, defect, asset, job_order')
+        .eq('hotel_code', hotelUpper)
+        .eq('type', 'MO') as unknown as SbResult<MoHourSourceRow[]>;
+      let moRows = moResult.data ?? [];
+      if (moRows.length === 0) {
+        moResult = await supabase
+          .from('mo_records')
+          .select('created_datetime, resolution_minutes, defect, asset, job_order')
+          .eq('hotel_code', hotelUpper) as unknown as SbResult<MoHourSourceRow[]>;
+        moRows = moResult.data ?? [];
+      }
+      const hourMaps = moRows.length > 0 ? computeMoHourMaps(moRows, timezone) : {};
+      const moData = data as MoDashboardJson;
+      const summaryByType = moData.summary_by_type ? { ...moData.summary_by_type } : undefined;
+      if (summaryByType?.MO) {
+        summaryByType.MO = { ...summaryByType.MO, ...hourMaps };
+      }
+      return {
+        ...data,
+        meta: {
+          ...data.meta,
+          timezone,
+        },
+        summary: { ...data.summary, ...hourMaps },
+        ...(summaryByType ? { summary_by_type: summaryByType } : {}),
+      } as MoDashboardJson;
     }
 
     if (isCo && hotelCode) {
@@ -134,6 +468,24 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
           timezone,
         },
       } as CoDashboardJson;
+    }
+
+    // IM (default)
+    if (hotelCode) {
+      const imResult = await supabase
+        .from('im_records')
+        .select('department, incident_category, incident_item_name, vip_code, created_date, incident_datetime')
+        .eq('hotel_code', hotelUpper) as unknown as SbResult<ImHourSourceRow[]>;
+      const imRows = imResult.data ?? [];
+      const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows, timezone) : {};
+      return {
+        ...data,
+        meta: {
+          ...data.meta,
+          timezone,
+        },
+        summary: { ...data.summary, ...hourMaps },
+      } as DashboardJson;
     }
     return {
       ...data,
@@ -490,9 +842,11 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
   if (!chainCode) return { data: null, chainEntries: [] };
   try {
     const supabase = createAdminClient();
-    const orgTimezone = await getOrganizationTimezone(supabase, chainCode);
-    const isMo = String(moduleCode ?? '').toLowerCase() === 'mo';
-    const isCo = String(moduleCode ?? '').toLowerCase() === 'co';
+    const normalizedModule = String(moduleCode ?? '').toLowerCase();
+    const isMo = normalizedModule === 'mo';
+    const isCo = normalizedModule === 'co';
+    const isJo = normalizedModule === 'jo';
+    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : 'im_records';
     type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
     const rowsResult = await supabase
@@ -540,9 +894,16 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
       };
     }).sort((a, b) => a.hotel_code.localeCompare(b.hotel_code));
 
+    // Resolve the org timezone live, at request time, from the module's own record
+    // table (organization_id UUID, reliable), falling back to chain-code match, then
+    // a hard default. This is what makes a Configuration → System Settings timezone
+    // change take effect immediately across JO/MO/CO/IM without a CSV re-upload.
+    const allHotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
+    const orgTimezone = await resolveLiveTimezone(supabase, recordTable, allHotelCodes, chainCode);
+
     // Build accurate department->source_of_complaint and department->item maps
     // from live IM records so corp charts remain correct even for legacy summaries.
-    if (!isMo && !isCo && String(moduleCode ?? '').toLowerCase() !== 'jo') {
+    if (!isMo && !isCo && !isJo) {
       type SrcRow = {
         hotel_code: string | null;
         department: string | null;
@@ -553,15 +914,10 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         created_date: string | null;
         incident_datetime: string | null;
         investigation_updated_on_2: string | null;
+        organization_id: string | null;
       };
       const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
       if (hotelCodes.length > 0) {
-        const orgRes = await supabase
-          .from('organizations')
-          .select('timezone')
-          .ilike('organization_code', chainCode.toUpperCase())
-          .maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
-        const orgTimezone = orgRes.data?.timezone ?? 'UTC';
         const mapByHotel: Record<string, Record<string, Record<string, number>>> = {};
         const deptCategoryByHotel: Record<string, Record<string, Record<string, number>>> = {};
         const itemByHotel: Record<string, Record<string, Record<string, number>>> = {};
@@ -575,9 +931,10 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         const bookingByHotel: Record<string, Record<string, number>> = {};
         const batch = await supabase
           .from('im_records')
-          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_2')
+          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_2, organization_id')
           .in('hotel_code', hotelCodes) as unknown as SbResult<SrcRow[]>;
         const rows = batch.data ?? [];
+        // orgTimezone is resolved live above (shared across all modules in this request).
         for (const r of rows) {
           const hotel = (r.hotel_code ?? '').toUpperCase();
           if (!hotel) continue;
@@ -642,20 +999,22 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         }
 
         for (const entry of chainEntries) {
+          // Non-timezone-dependent maps: always update from live records.
           entry.summary.dept_source_map = mapByHotel[entry.hotel_code] ?? entry.summary.dept_source_map ?? {};
           entry.summary.dept_category_map = deptCategoryByHotel[entry.hotel_code] ?? entry.summary.dept_category_map ?? {};
           entry.summary.dept_item_map = itemByHotel[entry.hotel_code] ?? entry.summary.dept_item_map ?? {};
           entry.summary.category_item_map = categoryItemByHotel[entry.hotel_code] ?? entry.summary.category_item_map ?? {};
-          entry.summary.im_hour_map = hourByHotel[entry.hotel_code] ?? entry.summary.im_hour_map ?? {};
-          entry.summary.im_hour_category_map = hourCategoryByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_map ?? {};
-          entry.summary.im_hour_dept_map = hourDeptByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_map ?? {};
-          entry.summary.im_hour_category_item_map = hourCategoryItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_item_map ?? {};
-          entry.summary.im_hour_dept_item_map = hourDeptItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_item_map ?? {};
           const durations = itemDurationByHotel[entry.hotel_code] ?? {};
           entry.summary.im_item_duration_map = Object.fromEntries(
             Object.entries(durations).map(([item, v]) => [item, v.count > 0 ? v.sum / v.count : 0]),
           );
           entry.summary.booking_map = bookingByHotel[entry.hotel_code] ?? entry.summary.booking_map ?? {};
+          // Timezone-dependent hour maps: recomputed live above using the current org timezone.
+          entry.summary.im_hour_map = hourByHotel[entry.hotel_code] ?? entry.summary.im_hour_map ?? {};
+          entry.summary.im_hour_category_map = hourCategoryByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_map ?? {};
+          entry.summary.im_hour_dept_map = hourDeptByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_map ?? {};
+          entry.summary.im_hour_category_item_map = hourCategoryItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_item_map ?? {};
+          entry.summary.im_hour_dept_item_map = hourDeptItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_item_map ?? {};
         }
       }
     } else if (String(moduleCode ?? '').toLowerCase() === 'jo') {
@@ -733,15 +1092,6 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
       if (hotelCodes.length > 0) {
         type DurRow = { hotel_code: string | null; job_status: string | null; actual_duration: number | null };
         const JO_DUR_ORDER = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
-        function joDurBucket(min: number): string {
-          if (min < 15) return '< 15 min';
-          if (min < 30) return '15–30 min';
-          if (min < 60) return '30–60 min';
-          if (min < 120) return '1–2 h';
-          if (min < 240) return '2–4 h';
-          if (min < 480) return '4–8 h';
-          return '8+ h';
-        }
         const durBatch = await supabase
           .from('jo_records')
           .select('hotel_code, job_status, actual_duration')
@@ -761,6 +1111,27 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           entry.summary.jo_status_dur_bkt_map = statusDurByHotel[entry.hotel_code] ?? entry.summary.jo_status_dur_bkt_map ?? {};
         }
         void JO_DUR_ORDER; // referenced in DashboardClient
+      }
+      // 24-hour distribution maps (jo-01/02/06/27/28, cjo-12/13/14/22..28): live from jo_records, per hotel.
+      if (hotelCodes.length > 0) {
+        type JoHourRow = JoHourSourceRow & { hotel_code: string | null };
+        const hourBatch = await supabase
+          .from('jo_records')
+          .select('hotel_code, job_status, service_item_category, service_item, delay_duration, escalation_group, vip_code, created_datetime, acknowledged_datetime, completed_datetime')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<JoHourRow[]>;
+        const rowsByHotel: Record<string, JoHourSourceRow[]> = {};
+        for (const r of hourBatch.data ?? []) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          if (!rowsByHotel[hotel]) rowsByHotel[hotel] = [];
+          rowsByHotel[hotel].push(r);
+        }
+        for (const entry of chainEntries) {
+          const hotelRows = rowsByHotel[entry.hotel_code];
+          if (hotelRows && hotelRows.length > 0) {
+            Object.assign(entry.summary, computeJoHourMaps(hotelRows, orgTimezone));
+          }
+        }
       }
     } else if (String(moduleCode ?? '').toLowerCase() === 'im') {
       type JoLiveRow = {
@@ -839,6 +1210,30 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
             entry.summary_by_type[maintenanceType].location_map =
               locationByHotel[entry.hotel_code] ?? entry.summary_by_type[maintenanceType].location_map ?? {};
           }
+        }
+      }
+
+      // 24-hour distribution maps (mo-10/11, cmo-10/11): live from mo_records, per hotel.
+      // CO is skipped here — CoDashboardView rebuilds all its charts client-side from raw rows already.
+      if (isMo && hotelCodes.length > 0) {
+        const hourBatch = await supabase
+          .from('mo_records')
+          .select('hotel_code, created_datetime, resolution_minutes, defect, asset, job_order')
+          .in('hotel_code', hotelCodes)
+          .eq('type', 'MO') as unknown as SbResult<(MoHourSourceRow & { hotel_code: string | null })[]>;
+        const rowsByHotel: Record<string, MoHourSourceRow[]> = {};
+        for (const r of hourBatch.data ?? []) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          if (!rowsByHotel[hotel]) rowsByHotel[hotel] = [];
+          rowsByHotel[hotel].push(r);
+        }
+        for (const entry of chainEntries) {
+          const hotelRows = rowsByHotel[entry.hotel_code];
+          if (!hotelRows || hotelRows.length === 0) continue;
+          const hourMaps = computeMoHourMaps(hotelRows, orgTimezone);
+          Object.assign(entry.summary, hourMaps);
+          if (entry.summary_by_type?.MO) Object.assign(entry.summary_by_type.MO, hourMaps);
         }
       }
 

@@ -570,7 +570,9 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
       const dayKey   = d.toISOString().slice(0, 10);
       const monthKey = d.toISOString().slice(0, 7);
       const wd       = d.getDay();
-      const hr       = localHour(d, timezone);
+      // IM's CSV source stores created/incident date-time as local wall-clock time
+      // already (not UTC) — read the hour directly, no timezone shift.
+      const hr       = d.getUTCHours();
       const wkKey    = toWeekKey(d);
 
       if (!acc.dailyMap[dayKey]) acc.dailyMap[dayKey] = {

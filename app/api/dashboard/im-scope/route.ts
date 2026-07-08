@@ -16,7 +16,6 @@ type ImRow = {
   department: string | null;
   room_no: string | null;
   incident_location: string | null;
-  organization_id: string | null;
 };
 
 type DailyBucket = {
@@ -47,29 +46,6 @@ function toDateOnly(v: string | null | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-// Constructing Intl.DateTimeFormat is expensive; localHour() runs per-row for every
-// request here, so the formatter is cached per timezone rather than rebuilt each call.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(tz: string): Intl.DateTimeFormat {
-  let formatter = hourFormatterCache.get(tz);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-    hourFormatterCache.set(tz, formatter);
-  }
-  return formatter;
-}
-
-function localHour(d: Date, tz: string): number {
-  try {
-    const s = getHourFormatter(tz).format(d);
-    const h = parseInt(s, 10);
-    if (!Number.isNaN(h)) return h === 24 ? 0 : h;
-  } catch {
-    // fall through
-  }
-  return d.getUTCHours();
-}
-
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -84,38 +60,16 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const orgRes = await supabase
-      .from('organizations')
-      .select('timezone')
-      .ilike('organization_code', chain)
-      .maybeSingle() as unknown as { data: { timezone: string | null } | null; error: { message: string } | null };
 
     const q = await supabase
       .from('im_records')
-      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location, organization_id')
+      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location')
       .eq('chain_code', chain)
       .eq('hotel_code', hotel) as unknown as { data: ImRow[] | null; error: { message: string } | null };
 
     if (q.error) {
       return NextResponse.json({ error: q.error.message }, { status: 500 });
     }
-
-    // Stage 1: chain-code match (authoritative — matches Configuration → System Settings).
-    // Stage 2: organization_id from this hotel's own records, as a fallback.
-    // Stage 3: hard default.
-    let orgTimezone = orgRes.data?.timezone ?? null;
-    if (!orgTimezone) {
-      const firstOrgId = (q.data ?? []).find((r) => r.organization_id)?.organization_id ?? null;
-      if (firstOrgId) {
-        const fallbackTz = await supabase
-          .from('organizations')
-          .select('timezone')
-          .eq('id', firstOrgId)
-          .maybeSingle() as unknown as { data: { timezone: string | null } | null };
-        orgTimezone = fallbackTz.data?.timezone ?? null;
-      }
-    }
-    orgTimezone = orgTimezone ?? 'Asia/Hong_Kong';
 
     const rows = (q.data ?? []).filter((r) => {
       const d = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
@@ -308,7 +262,9 @@ export async function GET(req: NextRequest) {
       const dept = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
       const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
       if (!dt || Number.isNaN(dt.getTime())) continue;
-      const h = localHour(dt, orgTimezone);
+      // IM's CSV source stores created/incident date-time as local wall-clock time
+      // already (not UTC) — read the hour directly, no timezone shift.
+      const h = dt.getUTCHours();
       hour_map[h] = (hour_map[h] ?? 0) + 1;
       const hourKey = String(h);
       if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};

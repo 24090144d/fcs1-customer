@@ -297,8 +297,14 @@ type ImHourSourceRow = {
   incident_datetime: string | null;
 };
 
-/** Recomputes hotel-level IM 24-hour-distribution maps live, from raw im_records, using the current org timezone. */
-function computeImHourMaps(rows: ImHourSourceRow[], tz: string): Partial<HotelSummary> {
+/**
+ * Recomputes hotel-level IM 24-hour-distribution maps live, from raw im_records.
+ * IM's CSV source already provides created/incident date-time as local wall-clock
+ * time (not UTC), and that value is stored as-is — so the hour is read directly
+ * via getUTCHours() with no timezone conversion. Applying a timezone shift here
+ * would double-convert and produce the wrong hour.
+ */
+function computeImHourMaps(rows: ImHourSourceRow[]): Partial<HotelSummary> {
   const hourMap: Record<string, number> = {};
   const hourCategoryMap: Record<string, Record<string, number>> = {};
   const hourDeptMap: Record<string, Record<string, number>> = {};
@@ -310,7 +316,7 @@ function computeImHourMaps(rows: ImHourSourceRow[], tz: string): Partial<HotelSu
     if (!rawDate) continue;
     const d = new Date(rawDate);
     if (Number.isNaN(d.getTime())) continue;
-    const h = String(localHour(d, tz));
+    const h = String(d.getUTCHours());
     const cat = r.incident_category ?? 'Unknown';
     const dept = r.department ?? 'Unknown';
     const item = r.incident_item_name ?? 'Unknown';
@@ -482,7 +488,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
         .select('department, incident_category, incident_item_name, vip_code, created_date, incident_datetime')
         .eq('hotel_code', hotelUpper) as unknown as SbResult<ImHourSourceRow[]>;
       const imRows = imResult.data ?? [];
-      const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows, timezone) : {};
+      const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows) : {};
       return {
         ...data,
         meta: {
@@ -966,7 +972,9 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           if (rawDate) {
             const d = new Date(rawDate);
             if (!Number.isNaN(d.getTime())) {
-              const hour = String(localHour(d, orgTimezone));
+              // IM's CSV source stores created/incident date-time as local wall-clock
+              // time already (not UTC) — read the hour directly, no timezone shift.
+              const hour = String(d.getUTCHours());
               if (!hourByHotel[hotel]) hourByHotel[hotel] = {};
               hourByHotel[hotel][hour] = (hourByHotel[hotel][hour] ?? 0) + 1;
               if (!hourCategoryByHotel[hotel]) hourCategoryByHotel[hotel] = {};

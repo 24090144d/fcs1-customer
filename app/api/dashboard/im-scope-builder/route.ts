@@ -46,29 +46,6 @@ function toDateOnly(v: string | null | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-// Constructing Intl.DateTimeFormat is expensive; localHour() runs per-row for every
-// request here, so the formatter is cached per timezone rather than rebuilt each call.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(tz: string): Intl.DateTimeFormat {
-  let formatter = hourFormatterCache.get(tz);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-    hourFormatterCache.set(tz, formatter);
-  }
-  return formatter;
-}
-
-function localHour(d: Date, tz: string): number {
-  try {
-    const s = getHourFormatter(tz).format(d);
-    const h = parseInt(s, 10);
-    if (!Number.isNaN(h)) return h === 24 ? 0 : h;
-  } catch {
-    // fall through
-  }
-  return d.getUTCHours();
-}
-
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -82,12 +59,6 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const orgRes = await supabase
-      .from('organizations')
-      .select('timezone')
-      .eq('id', organizationId)
-      .maybeSingle() as unknown as { data: { timezone: string | null } | null; error: { message: string } | null };
-    const orgTimezone = orgRes.data?.timezone ?? 'Asia/Hong_Kong';
 
     const q = await supabase
       .from('im_records')
@@ -287,7 +258,9 @@ export async function GET(req: NextRequest) {
       const dept = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
       const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
       if (!dt || Number.isNaN(dt.getTime())) continue;
-      const h = localHour(dt, orgTimezone);
+      // IM's CSV source stores created/incident date-time as local wall-clock time
+      // already (not UTC) — read the hour directly, no timezone shift.
+      const h = dt.getUTCHours();
       hour_map[h] = (hour_map[h] ?? 0) + 1;
       const hourKey = String(h);
       if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};

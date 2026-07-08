@@ -574,6 +574,22 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney', 'Pacific/Auckland',
 ];
 
+/** e.g. "Asia/Hong_Kong" -> "UTC+8", "Asia/Kolkata" -> "UTC+5:30" */
+function getUtcOffsetLabel(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' }).formatToParts(new Date());
+    const offset = parts.find(p => p.type === 'timeZoneName')?.value ?? '';
+    return offset.replace('GMT', 'UTC') || 'UTC+0';
+  } catch {
+    return '';
+  }
+}
+
+function timezoneOptionLabel(tz: string): string {
+  const offset = getUtcOffsetLabel(tz);
+  return offset ? `${tz} (${offset})` : tz;
+}
+
 function SystemSettingsPanel({ pal }: { pal: Palette }) {
   const [timezone, setTimezone] = useState('UTC');
   const [orgName, setOrgName]   = useState('');
@@ -657,7 +673,7 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
               }}
             >
               {COMMON_TIMEZONES.map(tz => (
-                <option key={tz} value={tz}>{tz}</option>
+                <option key={tz} value={tz}>{timezoneOptionLabel(tz)}</option>
               ))}
             </select>
           )}

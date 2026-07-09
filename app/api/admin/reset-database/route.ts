@@ -159,6 +159,28 @@ export async function POST(req: Request) {
       } catch { /* non-critical */ }
     }
 
+    // A full (module=ALL) reset truncates `organizations` too, and every CSV
+    // upload depends on at least one row existing there (see
+    // app/api/uploads/create-job/route.ts's resolveOrganizationId fallback).
+    // Re-seed the default org immediately so the app isn't left in a state
+    // where no upload can succeed until someone notices and reseeds by hand.
+    let orgReseeded = false;
+    if (tables.includes('organizations')) {
+      const fallbackCode = (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase();
+      const fallbackName = process.env.CUSTOMER_NAME ?? 'Default Organization';
+      try {
+        await pool.query(
+          `INSERT INTO organizations (organization_code, organization_name, timezone)
+           VALUES ($1, $2, 'UTC')
+           ON CONFLICT (organization_code) DO UPDATE SET organization_name = EXCLUDED.organization_name`,
+          [fallbackCode, fallbackName],
+        );
+        orgReseeded = true;
+      } catch (e) {
+        console.error('[reset-database] Failed to reseed default organization:', e instanceof Error ? e.message : e);
+      }
+    }
+
     const label = module === 'ALL' ? 'All modules' : `${module} module`;
     return NextResponse.json({
       ok: true,
@@ -166,7 +188,8 @@ export async function POST(req: Request) {
       truncated_tables: tables.length,
       vacuumed_tables:  vacuumed,
       identity_reset:   identityReset,
-      message: `${label} reset completed — ${tables.length} tables truncated${vacuumed > 0 ? `, ${vacuumed} vacuumed` : ''}.`,
+      org_reseeded:     orgReseeded,
+      message: `${label} reset completed — ${tables.length} tables truncated${vacuumed > 0 ? `, ${vacuumed} vacuumed` : ''}${orgReseeded ? ', default organization reseeded' : ''}.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown reset failure';

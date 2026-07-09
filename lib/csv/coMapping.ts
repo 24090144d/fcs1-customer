@@ -1,4 +1,5 @@
 import type { CoRow } from '@/types/csv';
+import { parseCsvDate } from '@/lib/timezone';
 
 const CO_KEY_ALIASES: Record<string, string> = {
   created_date: 'created_date',
@@ -69,12 +70,12 @@ export function normaliseCoKeys(raw: Record<string, string | unknown>): Record<s
   ) as Record<string, string>;
 }
 
-export function parseCoDateTime(value: unknown): string | null {
+export function parseCoDateTime(value: unknown, tz: string = 'UTC'): string | null {
   if (value === null || value === undefined) return null;
   const text = collapseWhitespace(String(value));
   if (!text) return null;
-  const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  const parsed = parseCsvDate(text, tz);
+  return parsed ? parsed.toISOString() : null;
 }
 
 export function parseCoMinutes(value: unknown): number | null {
@@ -163,8 +164,8 @@ function isTruthyLike(value: unknown): boolean {
   return ['1', 'true', 'y', 'yes', 't', 'pass', 'passed', 'fail', 'failed', 'reclean', 're-clean'].includes(text);
 }
 
-function deriveCreatedDate(raw: Record<string, unknown>): string | null {
-  return parseCoDateTime(raw.created_date ?? raw.start_time ?? raw.completed_time ?? raw.updated_on);
+function deriveCreatedDate(raw: Record<string, unknown>, tz: string): string | null {
+  return parseCoDateTime(raw.created_date ?? raw.start_time ?? raw.completed_time ?? raw.updated_on, tz);
 }
 
 function deriveActualDurationMinutes(raw: Record<string, unknown>, startTime: string | null, completedTime: string | null): number | null {
@@ -182,7 +183,7 @@ function deriveActualDurationMinutes(raw: Record<string, unknown>, startTime: st
   return null;
 }
 
-export function buildCoRow(raw: Record<string, string | unknown>, rowNumber: number): CoRow {
+export function buildCoRow(raw: Record<string, string | unknown>, rowNumber: number, tz: string = 'UTC'): CoRow {
   const norm = normaliseCoKeys(raw);
   const cleaningOrderNo = normalizeText(norm.cleaning_order_no) ?? `CO-${String(rowNumber).padStart(4, '0')}`;
   const roomNo = normalizeRoomNo(norm.room_no);
@@ -197,11 +198,11 @@ export function buildCoRow(raw: Record<string, string | unknown>, rowNumber: num
   const department = normalizeText(norm.department);
   const taskType = normalizeText(norm.task_type);
   const cleaningType = normalizeText(norm.cleaning_type);
-  const startTime = parseCoDateTime(norm.start_time);
-  const endTime = parseCoDateTime(norm.end_time);
-  const completedTime = parseCoDateTime(norm.completed_time);
-  const createdDate = deriveCreatedDate(norm);
-  const updatedOn = parseCoDateTime(norm.updated_on);
+  const startTime = parseCoDateTime(norm.start_time, tz);
+  const endTime = parseCoDateTime(norm.end_time, tz);
+  const completedTime = parseCoDateTime(norm.completed_time, tz);
+  const createdDate = deriveCreatedDate(norm, tz);
+  const updatedOn = parseCoDateTime(norm.updated_on, tz);
   const plannedDurationMinutes = parseCoMinutes(norm.planned_duration_minutes ?? norm.cleaning_duration);
   const actualDurationMinutes = deriveActualDurationMinutes(norm, startTime, completedTime);
   const durationMinutes = actualDurationMinutes ?? plannedDurationMinutes;

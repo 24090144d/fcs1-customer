@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { resolveLiveTimezone } from '@/lib/dashboard-fetch';
+import { localHour, localDateKey } from '@/lib/timezone';
 
 type ImRow = {
   created_date: string | null;
@@ -39,11 +41,11 @@ function isVip(v: string | null | undefined): boolean {
   return s !== '-';
 }
 
-function toDateOnly(v: string | null | undefined): string | null {
+function toDateOnly(v: string | null | undefined, tz: string): string | null {
   if (!v) return null;
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
+  return localDateKey(d, tz);
 }
 
 export async function GET(req: NextRequest) {
@@ -60,6 +62,7 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
+    const tz = await resolveLiveTimezone(supabase, 'im_records', [hotel], chain);
 
     const q = await supabase
       .from('im_records')
@@ -72,7 +75,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rows = (q.data ?? []).filter((r) => {
-      const d = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
+      const d = toDateOnly(r.created_date, tz) ?? toDateOnly(r.incident_datetime, tz);
       if (!d) return false;
       if (from && d < from) return false;
       if (to && d > to) return false;
@@ -207,7 +210,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const day = toDateOnly(r.created_date) ?? toDateOnly(r.incident_datetime);
+      const day = toDateOnly(r.created_date, tz) ?? toDateOnly(r.incident_datetime, tz);
       if (day) {
         if (!byDate.has(day)) {
           byDate.set(day, {
@@ -260,11 +263,11 @@ export async function GET(req: NextRequest) {
       const cat = (r.incident_category ?? 'Uncategorized').trim() || 'Uncategorized';
       const item = (r.incident_item_name ?? 'Unknown Item').trim() || 'Unknown Item';
       const dept = (r.department ?? 'Unknown Department').trim() || 'Unknown Department';
-      const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
+      const dt = r.created_date ? new Date(r.created_date) : (r.incident_datetime ? new Date(r.incident_datetime) : null);
       if (!dt || Number.isNaN(dt.getTime())) continue;
-      // IM's CSV source stores created/incident date-time as local wall-clock time
-      // already (not UTC) — read the hour directly, no timezone shift.
-      const h = dt.getUTCHours();
+      // created_date/incident_datetime are true UTC (post-ingestion-fix) —
+      // convert to the org's configured timezone for the local hour-of-day.
+      const h = localHour(dt, tz);
       hour_map[h] = (hour_map[h] ?? 0) + 1;
       const hourKey = String(h);
       if (!hour_category_map[hourKey]) hour_category_map[hourKey] = {};

@@ -8,6 +8,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getPool } from '@/lib/db/supabaseCompat';
 import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
 import type { CoRow } from '@/types/csv';
+import { localHour } from '@/lib/timezone';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
@@ -27,7 +28,7 @@ const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'im_r
  * fallback when no chain-code match exists.
  * Stage 3: hard default (UTC+8) per product decision.
  */
-async function resolveLiveTimezone(
+export async function resolveLiveTimezone(
   supabase: ReturnType<typeof createAdminClient>,
   table: 'jo_records' | 'mo_records' | 'co_records' | 'im_records',
   hotelCodes: string[],
@@ -103,11 +104,10 @@ type JoHourSourceRow = {
 
 /**
  * Recomputes every JO 24-hour-distribution map live, from raw jo_records.
- * JO's CSV source stores created/acknowledged/completed date-time as local
- * wall-clock time already (not UTC) — the hour is read via getUTCHours()
- * with no timezone conversion.
+ * created_datetime is true UTC (post-ingestion-fix) — converted to the org's
+ * configured timezone (tz) for the local hour-of-day.
  */
-function computeJoHourMaps(rows: JoHourSourceRow[]): Partial<HotelSummary> {
+function computeJoHourMaps(rows: JoHourSourceRow[], tz: string): Partial<HotelSummary> {
   const hourCompleted: Record<string, number> = {};
   const hourCompBkt: Record<string, Record<string, number>> = {};
   const hourAcknowledged: Record<string, number> = {};
@@ -143,7 +143,7 @@ function computeJoHourMaps(rows: JoHourSourceRow[]): Partial<HotelSummary> {
     const ackAt = r.acknowledged_datetime ? new Date(r.acknowledged_datetime) : null;
     const completedAt = r.completed_datetime ? new Date(r.completed_datetime) : null;
     if (!createdAt || Number.isNaN(createdAt.getTime())) continue;
-    const h = String(createdAt.getUTCHours());
+    const h = String(localHour(createdAt, tz));
 
     hourSlaTotal[h] = (hourSlaTotal[h] ?? 0) + 1;
     if (!hourItemCount[h]) hourItemCount[h] = {};
@@ -253,14 +253,14 @@ type MoHourSourceRow = {
  * MO's CSV source stores created date-time as local wall-clock time already
  * (not UTC) — the hour is read via getUTCHours() with no timezone conversion.
  */
-function computeMoHourMaps(rows: MoHourSourceRow[]): Partial<HotelSummary> {
+function computeMoHourMaps(rows: MoHourSourceRow[], tz: string): Partial<HotelSummary> {
   const hourMap: Record<string, number> = {};
   const item24hHourMap: Record<string, Record<string, number>> = {};
   for (const r of rows) {
     if (!r.created_datetime) continue;
     const d = new Date(r.created_datetime);
     if (Number.isNaN(d.getTime())) continue;
-    const h = String(d.getUTCHours());
+    const h = String(localHour(d, tz));
     hourMap[h] = (hourMap[h] ?? 0) + 1;
     const resMin = r.resolution_minutes !== null ? Number(r.resolution_minutes) : null;
     if (resMin !== null && Number.isFinite(resMin) && resMin >= 1440) {
@@ -283,12 +283,10 @@ type ImHourSourceRow = {
 
 /**
  * Recomputes hotel-level IM 24-hour-distribution maps live, from raw im_records.
- * IM's CSV source already provides created/incident date-time as local wall-clock
- * time (not UTC), and that value is stored as-is — so the hour is read directly
- * via getUTCHours() with no timezone conversion. Applying a timezone shift here
- * would double-convert and produce the wrong hour.
+ * created_date/incident_datetime are true UTC (post-ingestion-fix) — converted
+ * to the org's configured timezone (tz) for the local hour-of-day.
  */
-function computeImHourMaps(rows: ImHourSourceRow[]): Partial<HotelSummary> {
+function computeImHourMaps(rows: ImHourSourceRow[], tz: string): Partial<HotelSummary> {
   const hourMap: Record<string, number> = {};
   const hourCategoryMap: Record<string, Record<string, number>> = {};
   const hourDeptMap: Record<string, Record<string, number>> = {};
@@ -296,11 +294,11 @@ function computeImHourMaps(rows: ImHourSourceRow[]): Partial<HotelSummary> {
   const hourDeptItemMap: Record<string, Record<string, Record<string, number>>> = {};
   const vipHourMap: Record<string, number> = {};
   for (const r of rows) {
-    const rawDate = r.incident_datetime ?? r.created_date;
+    const rawDate = r.created_date ?? r.incident_datetime;
     if (!rawDate) continue;
     const d = new Date(rawDate);
     if (Number.isNaN(d.getTime())) continue;
-    const h = String(d.getUTCHours());
+    const h = String(localHour(d, tz));
     const cat = r.incident_category ?? 'Unknown';
     const dept = r.department ?? 'Unknown';
     const item = r.incident_item_name ?? 'Unknown';
@@ -412,7 +410,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
           fmt: 'integer',
         };
       }
-      const hourMaps = joRows.length > 0 ? computeJoHourMaps(joRows) : {};
+      const hourMaps = joRows.length > 0 ? computeJoHourMaps(joRows, timezone) : {};
       return {
         ...data,
         meta: {
@@ -438,7 +436,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
           .eq('hotel_code', hotelUpper) as unknown as SbResult<MoHourSourceRow[]>;
         moRows = moResult.data ?? [];
       }
-      const hourMaps = moRows.length > 0 ? computeMoHourMaps(moRows) : {};
+      const hourMaps = moRows.length > 0 ? computeMoHourMaps(moRows, timezone) : {};
       const moData = data as MoDashboardJson;
       const summaryByType = moData.summary_by_type ? { ...moData.summary_by_type } : undefined;
       if (summaryByType?.MO) {
@@ -472,7 +470,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
         .select('department, incident_category, incident_item_name, vip_code, created_date, incident_datetime')
         .eq('hotel_code', hotelUpper) as unknown as SbResult<ImHourSourceRow[]>;
       const imRows = imResult.data ?? [];
-      const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows) : {};
+      const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows, timezone) : {};
       return {
         ...data,
         meta: {
@@ -953,12 +951,13 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           if (!categoryItemByHotel[hotel][cat]) categoryItemByHotel[hotel][cat] = {};
           categoryItemByHotel[hotel][cat][item] = (categoryItemByHotel[hotel][cat][item] ?? 0) + 1;
           const rawDate = r.incident_datetime ?? r.created_date;
-          if (rawDate) {
-            const d = new Date(rawDate);
+          const hourRawDate = r.created_date ?? r.incident_datetime;
+          if (hourRawDate) {
+            const d = new Date(hourRawDate);
             if (!Number.isNaN(d.getTime())) {
-              // IM's CSV source stores created/incident date-time as local wall-clock
-              // time already (not UTC) — read the hour directly, no timezone shift.
-              const hour = String(d.getUTCHours());
+              // created_date/incident_datetime are true UTC (post-ingestion-fix) —
+              // convert to the org's configured timezone for the local hour-of-day.
+              const hour = String(localHour(d, orgTimezone));
               if (!hourByHotel[hotel]) hourByHotel[hotel] = {};
               hourByHotel[hotel][hour] = (hourByHotel[hotel][hour] ?? 0) + 1;
               if (!hourCategoryByHotel[hotel]) hourCategoryByHotel[hotel] = {};
@@ -1126,7 +1125,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         for (const entry of chainEntries) {
           const hotelRows = rowsByHotel[entry.hotel_code];
           if (hotelRows && hotelRows.length > 0) {
-            Object.assign(entry.summary, computeJoHourMaps(hotelRows));
+            Object.assign(entry.summary, computeJoHourMaps(hotelRows, orgTimezone));
           }
         }
       }
@@ -1228,7 +1227,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         for (const entry of chainEntries) {
           const hotelRows = rowsByHotel[entry.hotel_code];
           if (!hotelRows || hotelRows.length === 0) continue;
-          const hourMaps = computeMoHourMaps(hotelRows);
+          const hourMaps = computeMoHourMaps(hotelRows, orgTimezone);
           Object.assign(entry.summary, hourMaps);
           if (entry.summary_by_type?.MO) Object.assign(entry.summary_by_type.MO, hourMaps);
         }

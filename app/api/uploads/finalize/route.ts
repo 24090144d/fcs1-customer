@@ -5,6 +5,7 @@ import type { CoRow } from '@/types/csv';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { deriveMoType } from './mo-helpers.mjs';
 import { buildCoRow } from '@/lib/csv/coMapping';
+import { parseCsvDate, localHour, localDateKey, localWeekday } from '@/lib/timezone';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -43,10 +44,13 @@ function parseFilename(fileName: string): { chainCode: string; hotelCode: string
   };
 }
 
-function toIso(val: unknown): string | null {
-  if (val === null || val === undefined || val === '') return null;
-  const d = new Date(String(val));
-  return isNaN(d.getTime()) ? null : d.toISOString();
+// Naive "DD Mon YYYY HH:mm[:ss]" CSV strings (e.g. "01 Jul 2026 10:24") carry
+// no timezone marker — they represent local wall-clock time in the org's
+// configured timezone (Configuration → System) and must be converted to a
+// true UTC instant for storage via `tz`, not the server's ambient timezone.
+function toIso(val: unknown, tz: string): string | null {
+  const d = parseCsvDate(val, tz);
+  return d ? d.toISOString() : null;
 }
 function toNum(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
@@ -102,13 +106,17 @@ function findField(rr: Record<string, unknown>, ...fields: string[]): string | n
   return null;
 }
 
-function toWeekKey(d: Date): string {
-  const dt = new Date(d);
-  dt.setHours(0, 0, 0, 0);
-  dt.setDate(dt.getDate() + 3 - ((dt.getDay() + 6) % 7));
-  const w1 = new Date(dt.getFullYear(), 0, 4);
-  const wn = 1 + Math.round(((dt.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getDay() + 6) % 7)) / 7);
-  return `${dt.getFullYear()}-W${String(wn).padStart(2, '0')}`;
+function toWeekKey(d: Date, tz: string): string {
+  // Compute the ISO week from `d`'s calendar date in `tz`, using UTC-midnight
+  // arithmetic throughout so the result never depends on the server's own
+  // ambient timezone (setHours/getDay/getFullYear are local-TZ methods).
+  const dayKey = localDateKey(d, tz); // "YYYY-MM-DD" in tz
+  const dt = new Date(`${dayKey}T00:00:00Z`);
+  const utcDay = dt.getUTCDay();
+  dt.setUTCDate(dt.getUTCDate() + 3 - ((utcDay + 6) % 7));
+  const w1 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+  const wn = 1 + Math.round(((dt.getTime() - w1.getTime()) / 86400000 - 3 + ((w1.getUTCDay() + 6) % 7)) / 7);
+  return `${dt.getUTCFullYear()}-W${String(wn).padStart(2, '0')}`;
 }
 
 function parseDurationMinutes(val: unknown): number | null {
@@ -541,18 +549,23 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
     }
   }
 
-  // Date-based accumulation
+  // Date-based accumulation. `rr` here is the raw CSV row (pre-toIso), so
+  // parse it the same tz-aware way as toIso() — the naive CSV string is
+  // local wall-clock time in the org's configured timezone. Hour/day/week/
+  // month all derive from that same local calendar, not from the UTC
+  // instant, so charts show the correct local hour and calendar boundaries.
   const rawDate = toStr(rr.incident_datetime) ?? toStr(rr.created_date);
+  const hourRawDate = toStr(rr.created_date) ?? toStr(rr.incident_datetime);
   if (rawDate) {
-    const d = new Date(rawDate);
-    if (!isNaN(d.getTime())) {
-      const dayKey   = d.toISOString().slice(0, 10);
-      const monthKey = d.toISOString().slice(0, 7);
-      const wd       = d.getDay();
-      // IM's CSV source stores created/incident date-time as local wall-clock time
-      // already (not UTC) — read the hour directly, no timezone shift.
-      const hr       = d.getUTCHours();
-      const wkKey    = toWeekKey(d);
+    const d = parseCsvDate(rawDate, timezone);
+    if (d) {
+      const dayKey   = localDateKey(d, timezone);
+      const monthKey = dayKey.slice(0, 7);
+      const wd       = localWeekday(d, timezone);
+      // Defaults to created_date (falls back to incident_datetime) for the 24-hour trend.
+      const hourDate = hourRawDate ? parseCsvDate(hourRawDate, timezone) : d;
+      const hr       = hourDate ? localHour(hourDate, timezone) : localHour(d, timezone);
+      const wkKey    = toWeekKey(d, timezone);
 
       if (!acc.dailyMap[dayKey]) acc.dailyMap[dayKey] = {
         date: dayKey, total: 0, completed: 0, cancelled: 0, pending: 0,
@@ -1551,35 +1564,31 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   const createdAt = toStr(rr.created_datetime);
   const ackAt = toStr(rr.acknowledged_datetime);
   const completedAt = toStr(rr.completed_datetime);
-  if (createdAt) {
-    const d = new Date(createdAt);
-    if (!isNaN(d.getTime())) {
-      const wk = toWeekKey(d);
-      if (!acc.weekStats[wk]) acc.weekStats[wk] = { jobs: 0, completed: 0, slaBreaches: 0, timeouts: 0 };
-      acc.weekStats[wk].jobs++;
-      if (completedFlag) acc.weekStats[wk].completed++;
-      if (timeoutFlag) acc.weekStats[wk].timeouts++;
-      if (completedFlag && delayMin !== null && delayMin > 0) acc.weekStats[wk].slaBreaches++;
-      // jo-11: item → date (YYYY-MM-DD) → count
-      const dateKey = d.toISOString().slice(0, 10);
-      inc2(acc.itemDateMap, item, dateKey);
-    }
+  const createdD = createdAt ? parseCsvDate(createdAt, timezone) : null;
+  if (createdD) {
+    const wk = toWeekKey(createdD, timezone);
+    if (!acc.weekStats[wk]) acc.weekStats[wk] = { jobs: 0, completed: 0, slaBreaches: 0, timeouts: 0 };
+    acc.weekStats[wk].jobs++;
+    if (completedFlag) acc.weekStats[wk].completed++;
+    if (timeoutFlag) acc.weekStats[wk].timeouts++;
+    if (completedFlag && delayMin !== null && delayMin > 0) acc.weekStats[wk].slaBreaches++;
+    // jo-11: item → date (YYYY-MM-DD) → count
+    const dateKey = localDateKey(createdD, timezone);
+    inc2(acc.itemDateMap, item, dateKey);
   }
-  if (createdAt && ackAt) {
-    const t1 = new Date(createdAt).getTime();
-    const t2 = new Date(ackAt).getTime();
-    if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
-      const m = (t2 - t1) / 60_000;
+  if (createdD && ackAt) {
+    const ackD = parseCsvDate(ackAt, timezone);
+    if (ackD && ackD.getTime() >= createdD.getTime()) {
+      const m = (ackD.getTime() - createdD.getTime()) / 60_000;
       acc.responseMins.push(m);
       push2(acc.catItemResponse, category, item, m);
     }
   }
   let resolutionMin: number | null = null;
-  if (createdAt && completedAt) {
-    const t1 = new Date(createdAt).getTime();
-    const t2 = new Date(completedAt).getTime();
-    if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
-      resolutionMin = (t2 - t1) / 60_000;
+  if (createdD && completedAt) {
+    const completedD = parseCsvDate(completedAt, timezone);
+    if (completedD && completedD.getTime() >= createdD.getTime()) {
+      resolutionMin = (completedD.getTime() - createdD.getTime()) / 60_000;
       acc.resolutionMins.push(resolutionMin);
       push2(acc.catItemResolution, category, item, resolutionMin);
     }
@@ -1590,9 +1599,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   }
 
   // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
-  // JO's CSV source stores created date-time as local wall-clock time already
-  // (not UTC) — read the hour directly, no timezone shift.
-  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getUTCHours(); })() : null;
+  // JO's created_datetime is true UTC — convert to the org's configured
+  // timezone (Configuration → System) for the local hour-of-day.
+  const createdHour = createdD ? localHour(createdD, timezone) : null;
   if (createdHour !== null) {
     acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
     // track service item count per hour for cjo-22
@@ -1622,11 +1631,10 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
     }
 
     // jo-24: acknowledged jobs per hour + response duration drilldown
-    if (createdAt && ackAt) {
-      const t1 = new Date(createdAt).getTime();
-      const t2 = new Date(ackAt).getTime();
-      if (!isNaN(t1) && !isNaN(t2) && t2 >= t1) {
-        const responseMin = (t2 - t1) / 60_000;
+    if (createdD && ackAt) {
+      const ackD = parseCsvDate(ackAt, timezone);
+      if (ackD && ackD.getTime() >= createdD.getTime()) {
+        const responseMin = (ackD.getTime() - createdD.getTime()) / 60_000;
         acc.hourAcknowledged[createdHour] = (acc.hourAcknowledged[createdHour] ?? 0) + 1;
         const bkt = durBucket(responseMin);
         if (!acc.hourResponseBuckets[createdHour]) acc.hourResponseBuckets[createdHour] = {};
@@ -1684,9 +1692,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   if (isVip(rr)) {
     const createdAt2 = toStr(rr.created_datetime);
     if (createdAt2) {
-      const d2 = new Date(createdAt2);
-      if (!isNaN(d2.getTime())) {
-        const h = d2.getUTCHours();
+      const d2 = parseCsvDate(createdAt2, timezone);
+      if (d2) {
+        const h = localHour(d2, timezone);
         acc.vipHourCount[h] = (acc.vipHourCount[h] ?? 0) + 1;
         if (!acc.vipHourItemCount[h]) acc.vipHourItemCount[h] = {};
         acc.vipHourItemCount[h][item] = (acc.vipHourItemCount[h][item] ?? 0) + 1;
@@ -2173,7 +2181,7 @@ export async function POST(req: NextRequest) {
         }
         const prepared = backfillCoCreatedDates(gathered.map((row) => ({
           id: row.id,
-          co: buildCoRow(row.raw_row, row.row_number),
+          co: buildCoRow(row.raw_row, row.row_number, orgTimezone),
         })));
         return new Map(prepared.map((entry) => [entry.id, entry.co] as const));
       })()
@@ -2224,16 +2232,16 @@ export async function POST(req: NextRequest) {
           date_of_birth:      toStr(rr.date_of_birth),
           company_name:       toStr(rr.company_name),
           // Stay details
-          arrival_date:       toIso(rr.arrival_date),
-          departure_date:     toIso(rr.departure_date),
+          arrival_date:       toIso(rr.arrival_date, orgTimezone),
+          departure_date:     toIso(rr.departure_date, orgTimezone),
           nights:             toNum(rr.nights),
           rates:              toStr(rr.rates),
           rate_code:          toStr(rr.rate_code),
           booking_source:     toStr(rr.booking_source),
           visits:             toStr(rr.visits),
           // Dates
-          created_date:       toIso(rr.created_date),
-          incident_datetime:  toIso(rr.incident_datetime),
+          created_date:       toIso(rr.created_date, orgTimezone),
+          incident_datetime:  toIso(rr.incident_datetime, orgTimezone),
           // Staff
           created_by:         toStr(rr.created_by),
           department:         toStr(rr.department),
@@ -2241,16 +2249,16 @@ export async function POST(req: NextRequest) {
           investigation_1:            toStr(rr.investigation_1),
           investigation_remarks_1:    toStr(rr.investigation_remarks_1),
           investigation_updated_by_1: toStr(rr.investigation_updated_by_1),
-          investigation_updated_on_1: toIso(rr.investigation_updated_on_1),
+          investigation_updated_on_1: toIso(rr.investigation_updated_on_1, orgTimezone),
           // Investigation cycle 2
           investigation_2:            toStr(rr.investigation_2),
           investigation_remarks_2:    toStr(rr.investigation_remarks_2),
           investigation_updated_by_2: toStr(rr.investigation_updated_by_2),
-          investigation_updated_on_2: toIso(rr.investigation_updated_on_2),
+          investigation_updated_on_2: toIso(rr.investigation_updated_on_2, orgTimezone),
           // Feedback cycle 1
           feedback_method_1:     toStr(rr.feedback_method_1),
           feedback_updated_by_1: toStr(rr.feedback_updated_by_1),
-          feedback_updated_on_1: toIso(rr.feedback_updated_on_1),
+          feedback_updated_on_1: toIso(rr.feedback_updated_on_1, orgTimezone),
           feedback_remarks_1:    toStr(rr.feedback_remarks_1),
           normalized_row:     rr,
         };
@@ -2269,7 +2277,7 @@ export async function POST(req: NextRequest) {
           module_code:           module_code,
           country_code:          hotel.countryCode || null,
           department_name:       toStr(rr.department_name),
-          created_datetime:      toIso(rr.created_datetime),
+          created_datetime:      toIso(rr.created_datetime, orgTimezone),
           job_status:            toStr(rr.job_status),
           job_order:             toStr(rr.job_order),
           guest_name:            toStr(rr.guest_name),
@@ -2279,17 +2287,17 @@ export async function POST(req: NextRequest) {
           quantity:              toNum(rr.quantity),
           remarks:               toStr(rr.remarks),
           execution_duration:    toStr(rr.execution_duration),
-          initial_deadline:      toIso(rr.initial_deadline),
-          extended_deadline:     toIso(rr.extended_deadline),
-          acknowledged_datetime: toIso(rr.acknowledged_datetime),
-          completed_datetime:    toIso(rr.completed_datetime),
+          initial_deadline:      toIso(rr.initial_deadline, orgTimezone),
+          extended_deadline:     toIso(rr.extended_deadline, orgTimezone),
+          acknowledged_datetime: toIso(rr.acknowledged_datetime, orgTimezone),
+          completed_datetime:    toIso(rr.completed_datetime, orgTimezone),
           delay_duration:        toStr(rr.delay_duration),
           vip_code:              toStr(rr.vip_code),
           is_vip:                isVip(rr),
           actual_duration:       parseDurationMinutes(toStr(rr.total_minute_between_created_to_completed)),
           is_ontime:             isOntime(rr),
           is_complete:           toStr(rr.job_status) === 'Completed',
-          respond_time:          isoToMinutesDiff(toIso(rr.created_datetime), toIso(rr.acknowledged_datetime)),
+          respond_time:          isoToMinutesDiff(toIso(rr.created_datetime, orgTimezone), toIso(rr.acknowledged_datetime, orgTimezone)),
           // Keep full JO source row in normalized_row for compatibility
           // with DBs that haven't applied 002_jo_schema_alignment.sql yet.
           normalized_row:        rr,
@@ -2298,7 +2306,7 @@ export async function POST(req: NextRequest) {
     } else if (module_code === 'co') {
       payload = rows.map(r => {
         const rr = r.raw_row;
-        const co = coRowsById?.get(r.id) ?? buildCoRow(rr, r.row_number);
+        const co = coRowsById?.get(r.id) ?? buildCoRow(rr, r.row_number, orgTimezone);
         const imLike = normaliseCoForIm(co);
         accumulate(acc, imLike, orgTimezone);
         accumulate(moTypeAcc.MO, imLike, orgTimezone);
@@ -2362,9 +2370,9 @@ export async function POST(req: NextRequest) {
       payload = rows.map(r => {
         const rr = r.raw_row;
         const type = deriveMoType(rr.job_order);
-        const createdIso = toIso(rr.created_datetime);
-        const deadlineIso = toIso(rr.deadline_datetime);
-        const completedIso = toIso(rr.completed_datetime);
+        const createdIso = toIso(rr.created_datetime, orgTimezone);
+        const deadlineIso = toIso(rr.deadline_datetime, orgTimezone);
+        const completedIso = toIso(rr.completed_datetime, orgTimezone);
         const createdAt = createdIso ? new Date(createdIso) : null;
         const deadlineAt = deadlineIso ? new Date(deadlineIso) : null;
         const completedAt = completedIso ? new Date(completedIso) : null;
@@ -2387,14 +2395,14 @@ export async function POST(req: NextRequest) {
         const deadlineVarianceMinutes = completedAt && deadlineAt ? (completedAt.getTime() - deadlineAt.getTime()) / 60000 : null;
         const completedWithinSla = typeof deadlineVarianceMinutes === 'number' ? deadlineVarianceMinutes <= 0 : false;
         const isOverdue = !!deadlineAt && ((!completedAt && deadlineAt.getTime() < Date.now()) || (typeof deadlineVarianceMinutes === 'number' && deadlineVarianceMinutes > 0));
-        const createdDate = createdAt ? createdAt.toISOString().slice(0, 10) : null;
-        // MO's CSV source stores created date-time as local wall-clock time already
-        // (not UTC) — read the hour directly, no timezone shift.
-        const createdHour = createdAt ? createdAt.getUTCHours() : null;
-        const createdWeek = createdAt ? toWeekKey(createdAt) : null;
-        const createdMonth = createdAt ? createdAt.toISOString().slice(0, 7) : null;
-        const createdQuarter = createdAt ? `${createdAt.getUTCFullYear()}-Q${Math.floor(createdAt.getUTCMonth() / 3) + 1}` : null;
-        const completedDate = completedAt ? completedAt.toISOString().slice(0, 10) : null;
+        // MO's created_datetime is true UTC (post-toIso) — derive calendar
+        // day/hour/week/month/quarter from the org's configured timezone.
+        const createdDate = createdAt ? localDateKey(createdAt, orgTimezone) : null;
+        const createdHour = createdAt ? localHour(createdAt, orgTimezone) : null;
+        const createdWeek = createdAt ? toWeekKey(createdAt, orgTimezone) : null;
+        const createdMonth = createdDate ? createdDate.slice(0, 7) : null;
+        const createdQuarter = createdDate ? `${createdDate.slice(0, 4)}-Q${Math.floor((Number(createdDate.slice(5, 7)) - 1) / 3) + 1}` : null;
+        const completedDate = completedAt ? localDateKey(completedAt, orgTimezone) : null;
         const stockOutQtyNum = toNum(rr.stock_out_qty);
         const escalationLevelNum = toNum(rr.escalation_level);
 

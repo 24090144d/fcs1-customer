@@ -11,6 +11,7 @@ import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
+import { localHour } from '@/lib/timezone';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then((m) => m.HcChart), { ssr: false });
 
@@ -115,16 +116,13 @@ function parseDate(value: string): Date | null {
   return parseLocalDateKey(value);
 }
 
-// CO's CSV source stores created/completed date-time as local wall-clock
-// time already (not UTC) — the hour is read via getUTCHours() with no
-// timezone conversion (matches JO/MO/IM). `timeZone` is kept as a parameter
-// for call-site compatibility but is no longer used.
+// CO's created/completed date-time (post-ingestion-fix) is true UTC —
+// converted to the org's configured timezone for the local hour-of-day.
 function hourFromSource(source: string | null | undefined, timeZone: string): number | null {
-  void timeZone;
   if (!source) return null;
   const date = new Date(source);
   if (Number.isNaN(date.getTime())) return null;
-  return date.getUTCHours();
+  return localHour(date, timeZone);
 }
 
 function toDateKey(value: string | null | undefined): string {

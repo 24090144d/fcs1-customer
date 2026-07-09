@@ -115,36 +115,16 @@ function parseDate(value: string): Date | null {
   return parseLocalDateKey(value);
 }
 
-// Constructing Intl.DateTimeFormat is expensive; buildCharts/buildCorpCharts call
-// localHour() per-row across many 24-hour bucketing sections (tens of thousands of
-// calls for a single render), so the formatter must be cached per timezone rather
-// than rebuilt on every call — this was the source of a 30s+ render time regression.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(timeZone: string): Intl.DateTimeFormat {
-  let formatter = hourFormatterCache.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone });
-    hourFormatterCache.set(timeZone, formatter);
-  }
-  return formatter;
-}
-
-function localHour(date: Date, timeZone: string): number {
-  try {
-    const text = getHourFormatter(timeZone).format(date);
-    const hour = parseInt(text, 10);
-    if (!Number.isNaN(hour)) return hour === 24 ? 0 : hour;
-  } catch {
-    // fall through
-  }
-  return date.getUTCHours();
-}
-
+// CO's CSV source stores created/completed date-time as local wall-clock
+// time already (not UTC) — the hour is read via getUTCHours() with no
+// timezone conversion (matches JO/MO/IM). `timeZone` is kept as a parameter
+// for call-site compatibility but is no longer used.
 function hourFromSource(source: string | null | undefined, timeZone: string): number | null {
+  void timeZone;
   if (!source) return null;
   const date = new Date(source);
   if (Number.isNaN(date.getTime())) return null;
-  return localHour(date, timeZone);
+  return date.getUTCHours();
 }
 
 function toDateKey(value: string | null | undefined): string {

@@ -66,27 +66,6 @@ function topN(map: Record<string, number>, n: number): [string, number][] {
 function r1(n: number) { return Math.round(n * 10) / 10; }
 function r2(n: number) { return Math.round(n * 100) / 100; }
 
-// Memoized per-timezone Intl formatter — avoids constructing a new
-// Intl.DateTimeFormat per row across tens of thousands of rows.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(tz: string): Intl.DateTimeFormat {
-  let f = hourFormatterCache.get(tz);
-  if (!f) {
-    f = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-    hourFormatterCache.set(tz, f);
-  }
-  return f;
-}
-/** JO's created/acknowledged/completed timestamps are true UTC — convert to the org's saved timezone for hour-of-day bucketing. */
-function localHour(d: Date, tz: string): number {
-  try {
-    const s = getHourFormatter(tz).format(d);
-    const h = parseInt(s, 10);
-    if (!isNaN(h)) return h === 24 ? 0 : h;
-  } catch { /* fall through */ }
-  return d.getUTCHours();
-}
-
 function isVip(rr: Record<string, unknown>): boolean {
   // IM rule: VIP is decided by vip_code only.
   // Non-VIP when vip_code is null/undefined, blank/whitespace, or '-'.
@@ -1611,9 +1590,9 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   }
 
   // ── 24-hour distribution accumulation (jo-23..jo-26) ─────────────────────
-  // JO's created_datetime is true UTC — convert to the org's saved timezone
-  // (e.g. Asia/Hong_Kong, Asia/Macau, Asia/Shanghai — all UTC+8).
-  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : localHour(d, timezone); })() : null;
+  // JO's CSV source stores created date-time as local wall-clock time already
+  // (not UTC) — read the hour directly, no timezone shift.
+  const createdHour = createdAt ? (() => { const d = new Date(createdAt); return isNaN(d.getTime()) ? null : d.getUTCHours(); })() : null;
   if (createdHour !== null) {
     acc.hourSlaTotal[createdHour] = (acc.hourSlaTotal[createdHour] ?? 0) + 1;
     // track service item count per hour for cjo-22
@@ -1707,7 +1686,7 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
     if (createdAt2) {
       const d2 = new Date(createdAt2);
       if (!isNaN(d2.getTime())) {
-        const h = localHour(d2, timezone);
+        const h = d2.getUTCHours();
         acc.vipHourCount[h] = (acc.vipHourCount[h] ?? 0) + 1;
         if (!acc.vipHourItemCount[h]) acc.vipHourItemCount[h] = {};
         acc.vipHourItemCount[h][item] = (acc.vipHourItemCount[h][item] ?? 0) + 1;

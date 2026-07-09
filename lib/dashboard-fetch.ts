@@ -89,27 +89,6 @@ function isVipLike(v: string | null | undefined): boolean {
   return !!s && s !== '-';
 }
 
-// Memoized per-timezone Intl formatter — avoids constructing a new
-// Intl.DateTimeFormat per row across tens of thousands of calls.
-const hourFormatterCache = new Map<string, Intl.DateTimeFormat>();
-function getHourFormatter(tz: string): Intl.DateTimeFormat {
-  let f = hourFormatterCache.get(tz);
-  if (!f) {
-    f = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz });
-    hourFormatterCache.set(tz, f);
-  }
-  return f;
-}
-/** JO's created/acknowledged/completed timestamps are true UTC — convert to the org's saved timezone (e.g. Asia/Hong_Kong, UTC+8) for hour-of-day bucketing. */
-function localHour(d: Date, tz: string): number {
-  try {
-    const s = getHourFormatter(tz).format(d);
-    const h = parseInt(s, 10);
-    if (!isNaN(h)) return h === 24 ? 0 : h;
-  } catch { /* fall through */ }
-  return d.getUTCHours();
-}
-
 type JoHourSourceRow = {
   job_status: string | null;
   service_item_category: string | null;
@@ -123,12 +102,12 @@ type JoHourSourceRow = {
 };
 
 /**
- * Recomputes every JO 24-hour-distribution map live, from raw jo_records,
- * converting created/acknowledged/completed UTC timestamps to the org's
- * saved timezone (e.g. Asia/Hong_Kong, Asia/Macau, Asia/Shanghai — all
- * UTC+8) so hour-of-day buckets reflect true local wall-clock time.
+ * Recomputes every JO 24-hour-distribution map live, from raw jo_records.
+ * JO's CSV source stores created/acknowledged/completed date-time as local
+ * wall-clock time already (not UTC) — the hour is read via getUTCHours()
+ * with no timezone conversion.
  */
-function computeJoHourMaps(rows: JoHourSourceRow[], tz: string): Partial<HotelSummary> {
+function computeJoHourMaps(rows: JoHourSourceRow[]): Partial<HotelSummary> {
   const hourCompleted: Record<string, number> = {};
   const hourCompBkt: Record<string, Record<string, number>> = {};
   const hourAcknowledged: Record<string, number> = {};
@@ -164,7 +143,7 @@ function computeJoHourMaps(rows: JoHourSourceRow[], tz: string): Partial<HotelSu
     const ackAt = r.acknowledged_datetime ? new Date(r.acknowledged_datetime) : null;
     const completedAt = r.completed_datetime ? new Date(r.completed_datetime) : null;
     if (!createdAt || Number.isNaN(createdAt.getTime())) continue;
-    const h = String(localHour(createdAt, tz));
+    const h = String(createdAt.getUTCHours());
 
     hourSlaTotal[h] = (hourSlaTotal[h] ?? 0) + 1;
     if (!hourItemCount[h]) hourItemCount[h] = {};
@@ -433,7 +412,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
           fmt: 'integer',
         };
       }
-      const hourMaps = joRows.length > 0 ? computeJoHourMaps(joRows, timezone) : {};
+      const hourMaps = joRows.length > 0 ? computeJoHourMaps(joRows) : {};
       return {
         ...data,
         meta: {
@@ -1147,7 +1126,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         for (const entry of chainEntries) {
           const hotelRows = rowsByHotel[entry.hotel_code];
           if (hotelRows && hotelRows.length > 0) {
-            Object.assign(entry.summary, computeJoHourMaps(hotelRows, orgTimezone));
+            Object.assign(entry.summary, computeJoHourMaps(hotelRows));
           }
         }
       }

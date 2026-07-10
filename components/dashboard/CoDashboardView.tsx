@@ -11,7 +11,7 @@ import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
-import { localHour } from '@/lib/timezone';
+import { localHour, localDateKey } from '@/lib/timezone';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then((m) => m.HcChart), { ssr: false });
 
@@ -150,11 +150,20 @@ function bucketRowsByHour(rows: CoRow[], hourByRow: Map<CoRow, number | null>): 
   return buckets;
 }
 
-function toDateKey(value: string | null | undefined): string {
+// Row date/time fields (created_date/completed_time/start_time) are stored
+// as true UTC instants (see hourFromSource above) — a bare "YYYY-MM-DD" is
+// already a calendar date and needs no conversion, but a full timestamp must
+// be converted to the org's configured timezone via localDateKey, not JS's
+// ambient local Date getters (formatLocalDateKey), or the daily trend charts
+// and date-range filter can bucket a row onto the wrong calendar day near
+// midnight in timezones ahead of UTC.
+function toDateKey(value: string | null | undefined, timeZone: string): string {
   const text = normText(value);
   if (!text) return '';
-  const date = parseLocalDateKey(text);
-  return date ? formatLocalDateKey(date) : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return '';
+  return localDateKey(date, timeZone);
 }
 
 function toMinutes(row: CoRow): number {
@@ -303,8 +312,8 @@ function classifyRate(value: number | null, good: number, watch: number, higherI
   return 'bad';
 }
 
-function matchesRow(row: CoRow, filters: CoFilters): boolean {
-  const rowDate = toDateKey(row.created_date ?? row.completed_time ?? row.start_time);
+function matchesRow(row: CoRow, filters: CoFilters, timeZone: string): boolean {
+  const rowDate = toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone);
   if (filters.dateFrom && rowDate && rowDate < filters.dateFrom) return false;
   if (filters.dateTo && rowDate && rowDate > filters.dateTo) return false;
   if (filters.floor !== 'ALL' && normKey(row.floor) !== normKey(filters.floor)) return false;
@@ -764,7 +773,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
   };
 
   for (const row of allRows) {
-    const dateKey = toDateKey(row.created_date ?? row.completed_time ?? row.start_time) || 'Unknown';
+    const dateKey = toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone) || 'Unknown';
     if (!dailyMap.has(dateKey)) dailyMap.set(dateKey, { total: 0, completed: 0, delayed: 0, reclean: 0 });
     const daily = dailyMap.get(dateKey)!;
     daily.total += 1;
@@ -2210,7 +2219,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     const cleaningType = normText(row.cleaning_type) || 'Unknown Cleaning Type';
     const duration = toMinutes(row);
     const credit = typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
-    const dateKey = toDateKey(row.created_date ?? row.completed_time ?? row.start_time) || 'Unknown';
+    const dateKey = toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone) || 'Unknown';
     if (!dailyMap.has(dateKey)) dailyMap.set(dateKey, { total: 0, completed: 0, delayed: 0, reclean: 0 });
     const daily = dailyMap.get(dateKey)!;
     daily.total += 1;
@@ -3753,8 +3762,8 @@ export function CoDashboardView({
     const hotelScopedRows = isCorp && hotelFilter !== 'ALL'
       ? rows.filter((row) => normKey(row.hotel_code) === normKey(hotelFilter))
       : rows;
-    return hotelScopedRows.filter((row) => matchesRow(row, filters));
-  }, [rows, filters, isCorp, hotelFilter]);
+    return hotelScopedRows.filter((row) => matchesRow(row, filters, orgTimezone));
+  }, [rows, filters, isCorp, hotelFilter, orgTimezone]);
   // 24-hour distribution charts (⏰) intentionally ignore the date-range filter,
   // matching JO/MO's existing behavior — they always show the full upload period,
   // scoped only by the non-date filters (floor/attendant/room type/status/hotel).
@@ -3768,16 +3777,16 @@ export function CoDashboardView({
     const hotelScopedRows = isCorp && hotelFilter !== 'ALL'
       ? rows.filter((row) => normKey(row.hotel_code) === normKey(hotelFilter))
       : rows;
-    return hotelScopedRows.filter((row) => matchesRow(row, hourFilters));
-  }, [rows, hourFilters, isCorp, hotelFilter]);
+    return hotelScopedRows.filter((row) => matchesRow(row, hourFilters, orgTimezone));
+  }, [rows, hourFilters, isCorp, hotelFilter, orgTimezone]);
   const previousWindow = useMemo(() => previousRange(filters.dateFrom, filters.dateTo), [filters.dateFrom, filters.dateTo]);
   const previousRows = useMemo(() => {
     if (!previousWindow) return [];
     const hotelScopedRows = isCorp && hotelFilter !== 'ALL'
       ? rows.filter((row) => normKey(row.hotel_code) === normKey(hotelFilter))
       : rows;
-    return hotelScopedRows.filter((row) => matchesRow(row, { ...filters, dateFrom: previousWindow.from, dateTo: previousWindow.to }));
-  }, [rows, filters, previousWindow, isCorp, hotelFilter]);
+    return hotelScopedRows.filter((row) => matchesRow(row, { ...filters, dateFrom: previousWindow.from, dateTo: previousWindow.to }, orgTimezone));
+  }, [rows, filters, previousWindow, isCorp, hotelFilter, orgTimezone]);
 
   const filterSummary = useMemo(() => {
     const parts = [buildFilterSummary(filters)];

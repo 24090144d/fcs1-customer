@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ModuleCode, ImRow, JoRow, MoRow, CoRow, ValidationError } from '@/types/csv';
-import { buildCoRow } from '@/lib/csv/coMapping';
+import { buildCoRow, normaliseCoKeys } from '@/lib/csv/coMapping';
 
 // ── Required column lists ─────────────────────────────────────────────────────
 
@@ -482,8 +482,27 @@ export function validateCoRow(
   raw: Record<string, string>,
   rowNumber: number,
 ): { row: CoRow | null; errors: ValidationError[] } {
+  // This runs client-side, before the org's configured timezone is known, so
+  // buildCoRow's date parsing here falls back to its 'UTC' default — wrong
+  // for CO's actual CSV format (naive local wall-clock time, e.g. "04 June
+  // 2026 11:39:28"). finalize/route.ts re-parses via
+  // buildCoRow(row.raw_row, ..., orgTimezone) using the real org timezone,
+  // but only if raw_row still holds the original ambiguous text — an
+  // already-converted ISO instant looks unambiguous and would be returned
+  // unchanged instead of re-converted. Overwrite the parsed date fields with
+  // the untouched raw text so finalize's re-parse is the one that counts.
+  const row = buildCoRow(raw, rowNumber);
+  const norm = normaliseCoKeys(raw);
+  const rawOrNull = (v: string | undefined) => (v ? v : null);
   return {
-    row: buildCoRow(raw, rowNumber),
+    row: {
+      ...row,
+      start_time:     rawOrNull(norm.start_time),
+      end_time:       rawOrNull(norm.end_time),
+      completed_time: rawOrNull(norm.completed_time),
+      updated_on:     rawOrNull(norm.updated_on),
+      created_date:   rawOrNull(norm.created_date ?? norm.start_time ?? norm.completed_time ?? norm.updated_on),
+    },
     errors: [],
   };
 }

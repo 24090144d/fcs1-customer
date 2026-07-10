@@ -17,6 +17,8 @@
 .env.test.local
 .env.production.local
 .env.vercel
+.env.neon
+.env.*-prod
 
 # debug
 npm-debug.log*

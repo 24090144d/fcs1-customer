@@ -103,11 +103,16 @@ export function zonedTimeToUtc(
 const MONTH_ABBR: Record<string, number> = {
   jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  january: 0, february: 1, march: 2, april: 3, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
 };
-// Matches the naive "DD Mon YYYY HH:mm[:ss]" format CSV exports use (e.g.
-// "01 Jul 2026 10:24") — no timezone/offset marker, so it must be interpreted
-// as being in the org's configured timezone, not the server's ambient one.
-const NAIVE_DATE_RE = /^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+// Matches the naive "DD Mon YYYY HH:mm[:ss]" format CSV exports use — JO/IM
+// export 3-letter abbreviations (e.g. "01 Jul 2026 10:24"), but CO exports
+// full month names (e.g. "04 June 2026 11:39:28"). Neither has a
+// timezone/offset marker, so both must be interpreted as being in the org's
+// configured timezone, not the server's ambient one — hence {3,9} to accept
+// "May" through "September"/"November"/"December".
+const NAIVE_DATE_RE = /^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
 // Matches naive ISO-shaped strings with no "Z"/offset suffix (e.g.
 // "2026-07-01 10:24:00" or "2026-07-01T10:24"), which JS would otherwise
 // parse as local time in the server's ambient timezone.

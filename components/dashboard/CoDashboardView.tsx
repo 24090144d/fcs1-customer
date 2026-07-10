@@ -125,6 +125,31 @@ function hourFromSource(source: string | null | undefined, timeZone: string): nu
   return localHour(date, timeZone);
 }
 
+// Precomputes each row's hour-of-day bucket in a single pass. The 24-hour
+// distribution charts previously recomputed this per row on every one of
+// their 24 buckets via `rows.filter(row => hourFromSource(...) === h)` — an
+// O(24n) scan (parsing + timezone-converting the same date up to 24 times
+// per row) repeated across ~35 chart definitions. This cuts that to a single
+// O(n) pass; callers group via the returned per-row hour lookup instead.
+function computeHourByRow(rows: CoRow[], sourceFn: (row: CoRow) => string | null | undefined, timeZone: string): Map<CoRow, number | null> {
+  const map = new Map<CoRow, number | null>();
+  for (const row of rows) {
+    map.set(row, hourFromSource(sourceFn(row), timeZone));
+  }
+  return map;
+}
+
+// Groups rows into 24 hour-of-day buckets using a precomputed per-row hour
+// lookup (from computeHourByRow) — a single O(n) pass instead of 24 filters.
+function bucketRowsByHour(rows: CoRow[], hourByRow: Map<CoRow, number | null>): CoRow[][] {
+  const buckets: CoRow[][] = Array.from({ length: 24 }, () => []);
+  for (const row of rows) {
+    const h = hourByRow.get(row);
+    if (h !== null && h !== undefined) buckets[h].push(row);
+  }
+  return buckets;
+}
+
 function toDateKey(value: string | null | undefined): string {
   const text = normText(value);
   if (!text) return '';
@@ -714,6 +739,9 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
   const suffix = chartTitleSuffix(filters);
   const allRows = filteredRows;
   const completedRows = filteredRows.filter(isCompleted);
+  // Single-pass hour lookup shared by every 24-hour-distribution chart below
+  // (co-04, co-15..20, co-25..27, co-28..39) — see computeHourByRow/bucketRowsByHour.
+  const hourByRow = computeHourByRow(allRows, (row) => row.completed_time ?? row.start_time ?? row.created_date, timeZone);
   const dailyMap = new Map<string, { total: number; completed: number; delayed: number; reclean: number }>();
   const statusMap = groupCount(allRows, rowStatus);
   const statusRoomTypeMap = new Map<string, Map<string, number>>();
@@ -828,15 +856,12 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
   ];
   const durationBinCounts = durationBins.map((bin) => completedDurationValues.filter((value) => value >= bin.min && value < bin.max).length);
   const completionHourCategories = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
-  const completionHourCounts = Array.from({ length: 24 }, (_, hour) => completedRows.filter((row) => {
-    const source = row.completed_time ?? row.start_time ?? row.created_date;
-    return hourFromSource(source, timeZone) === hour;
-  }).length);
+  const completedHourBuckets = bucketRowsByHour(completedRows, hourByRow);
+  const completionHourCounts = completedHourBuckets.map((rows) => rows.length);
   const hourFloorCreditMap = new Map<string, number>();
   for (const row of completedRows) {
-    const source = row.completed_time ?? row.start_time ?? row.created_date;
-    const hour = hourFromSource(source, timeZone);
-    if (hour === null) continue;
+    const hour = hourByRow.get(row);
+    if (hour === null || hour === undefined) continue;
     const floor = normText(row.floor) || 'Unknown';
     const key = `${hour}::${floor}`;
     const credit = typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
@@ -870,26 +895,17 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
   });
 
   // co-04 drilldown: duration bucket counts per completion hour
-  const hourDurBucketCounts = Array.from({ length: 24 }, (_, hour) => {
-    const hourRows = completedRows.filter((row) => {
-      const src = row.completed_time ?? row.start_time ?? row.created_date;
-      return hourFromSource(src, timeZone) === hour;
-    });
-    return durationBins.map((bin) =>
+  const hourDurBucketCounts = completedHourBuckets.map((hourRows) =>
+    durationBins.map((bin) =>
       hourRows.filter((row) => {
         const v = toMinutes(row);
         return Number.isFinite(v) && v >= bin.min && v < bin.max;
       }).length,
-    );
-  });
+    ),
+  );
 
   // co-15-20: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
-  const allHourRows24 = Array.from({ length: 24 }, (_, h) =>
-    allRows.filter((row) => {
-      const src = row.completed_time ?? row.start_time ?? row.created_date;
-      return hourFromSource(src, timeZone) === h;
-    })
-  );
+  const allHourRows24 = bucketRowsByHour(allRows, hourByRow);
   const allHourCounts24 = allHourRows24.map((rows) => rows.length);
   const h24DurBins = allHourRows24.map((rows) =>
     durationBins.map((bin) => ({
@@ -944,12 +960,7 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
 
   // co-25-27: 24-Hour Delayed Order distribution drilldown dimensions
   const delayedRows = completedRows.filter(isDelayed);
-  const delayedHourRows = Array.from({ length: 24 }, (_, h) =>
-    delayedRows.filter((row) => {
-      const src = row.completed_time ?? row.start_time ?? row.created_date;
-      return hourFromSource(src, timeZone) === h;
-    })
-  );
+  const delayedHourRows = bucketRowsByHour(delayedRows, hourByRow);
   const delayedHourCounts = delayedHourRows.map((rows) => rows.length);
   const delayedHourStayStatus = delayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.stay_status) || 'Unknown');
@@ -965,14 +976,14 @@ function buildCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: string
   });
 
   // co-28-39: Dimension → 24-Hour / Cleaning Duration drilldowns
-  const _g1ByHour = (rows: CoRow[]) =>
-    completionHourCategories.map((label, h) => ({
-      name: label,
-      y: rows.filter((r) => {
-        const src = r.completed_time ?? r.start_time ?? r.created_date;
-        return hourFromSource(src, timeZone) === h;
-      }).length,
-    }));
+  const _g1ByHour = (rows: CoRow[]) => {
+    const counts = new Array(24).fill(0);
+    for (const r of rows) {
+      const h = hourByRow.get(r);
+      if (h !== null && h !== undefined) counts[h]++;
+    }
+    return completionHourCategories.map((label, h) => ({ name: label, y: counts[h] }));
+  };
   const _g2ByDur = (rows: CoRow[]) =>
     durationBins.map((bin) => ({
       name: bin.label,
@@ -2152,6 +2163,9 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
   const suffix = chartTitleSuffix(filters);
   const allRows = filteredRows;
   const completedRows = filteredRows.filter(isCompleted);
+  // Single-pass hour lookup shared by every 24-hour-distribution chart below
+  // (cco-18..23, cco-28..36) — see computeHourByRow/bucketRowsByHour.
+  const hourByRow = computeHourByRow(allRows, (row) => row.completed_time ?? row.start_time ?? row.created_date, timeZone);
 
   const statusPriority = (status: string): number => {
     const normalized = status.toLowerCase();
@@ -2341,12 +2355,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
   }
 
   // cco-18-23: 24-Hour Cleaning distribution (all rows by hour, 6 drilldown dimensions)
-  const ccoAllHourRows24 = Array.from({ length: 24 }, (_, h) =>
-    allRows.filter((row) => {
-      const src = row.completed_time ?? row.start_time ?? row.created_date;
-      return hourFromSource(src, timeZone) === h;
-    })
-  );
+  const ccoAllHourRows24 = bucketRowsByHour(allRows, hourByRow);
   const ccoAllHourCounts24 = ccoAllHourRows24.map((rows) => rows.length);
   const ccoHourCategories = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
   const ccoh24DurBins = ccoAllHourRows24.map((rows) =>
@@ -2405,12 +2414,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
 
   // cco-28-30: 24-Hour Delayed Order distribution drilldown dimensions
   const ccoDelayedRows = completedRows.filter(isDelayed);
-  const ccoDelayedHourRows = Array.from({ length: 24 }, (_, h) =>
-    ccoDelayedRows.filter((row) => {
-      const src = row.completed_time ?? row.start_time ?? row.created_date;
-      return hourFromSource(src, timeZone) === h;
-    })
-  );
+  const ccoDelayedHourRows = bucketRowsByHour(ccoDelayedRows, hourByRow);
   const ccoDelayedHourCounts = ccoDelayedHourRows.map((rows) => rows.length);
   const ccoDelayedHourStayStatus = ccoDelayedHourRows.map((rows) => {
     const m = groupCount(rows, (r) => normText(r.stay_status) || 'Unknown');
@@ -2426,14 +2430,14 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
   });
 
   // cco-31-42: Dimension → 24-Hour / Cleaning Duration drilldowns
-  const _ccog1ByHour = (rows: CoRow[]) =>
-    ccoHourCategories.map((label, h) => ({
-      name: label,
-      y: rows.filter((r) => {
-        const src = r.completed_time ?? r.start_time ?? r.created_date;
-        return hourFromSource(src, timeZone) === h;
-      }).length,
-    }));
+  const _ccog1ByHour = (rows: CoRow[]) => {
+    const counts = new Array(24).fill(0);
+    for (const r of rows) {
+      const h = hourByRow.get(r);
+      if (h !== null && h !== undefined) counts[h]++;
+    }
+    return ccoHourCategories.map((label, h) => ({ name: label, y: counts[h] }));
+  };
   const _ccog2ByDur = (rows: CoRow[]) =>
     durBucketLabels.map((label, bi) => ({
       name: label,

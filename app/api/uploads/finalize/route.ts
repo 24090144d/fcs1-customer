@@ -2086,9 +2086,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  type JobRow = { organization_id: string; module_code: 'im' | 'jo' | 'mo' | 'co'; source_name: string | null };
+  type JobRow = {
+    organization_id: string; module_code: 'im' | 'jo' | 'mo' | 'co'; source_name: string | null;
+    chain_code: string | null; hotel_code: string | null; hotel_name: string | null; country_code: string | null;
+  };
   const { data: job, error: jobError } = await supabase
-    .from('upload_jobs').select('organization_id, module_code, source_name')
+    .from('upload_jobs').select('organization_id, module_code, source_name, chain_code, hotel_code, hotel_name, country_code')
     .eq('id', upload_job_id).single() as unknown as SbResult<JobRow>;
 
   if (jobError || !job) return NextResponse.json({ error: 'Upload job not found' }, { status: 404 });
@@ -2146,7 +2149,19 @@ export async function POST(req: NextRequest) {
     }
   }
   const uploaded_file_id = fileRow?.id ?? null;
-  const hotel = parseFilename(fileRow?.file_name ?? '');
+  // Prefer the hotel/chain identity resolved once at create-job time and
+  // stored directly on the job — re-deriving it from uploaded_files.file_name
+  // is fragile: if file_hash dedup ever reuses a row from a different job,
+  // the filename (and thus hotel_code) silently belongs to the wrong upload.
+  // Fall back to filename parsing only for jobs created before this fix.
+  const hotel = job.chain_code || job.hotel_code
+    ? {
+        chainCode:   job.chain_code   ?? '',
+        hotelCode:   job.hotel_code   ?? '',
+        hotelName:   job.hotel_name   ?? '',
+        countryCode: job.country_code ?? '',
+      }
+    : parseFilename(fileRow?.file_name ?? '');
 
   await supabase.from(recordTable).delete().eq('upload_job_id', upload_job_id);
 

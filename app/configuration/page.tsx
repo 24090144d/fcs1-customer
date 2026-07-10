@@ -739,12 +739,42 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
   const [preview, setPreview]       = useState<TableStat[]>([]);
   const [errorMsg, setErrorMsg]     = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [compacting, setCompacting]   = useState(false);
+  const [compactMsg, setCompactMsg]   = useState('');
+  const [compactError, setCompactError] = useState('');
 
   function resetForm() {
     setStep('form');
     setPreview([]);
     setErrorMsg('');
     setSuccessMsg('');
+  }
+
+  async function runCompact() {
+    const trimmed = password.trim();
+    if (!trimmed) { setCompactError('Password is required.'); return; }
+    setCompacting(true);
+    setCompactError('');
+    setCompactMsg('');
+    try {
+      const res  = await fetch('/api/admin/reset-database', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ password: trimmed, module, action: 'compact' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; error?: string; message?: string;
+      };
+      if (!res.ok || !body.ok) {
+        setCompactError(body.error ?? 'Compaction failed.');
+        return;
+      }
+      setCompactMsg(body.message ?? 'Compaction completed.');
+    } catch (e) {
+      setCompactError(e instanceof Error ? e.message : 'Compaction failed.');
+    } finally {
+      setCompacting(false);
+    }
   }
 
   function handleModuleChange(m: ResetModule) {
@@ -1039,6 +1069,50 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
           </p>
         </div>
       )}
+
+      {/* Compact database — non-destructive, reclaims disk space left behind
+          by rows deleted outside a full reset (e.g. a scoped delete). Uses
+          the same module scope + password above. */}
+      <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${pal.panelBorder}` }}>
+        <p className="font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: pal.muted }}>
+          Compact database
+        </p>
+        <p className="mt-1 text-sm leading-6" style={{ color: pal.muted }}>
+          Runs VACUUM FULL on the {module} scope's tables to physically shrink them on disk.
+          Does not delete any data — only reclaims space already freed by prior deletes.
+          Briefly locks the affected tables.
+        </p>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void runCompact()}
+            disabled={compacting || busy}
+            className="inline-flex items-center gap-2 px-4 py-2 font-mono uppercase transition-opacity hover:opacity-85 disabled:opacity-60"
+            style={{ border: `1px solid ${pal.accent}`, color: pal.accent, background: 'transparent', fontSize: '0.68rem', letterSpacing: '0.08em' }}
+          >
+            <Database size={12} className={compacting ? 'animate-pulse' : ''} />
+            {compacting ? 'Compacting…' : `Compact ${module}`}
+          </button>
+        </div>
+        {compactError && (
+          <div
+            className="mt-3 flex items-start gap-2 px-3 py-2"
+            style={{ border: `1px solid ${pal.danger}55`, background: `${pal.danger}12`, color: pal.danger }}
+          >
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>{compactError}</p>
+          </div>
+        )}
+        {compactMsg && (
+          <div
+            className="mt-3 flex items-start gap-2 px-3 py-2"
+            style={{ border: `1px solid ${pal.accent}55`, background: `${pal.accent}14`, color: pal.accent }}
+          >
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+            <p className="font-mono" style={{ fontSize: '0.68rem', letterSpacing: '0.04em' }}>{compactMsg}</p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

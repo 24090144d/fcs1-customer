@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     const {
       file_hash, file_name, file_size,
-      module_code, chain_code, hotel_name, data_range,
+      module_code, chain_code, hotel_code, hotel_name, country_code, data_range,
     } = body;
 
     if (!file_hash || !file_name || !file_size || !module_code) {
@@ -94,6 +94,13 @@ export async function POST(req: NextRequest) {
       total_files:   1,
       total_rows:    0,
       processed_rows: 0,
+      // Resolved once here — finalize reads these directly instead of
+      // re-deriving hotel identity from a (possibly stale/reused) file lookup.
+      chain_code:    chain_code   ?? null,
+      hotel_code:    hotel_code   ?? null,
+      hotel_name:    hotel_name   ?? null,
+      country_code:  country_code ?? null,
+      data_range:    data_range   ?? null,
     };
 
     const { data: job, error: jobError } = await supabase

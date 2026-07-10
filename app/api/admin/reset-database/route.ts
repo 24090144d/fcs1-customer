@@ -6,7 +6,7 @@ import { getPool } from '@/lib/db/supabaseCompat';
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
-type ResetAction = 'preview' | 'execute';
+type ResetAction = 'preview' | 'execute' | 'compact';
 
 export interface TableStat {
   table_name: string;
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
       module   = (['ALL', 'JO', 'MO', 'CO', 'IM'].includes(body?.module ?? '')
         ? (body!.module as ResetModule)
         : 'ALL');
-      action   = body?.action === 'preview' ? 'preview' : 'execute';
+      action   = body?.action === 'preview' ? 'preview' : body?.action === 'compact' ? 'compact' : 'execute';
     } catch { /* empty / malformed body */ }
 
     const expected = todayPasswordHKT();
@@ -133,6 +133,61 @@ export async function POST(req: Request) {
     if (action === 'preview') {
       const stats = await getTableStats(pool, tables);
       return NextResponse.json({ ok: true, module, tables: stats });
+    }
+
+    // ── Compact: VACUUM FULL only — reclaims disk space from already-deleted
+    // rows without touching any remaining data. Plain VACUUM/VACUUM ANALYZE
+    // (run automatically after a reset's TRUNCATE below) only marks space
+    // reusable within the table; it does not shrink the file on disk. This is
+    // for the case where rows were removed some other way (e.g. a scoped
+    // delete outside this endpoint) and the table itself needs shrinking.
+    // Takes an ACCESS EXCLUSIVE lock per table for its duration.
+    if (action === 'compact') {
+      const before = await getTableStats(pool, tables);
+      const compacted: string[] = [];
+      const failed: string[] = [];
+      for (const t of tables) {
+        try {
+          await pool.query(`VACUUM (FULL, ANALYZE) ${quoteIdent(t)}`);
+          compacted.push(t);
+        } catch (e) {
+          console.error(`[reset-database] VACUUM FULL failed for ${t}:`, e instanceof Error ? e.message : e);
+          failed.push(t);
+        }
+      }
+      const after = await getTableStats(pool, tables);
+      const beforeBytes = before.reduce((s, t) => s + t.size_bytes, 0);
+      const afterBytes = after.reduce((s, t) => s + t.size_bytes, 0);
+      const label = module === 'ALL' ? 'All modules' : `${module} module`;
+      return NextResponse.json({
+        ok: true,
+        module,
+        compacted_tables: compacted.length,
+        failed_tables: failed,
+        before,
+        after,
+        bytes_reclaimed: Math.max(0, beforeBytes - afterBytes),
+        message: `${label} compacted — ${compacted.length}/${tables.length} tables, `
+          + `${(before.reduce((s, t) => s + t.size_bytes, 0) - after.reduce((s, t) => s + t.size_bytes, 0)) > 0
+              ? `reclaimed ${Math.round((beforeBytes - afterBytes) / 1024 / 1024)} MB`
+              : 'no size change'}${failed.length > 0 ? ` (${failed.length} failed — check logs)` : ''}.`,
+      });
+    }
+
+    // A full (module=ALL) reset truncates `organizations` too. Capture the
+    // existing row(s) — organization_code/name AND the configured timezone —
+    // before truncating, so the reset doesn't silently discard whatever the
+    // user set in Configuration → System (previously this reseeded with a
+    // hardcoded 'UTC' timezone and env-var defaults, losing both).
+    type OrgSnapshot = { organization_code: string; organization_name: string; timezone: string };
+    let orgSnapshot: OrgSnapshot[] = [];
+    if (tables.includes('organizations')) {
+      try {
+        const { rows } = await pool.query<OrgSnapshot>(
+          `SELECT organization_code, organization_name, timezone FROM organizations`,
+        );
+        orgSnapshot = rows;
+      } catch { /* table may not exist yet — proceed with no snapshot */ }
     }
 
     // ── Execute: TRUNCATE then VACUUM ANALYZE ─────────────────────────────────
@@ -159,25 +214,34 @@ export async function POST(req: Request) {
       } catch { /* non-critical */ }
     }
 
-    // A full (module=ALL) reset truncates `organizations` too, and every CSV
-    // upload depends on at least one row existing there (see
-    // app/api/uploads/create-job/route.ts's resolveOrganizationId fallback).
-    // Re-seed the default org immediately so the app isn't left in a state
-    // where no upload can succeed until someone notices and reseeds by hand.
+    // Restore the captured org row(s) — every CSV upload depends on at least
+    // one row existing (see create-job's resolveOrganizationId fallback), and
+    // restoring the ORIGINAL name/timezone (not env-var/UTC defaults) means a
+    // reset never resets Configuration → System settings as a side effect.
+    // Only fall back to CUSTOMER_CODE/CUSTOMER_NAME/UTC if no row existed at
+    // all (e.g. the very first reset on a brand-new database).
     let orgReseeded = false;
     if (tables.includes('organizations')) {
-      const fallbackCode = (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase();
-      const fallbackName = process.env.CUSTOMER_NAME ?? 'Default Organization';
+      const toRestore: OrgSnapshot[] = orgSnapshot.length > 0
+        ? orgSnapshot
+        : [{
+            organization_code: (process.env.CUSTOMER_CODE ?? 'DEFAULT').toUpperCase(),
+            organization_name: process.env.CUSTOMER_NAME ?? 'Default Organization',
+            timezone: 'UTC',
+          }];
       try {
-        await pool.query(
-          `INSERT INTO organizations (organization_code, organization_name, timezone)
-           VALUES ($1, $2, 'UTC')
-           ON CONFLICT (organization_code) DO UPDATE SET organization_name = EXCLUDED.organization_name`,
-          [fallbackCode, fallbackName],
-        );
+        for (const org of toRestore) {
+          await pool.query(
+            `INSERT INTO organizations (organization_code, organization_name, timezone)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (organization_code) DO UPDATE
+               SET organization_name = EXCLUDED.organization_name, timezone = EXCLUDED.timezone`,
+            [org.organization_code, org.organization_name, org.timezone],
+          );
+        }
         orgReseeded = true;
       } catch (e) {
-        console.error('[reset-database] Failed to reseed default organization:', e instanceof Error ? e.message : e);
+        console.error('[reset-database] Failed to restore organization row(s):', e instanceof Error ? e.message : e);
       }
     }
 

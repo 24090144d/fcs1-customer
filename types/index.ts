@@ -81,6 +81,15 @@ export interface UploadJobRow {
   processed_rows:  number;
   created_at:      string;
   updated_at:      string;
+  // Hotel/chain identity resolved once at create-job time — finalize reads
+  // these directly instead of re-deriving them from an uploaded_files.file_name
+  // lookup, which can resolve to the wrong row if file_hash dedup ever reuses
+  // an existing file across jobs.
+  chain_code:      string | null;
+  hotel_code:      string | null;
+  hotel_name:      string | null;
+  country_code:    string | null;
+  data_range:      string | null;
 }
 
 export type UploadJobInsert = Omit<UploadJobRow, 'id' | 'created_at' | 'updated_at'>;

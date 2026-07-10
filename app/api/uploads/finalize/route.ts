@@ -2156,10 +2156,13 @@ export async function POST(req: NextRequest) {
   // Fall back to filename parsing only for jobs created before this fix.
   const hotel = job.chain_code || job.hotel_code
     ? {
-        chainCode:   job.chain_code   ?? '',
-        hotelCode:   job.hotel_code   ?? '',
-        hotelName:   job.hotel_name   ?? '',
-        countryCode: job.country_code ?? '',
+        // Uppercased defensively — a client that sends a mixed-case filename
+        // segment (e.g. "LGBond") must not silently break case-sensitive
+        // lookups elsewhere (fetchCoRows, nav/dashboards, fetchDashboard).
+        chainCode:   (job.chain_code   ?? '').toUpperCase(),
+        hotelCode:   (job.hotel_code   ?? '').toUpperCase(),
+        hotelName:   job.hotel_name    ?? '',
+        countryCode: (job.country_code ?? '').toUpperCase(),
       }
     : parseFilename(fileRow?.file_name ?? '');
 

@@ -67,11 +67,15 @@ function parseFileName(filename: string): ParsedFileName | null {
   }
   if (moduleIndex < 0) return null;
   return {
-    chainCode:   parts[0],
-    hotelCode:   parts[1],
+    // Uppercased to match every downstream consumer (nav route, fetchCoRows,
+    // fetchDashboard, finalize's own filename-parsing fallback) — all compare
+    // hotel/chain/country codes case-sensitively against an uppercased value,
+    // so a mixed-case filename (e.g. "LGBond") must not be stored as-is.
+    chainCode:   parts[0].toUpperCase(),
+    hotelCode:   parts[1].toUpperCase(),
     hotelName:   parts.slice(2, moduleIndex).join('-'),
     module:      parts[moduleIndex],
-    countryCode: parts[moduleIndex + 1],
+    countryCode: parts[moduleIndex + 1].toUpperCase(),
     dataRange:   parts.slice(moduleIndex + 2).join('-'),
     isValid:     true,
   };

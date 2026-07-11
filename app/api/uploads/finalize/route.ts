@@ -1440,6 +1440,8 @@ interface JoKpiAcc {
   itemDateMap: Record<string, Record<string, number>>;
   // ── jo-03: service item → completion duration bucket → completed count ────
   itemDurBkt: Record<string, Record<string, number>>;
+  // ── cjo-04: delayed jobs (delay > 0) → duration bucket → assigned dept → assigned to (user) → count ──
+  delayBktDeptAssignedMap: Record<string, Record<string, Record<string, number>>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1496,6 +1498,7 @@ function newJoKpiAcc(): JoKpiAcc {
     hourTimeout: {},
     itemDateMap: {},
     itemDurBkt: {},
+    delayBktDeptAssignedMap: {},
   };
 }
 
@@ -1509,6 +1512,12 @@ function percentile(values: number[], p: number): number | null {
 function inc2(map: Record<string, Record<string, number>>, k1: string, k2: string, by = 1) {
   if (!map[k1]) map[k1] = {};
   map[k1][k2] = (map[k1][k2] ?? 0) + by;
+}
+
+function inc3(map: Record<string, Record<string, Record<string, number>>>, k1: string, k2: string, k3: string, by = 1) {
+  if (!map[k1]) map[k1] = {};
+  if (!map[k1][k2]) map[k1][k2] = {};
+  map[k1][k2][k3] = (map[k1][k2][k3] ?? 0) + by;
 }
 
 function push2(map: Record<string, Record<string, number[]>>, k1: string, k2: string, v: number) {
@@ -1525,6 +1534,7 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   const item = toStr(rr.service_item) ?? 'Unknown';
   const dept = toStr(rr.department_name) ?? 'Unknown';
   const assignedDept = toStr(rr.assigned_to_department) ?? 'Unknown';
+  const assignedTo = toStr(rr.assigned_to_user) ?? 'Unknown';
   const createdByDept = toStr(rr.created_by_department) ?? 'Unknown';
   const completedDept = toStr(rr.completed_by_department) ?? 'Unknown';
   const location = toStr(rr.location) ?? 'Unknown';
@@ -1560,6 +1570,8 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   if (escalatedFlag) inc2(acc.catItemEscalations, category, item);
   if (reassignedFlag) inc(acc.deptReassigned, dept);
   if (delayMin !== null && delayMin > 0) inc2(acc.catItemBreachMins, category, item, delayMin);
+  // cjo-04: delayed jobs → duration bucket → assigned dept → assigned to (user)
+  if (delayMin !== null && delayMin > 0) inc3(acc.delayBktDeptAssignedMap, durBucket(delayMin), assignedDept, assignedTo);
 
   const createdAt = toStr(rr.created_datetime);
   const ackAt = toStr(rr.acknowledged_datetime);
@@ -2310,6 +2322,19 @@ export async function POST(req: NextRequest) {
           acknowledged_datetime: toIso(rr.acknowledged_datetime, orgTimezone),
           completed_datetime:    toIso(rr.completed_datetime, orgTimezone),
           delay_duration:        toStr(rr.delay_duration),
+          // These columns exist on jo_records (002_jo_schema_alignment.sql)
+          // but were never populated here — accumulateJoKpis() already reads
+          // them from the raw row for chart aggregates, but the per-record
+          // columns themselves stayed NULL, blocking any direct SQL query or
+          // backfill against them (the values were only ever recoverable via
+          // the normalized_row JSON fallback).
+          created_by_department: toStr(rr.created_by_department),
+          created_by_user:       toStr(rr.created_by_user),
+          assigned_to_department: toStr(rr.assigned_to_department),
+          assigned_to_user:      toStr(rr.assigned_to_user),
+          completed_by_department: toStr(rr.completed_by_department),
+          reassigned_job:        toStr(rr.reassigned_job),
+          escalation_group:      toStr(rr.escalation_group),
           vip_code:              toStr(rr.vip_code),
           is_vip:                isVip(rr),
           actual_duration:       parseDurationMinutes(toStr(rr.total_minute_between_created_to_completed)),
@@ -2580,6 +2605,7 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_completion_dur_map = joKpiAcc.completionDurMap;
     generatedJson.summary.jo_response_dur_map   = joKpiAcc.responseDurMap;
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
+    generatedJson.summary.jo_delay_bkt_dept_assigned_map = joKpiAcc.delayBktDeptAssignedMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
     // ── 24-hour bucket maps for cjo-23..cjo-26 ────────────────────────────────

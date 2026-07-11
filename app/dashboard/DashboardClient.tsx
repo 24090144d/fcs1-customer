@@ -35,7 +35,7 @@ const JO_LONG_CHART_IDS = new Set<string>([]);
 const IM_LONG_CHART_IDS = new Set<string>(['im-41', 'im-42', 'im-43', 'im-44', 'im-45']);
 // ⏰ 24-hour-of-day distribution charts — always full period (date filter ignored),
 // matching JO/MO's established behavior. Used only to control the FULL PERIOD badge.
-const IM_24H_CHART_IDS = new Set<string>(['im-04', 'im-44', 'im-45', 'cim-25', 'cim-26']);
+const IM_24H_CHART_IDS = new Set<string>(['im-03', 'im-04', 'im-44', 'im-45', 'cim-25', 'cim-26']);
 
 function splitLongCharts<T extends { id: string }>(charts: T[], longIds: Set<string>): { simple: T[]; long: T[] } {
   const simple: T[] = [];
@@ -49,7 +49,7 @@ const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: st
   { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
   { code: 'cim-02', id: 'cim-02', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
   { code: 'cim-03', id: 'cim-03', title: 'VIP Closure Rate vs VIP Incident by Hotel', note: 'Dual-axis chart for premium guest risk and recovery effectiveness. Benchmark: Good VIP Closure >= 95%; Bad < 90%.', formula: 'VIP Incidents = COUNT(vip_code valid) GROUP BY hotel; VIP Closure % = VIP Completed / VIP Incidents * 100' },
-  { code: 'cim-04', id: 'cim-04', title: 'Hotel Incident -> Top 10 Incident Category', note: 'Drilldown from hotel totals to top 10 categories for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_category per hotel' },
+  { code: 'cim-04', id: 'cim-04', title: '⏰ Hotel -> Department -> Incident Category -> Incident Items', note: 'Drilldown from hotel totals to department, then incident category, then incident items for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_category per hotel+department; Level 4 = COUNT(incident_case) GROUP BY incident_item_name per hotel+department+category' },
   { code: 'cim-05', id: 'cim-05', title: 'Chain — Repeat Incident Rate by Hotel', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Repeat Rate % = repeat_count / total_cases * 100 per hotel' },
   { code: 'cim-06', id: 'cim-06', title: 'Worldmap Incident by Hotel', note: 'Country-level map with hotel-level labels for cross-region executive visibility. Benchmark: Good when no single country exceeds 50% of chain incidents; Bad when one country > 70%.', formula: 'Country Value = SUM(total_cases) GROUP BY country_code; Label = CONCAT(hotel_code, incident_count) list per country' },
   { code: 'cim-07', id: 'cim-07', title: 'Hotel -> Department', note: 'Hotel-to-department drilldown for operational ownership alignment. Benchmark: Good when no department exceeds 25% of hotel incidents; Bad > 40%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel' },
@@ -1020,34 +1020,6 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
     });
   }
-  if (id === 'cim-04') {
-    const topLevel = entries.map((e) => ({
-      name: e.hotel_code,
-      y: e.summary.total,
-      drilldown: e.hotel_code,
-    }));
-    const drillSeries = entries.map((e) => ({
-      id: e.hotel_code,
-      name: `${e.hotel_code} Top 10`,
-      type: 'pie' as const,
-      innerSize: '45%',
-      data: Object.entries(e.summary.category_map ?? {})
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 24)
-        .map(([name, y]) => ({ name, y })),
-    }));
-    return hcOpts({
-      chart: { type: 'pie' },
-      series: [{
-        name: 'Incidents',
-        type: 'pie',
-        innerSize: '45%',
-        data: topLevel,
-      }],
-      drilldown: { series: drillSeries },
-      tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
-    });
-  }
   if (id === 'cim-10') {
     const topHotels = entries
       .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
@@ -1360,6 +1332,73 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   const hourDeptItemRows = (summary: DeptScopedSummary, hour: string, dept: string) => {
     return topMap(summary.hour_dept_item_map?.[hour]?.[dept] ?? {}, 50);
   };
+
+  if (id === 'cim-04') {
+    // 4-level vertical-bar drilldown: Hotel -> Department -> Incident Category -> Incident Items.
+    // No pre-computed dept+category+item breakdown exists in HotelSummary, so the leaf level
+    // falls back category_item_map[category] -> item_map, matching the established fallback
+    // pattern used by the hotel-level im-42 equivalent (deptCategoryItemRows above).
+    const hotelTop = entries
+      .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
+      .sort((a, b) => b.total - a.total);
+    const drillSeries: Highcharts.SeriesOptionsType[] = [];
+    for (const h of hotelTop) {
+      const entry = entries.find((en) => en.hotel_code === h.hotel);
+      if (!entry) continue;
+      const hKey = idPart(h.hotel);
+      const deptTop = topMap(entry.summary.dept_map ?? {}, 50);
+      drillSeries.push({
+        type: 'column',
+        id: `cim04h:${hKey}`,
+        name: `${h.hotel} Departments`,
+        custom: { xAxisTitle: 'Department' },
+        color: '#C55A10',
+        dataLabels: { enabled: true, format: '{point.y}' },
+        data: deptTop.map(([dept, total]) => ({ name: dept, y: total, drilldown: `cim04d:${hKey}:${idPart(dept)}` })),
+      } as Highcharts.SeriesOptionsType);
+      for (const [dept] of deptTop) {
+        const dKey = idPart(dept);
+        const catTop = topMap(entry.summary.dept_category_map?.[dept] ?? {}, 50);
+        drillSeries.push({
+          type: 'column',
+          id: `cim04d:${hKey}:${dKey}`,
+          name: `${h.hotel} ${dept} Categories`,
+          custom: { xAxisTitle: 'Incident Category' },
+          color: '#B45309',
+          dataLabels: { enabled: true, format: '{point.y}' },
+          data: catTop.map(([cat, total]) => ({ name: cat, y: total, drilldown: `cim04c:${hKey}:${dKey}:${idPart(cat)}` })),
+        } as Highcharts.SeriesOptionsType);
+        for (const [cat] of catTop) {
+          const cKey = idPart(cat);
+          const exactItems = topMap(entry.summary.category_item_map?.[cat] ?? {}, 50);
+          const items = exactItems.length > 0 ? exactItems : topMap(entry.summary.item_map ?? {}, 50);
+          drillSeries.push({
+            type: 'column',
+            id: `cim04c:${hKey}:${dKey}:${cKey}`,
+            name: `${h.hotel} ${dept} ${cat} Items`,
+            custom: { xAxisTitle: 'Incident Items' },
+            color: '#1D4ED8',
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map(([item, total]) => ({ name: item, y: total })),
+          } as Highcharts.SeriesOptionsType);
+        }
+      }
+    }
+    return withDrilldownXAxisTitles(hcOpts({
+      chart: { type: 'column' },
+      xAxis: { type: 'category', title: { text: 'Hotel' } },
+      yAxis: { title: { text: 'Incidents' }, min: 0 },
+      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+      series: [{
+        type: 'column',
+        name: 'Incidents',
+        color: '#0F766E',
+        dataLabels: { enabled: true, format: '{point.y}' },
+        data: hotelTop.map((h) => ({ name: h.hotel, y: h.total, drilldown: `cim04h:${idPart(h.hotel)}` })),
+      }],
+      drilldown: { series: drillSeries },
+    }), 'Hotel');
+  }
 
   if (id === 'cim-22') {
     const hotelSeries = entries.map((e) => ({ name: e.hotel_code, y: e.summary.total, drilldown: `cim22h:${idPart(e.hotel_code)}` }));
@@ -1889,9 +1928,77 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         },
       }] : [],
     }),
-    make('cjo-04', 'Timeout Rate by Hotel', 'Highlights hotels with higher timeout pressure.', 'timeout_jobs / total_jobs * 100 BY hotel_code', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'Timeout %' } }, series: [{ type: 'column', name: 'Timeout %', data: timeoutRate }],
-    }),
+    make('cjo-04', '⏰ Hotel → Delayed Duration Distribution → Assigned Department → Assigned To',
+      'Delayed jobs (delay > 0) by hotel, drilling into duration bucket, then assigned department, then assigned user.',
+      'COUNT(delay_duration > 0) BY hotel_code DRILLDOWN duration_bucket DRILLDOWN assigned_to_department DRILLDOWN assigned_to_user', (() => {
+      const GREEN = '#0F766E', ORANGE = '#C2410C', AMBER = '#B45309', BLUE = '#1D4ED8';
+      const DELAY_DUR_BUCKETS = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'];
+      const hotelTop = entries.map((e) => {
+        const m = (e.summary.jo_delay_bkt_dept_assigned_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
+        let total = 0;
+        for (const deptMap of Object.values(m)) for (const userMap of Object.values(deptMap)) for (const c of Object.values(userMap)) total += c;
+        return { hotel: e.hotel_code, total, map: m };
+      }).sort((a, b) => b.total - a.total);
+      const ddSeries: Highcharts.SeriesOptionsType[] = [];
+      for (const h of hotelTop) {
+        const hKey = encodeURIComponent(h.hotel);
+        ddSeries.push({
+          id: `cjo04h:${hKey}`,
+          type: 'column',
+          name: `${h.hotel} — Delayed Duration Distribution`,
+          color: ORANGE,
+          dataLabels: { enabled: true, format: '{point.y}' },
+          data: DELAY_DUR_BUCKETS.map((bkt) => {
+            const deptMap = h.map[bkt] ?? {};
+            let y = 0;
+            for (const userMap of Object.values(deptMap)) for (const c of Object.values(userMap)) y += c;
+            return { name: bkt, y, drilldown: y > 0 ? `cjo04b:${hKey}:${encodeURIComponent(bkt)}` : undefined };
+          }),
+        } as Highcharts.SeriesOptionsType);
+        for (const bkt of DELAY_DUR_BUCKETS) {
+          const deptMap = h.map[bkt] ?? {};
+          const deptEntries = Object.entries(deptMap)
+            .map(([dept, userMap]) => [dept, Object.values(userMap).reduce((a, c) => a + c, 0)] as [string, number])
+            .sort((a, b) => b[1] - a[1]);
+          if (deptEntries.length === 0) continue;
+          const bKey = encodeURIComponent(bkt);
+          ddSeries.push({
+            id: `cjo04b:${hKey}:${bKey}`,
+            type: 'column',
+            name: `${h.hotel} ${bkt} — Assigned Department`,
+            color: AMBER,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: deptEntries.map(([dept, y]) => ({ name: dept, y, drilldown: `cjo04d:${hKey}:${bKey}:${encodeURIComponent(dept)}` })),
+          } as Highcharts.SeriesOptionsType);
+          for (const [dept] of deptEntries) {
+            const userMap = deptMap[dept] ?? {};
+            const userEntries = Object.entries(userMap).sort(([, a], [, b]) => b - a);
+            ddSeries.push({
+              id: `cjo04d:${hKey}:${bKey}:${encodeURIComponent(dept)}`,
+              type: 'column',
+              name: `${h.hotel} ${bkt} ${dept} — Assigned To`,
+              color: BLUE,
+              dataLabels: { enabled: true, format: '{point.y}' },
+              data: userEntries.map(([user, y]) => ({ name: user, y })),
+            } as Highcharts.SeriesOptionsType);
+          }
+        }
+      }
+      return {
+        chart: { type: 'column' },
+        xAxis: { type: 'category', title: { text: 'Hotel' } },
+        yAxis: { min: 0, title: { text: 'Delayed Jobs' } },
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        series: [{
+          type: 'column',
+          name: 'Delayed Jobs',
+          color: GREEN,
+          dataLabels: { enabled: true, format: '{point.y}' },
+          data: hotelTop.map((h) => ({ name: h.hotel, y: h.total, drilldown: `cjo04h:${encodeURIComponent(h.hotel)}` })),
+        }],
+        drilldown: { series: ddSeries },
+      };
+    })()),
     make('cjo-08', 'Avg Response Minutes by Hotel', 'Average create-to-acknowledge latency by hotel.', 'AVG(response_min) BY hotel_code', {
       chart: { type: 'bar' }, xAxis: { categories: hotelCodes }, series: [{ type: 'bar', name: 'Avg Response (min)', data: avgResponse }],
     }),
@@ -2363,6 +2470,14 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     const tmp = charts[i03];
     charts[i03] = charts[i27];
     charts[i27] = tmp;
+  }
+  // Swap display positions of cjo-04 and cjo-07 (chart contents stay tied to their own id)
+  const i04 = charts.findIndex((c) => c.id === 'cjo-04');
+  const i07 = charts.findIndex((c) => c.id === 'cjo-07');
+  if (i04 >= 0 && i07 >= 0) {
+    const tmp2 = charts[i04];
+    charts[i04] = charts[i07];
+    charts[i07] = tmp2;
   }
   return charts;
 }
@@ -4603,42 +4718,46 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           }),
         },
       }, 'imd08'),
-      make('im-03', 'Top Incident → Daily Trend', 'column', 'Top 10 incident items by volume. Click a bar to see its daily count trend.', 'COUNT by incident_item_name; drilldown: COUNT by created_date', (() => {
-        const GREEN  = '#0F766E';
-        const ORANGE = '#C2410C';
-        const idm = data.summary.im_item_date_map;
-        const hasIdm = !!idm && Object.keys(idm).length > 0;
-        const topItems: Array<[string, number]> = hasIdm
-          ? Object.entries(idm)
-              .map(([item, dm]): [string, number] => [item, Object.values(dm).reduce((a, c) => a + c, 0)])
-              .sort(([, a], [, b]) => b - a).slice(0, 24)
-          : Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => b - a).slice(0, 24);
-        const allDates = hasIdm
-          ? Array.from(new Set(topItems.flatMap(([k]) => Object.keys(idm![k] ?? {})))).sort()
-          : [];
-        return {
-          chart: { type: 'column' },
-          xAxis: { type: 'category' },
-          yAxis: { min: 0, title: { text: 'Incidents' } },
+      make('im-03', '⏰ 24 Hour Distribution > Department > Incident Items', 'column', 'Drilldown: 24 Hour Distribution > Department > Incident Items', 'COUNT by hour, then department, then item', (() => {
+        const scopeSummary = (deptScopedSummary ?? data.summary) as DeptScopedSummary;
+        const topMap = (map: Record<string, number>, limit = 50) => Object.entries(map ?? {})
+          .sort(([, a], [, b]) => Number(b) - Number(a))
+          .slice(0, limit);
+        const hourDeptRows = (summary: DeptScopedSummary, hour: string) => topMap(summary.hour_dept_map?.[hour] ?? {}, 50);
+        const hourDeptItemRows = (summary: DeptScopedSummary, hour: string, dept: string) => topMap(summary.hour_dept_item_map?.[hour]?.[dept] ?? {}, 50);
+        return withDrilldownXAxisTitles(hcOpts({
+          xAxis: { type: 'category', title: { text: '24 Hour Distribution' } },
+          yAxis: { title: { text: 'Incidents' }, min: 0 },
+          plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
           series: [{
-            type: 'column', name: 'Incidents', color: GREEN,
-            data: topItems.map(([k, v]) => ({ name: k, y: v, drilldown: hasIdm ? `im03d:${k}` : undefined })),
-            dataLabels: { enabled: true },
+            name: 'Incidents',
+            type: 'column',
+            data: Array.from({ length: 24 }, (_, hour) => ({ name: `${String(hour).padStart(2, '0')}:00`, y: Number(scopeSummary.hour_map?.[hour] ?? 0), drilldown: `im03h:${String(hour)}` })),
           }],
-          plotOptions: { column: { dataLabels: { enabled: true } } },
-          ...(hasIdm && allDates.length > 0 ? {
-            drilldown: {
-              series: topItems.map(([k]) => ({
-                id: `im03d:${k}`,
-                name: `${k} — Daily Trend`,
-                type: 'column', color: ORANGE,
-                dataLabels: { enabled: true },
-                data: allDates.map((date) => ({ name: date, y: idm![k]?.[date] ?? 0 })),
-              })),
-            },
-          } : {}),
-        } as Record<string, unknown>;
-      })(), 'im-05'),
+          drilldown: {
+            series: Array.from({ length: 24 }, (_, hour) => {
+              const h = String(hour);
+              const depts = hourDeptRows(scopeSummary, h);
+              return [
+                {
+                  id: `im03h:${h}`,
+                  type: 'column',
+                  name: `${String(hour).padStart(2, '0')}:00 Departments`,
+                  custom: { xAxisTitle: 'Department' },
+                  data: depts.map(([dept, y]) => ({ name: dept, y: Number(y), drilldown: `im03d:${h}:${encodeURIComponent(dept)}` })),
+                },
+                ...depts.map(([dept]) => ({
+                  id: `im03d:${h}:${encodeURIComponent(dept)}`,
+                  type: 'column',
+                  name: `${String(hour).padStart(2, '0')}:00 ${dept} Items`,
+                  custom: { xAxisTitle: 'Incident Items' },
+                  data: hourDeptItemRows(scopeSummary, h, dept).map(([name, y]) => ({ name, y })),
+                })),
+              ];
+            }).flat(),
+          },
+        }), '24 Hour Distribution') as unknown as Record<string, unknown>;
+      })(), 'im-45'),
       make('im-04', 'VIP vs Non-VIP → 24-Hour Distribution', 'column', 'Click VIP or Non-VIP to drill into its 24-hour incident distribution.', 'COUNT by vip_flag; drilldown: COUNT by created_hour', (() => {
         const vipHourRaw = data.summary.im_vip_hour_map ?? {};
         const vipHourMap: Record<number, number> = Object.fromEntries(

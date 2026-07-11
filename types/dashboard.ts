@@ -98,6 +98,7 @@ export interface HotelSummary {
   jo_completion_dur_map?: Record<string, number>;
   jo_response_dur_map?: Record<string, number>;
   jo_escalated_dur_map?: Record<string, number>;
+  jo_delay_bkt_dept_assigned_map?: Record<string, Record<string, Record<string, number>>>; // duration bucket → assigned dept → assigned to (user) → count
   jo_sla_cat_map?: Record<string, number>;   // category → SLA-compliant completed count
   jo_sla_cat_total?: Record<string, number>; // category → total completed count
   jo_cat_res_p90?: Record<string, number>;   // category → P90 resolution minutes

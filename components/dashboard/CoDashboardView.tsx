@@ -69,7 +69,7 @@ const CO_24H_CHART_IDS = new Set([
   'co-04', 'co-15', 'co-16', 'co-17', 'co-18', 'co-19', 'co-20',
   'co-25', 'co-26', 'co-27', 'co-28', 'co-29', 'co-30', 'co-31', 'co-32', 'co-33',
   'co-40', 'co-42',
-  'cco-03', 'cco-18', 'cco-19', 'cco-20', 'cco-21', 'cco-22', 'cco-23',
+  'cco-18', 'cco-19', 'cco-20', 'cco-21', 'cco-22', 'cco-23',
   'cco-28', 'cco-29', 'cco-30', 'cco-31', 'cco-32', 'cco-33', 'cco-34', 'cco-35', 'cco-36',
   'cco-44', 'cco-46',
 ]);
@@ -2721,39 +2721,99 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
         { type: 'line', name: 'Avg Duration (min)', data: hotelAvgDurationEntries.map((item) => item.avg), yAxis: 1, color: '#ea580c', lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 }, dashStyle: 'Solid' },
       ],
     }),
-    make('cco-03', '24-Hour Completion → Duration', 'Completed orders by hour of day with drilldown into cleaning duration distribution per hour', 'COUNT(*) GROUP BY HOUR(completed_time) DRILLDOWN duration_bin WHERE completed = true', {
-      chart: { type: 'column' },
-      title: { text: undefined },
-      xAxis: { type: 'category', title: { text: 'Hour of Day' } },
-      yAxis: { title: { text: 'Completed Orders' } },
-      plotOptions: { column: { dataLabels: { enabled: false } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{
-        type: 'column',
-        name: 'Completed Orders',
-        color: '#0f766e',
-        data: hourCategories.map((label, hour) => ({
-          name: label,
-          y: completedRows.filter((row) => {
-            const src = row.completed_time ?? row.start_time ?? row.created_date;
-            return hourFromSource(src, timeZone) === hour;
-          }).length,
-          drilldown: `cco-hour:${hour}`,
-        })),
-      }],
-      drilldown: {
-        series: hourCategories.map((label, hour) => ({
-          id: `cco-hour:${hour}`,
-          name: `${label} — Duration Distribution`,
-          type: 'column' as const,
-          color: '#ea580c',
-          data: ['0-15 min', '15-30 min', '30-45 min', '45-60 min', '60-75 min', '75-90 min', '>90 min'].map((bucket, i) => ({
-            name: bucket,
-            y: (hourDurBuckets.get(hour) ?? [])[i] ?? 0,
-          })),
-        })),
-      },
-    }),
+    (() => {
+      // cco-03: Hotel → Floor → Attendant Credit → Average Cleaning Duration
+      // (4-level vertical-bar drilldown, mirrors cco-43's Hotel→Floor→
+      // Attendant→AvgDuration structure exactly, but the Hotel/Floor/
+      // Attendant levels plot cleaning_credit sums instead of order counts).
+      type Cco03Agg = { credit: number; durations: number[]; roomTypeDur: Map<string, number[]> };
+      const cco03HotelFloorAtt = new Map<string, Map<string, Map<string, Cco03Agg>>>();
+      for (const row of completedRows) {
+        const hotel = normText(row.hotel_code) || 'Unknown Hotel';
+        const floor = normText(row.floor) || 'Unknown Floor';
+        const att = normText(row.attendant) || 'Unknown Attendant';
+        const credit = typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
+        if (!cco03HotelFloorAtt.has(hotel)) cco03HotelFloorAtt.set(hotel, new Map());
+        const floorMap = cco03HotelFloorAtt.get(hotel)!;
+        if (!floorMap.has(floor)) floorMap.set(floor, new Map());
+        const attMap = floorMap.get(floor)!;
+        if (!attMap.has(att)) attMap.set(att, { credit: 0, durations: [], roomTypeDur: new Map() });
+        const agg = attMap.get(att)!;
+        agg.credit += credit;
+        const dur = toMinutes(row);
+        if (dur !== null && Number.isFinite(dur)) {
+          agg.durations.push(dur);
+          const roomType = normText(row.room_type) || 'Unknown Room Type';
+          if (!agg.roomTypeDur.has(roomType)) agg.roomTypeDur.set(roomType, []);
+          agg.roomTypeDur.get(roomType)!.push(dur);
+        }
+      }
+
+      const cco03Primary: Array<{ name: string; y: number; drilldown: string }> = [];
+      const cco03DdSeries: DdSeries[] = [];
+      const cco03HotelsSorted = Array.from(cco03HotelFloorAtt.entries())
+        .map(([hotel, floorMap]) => {
+          let credit = 0;
+          for (const attMap of floorMap.values()) for (const a of attMap.values()) credit += a.credit;
+          return { hotel, floorMap, credit: Number(credit.toFixed(2)) };
+        })
+        .sort((a, b) => b.credit - a.credit || a.hotel.localeCompare(b.hotel))
+        .slice(0, 50);
+
+      cco03HotelsSorted.forEach(({ hotel, floorMap, credit }, hIdx) => {
+        cco03Primary.push({ name: hotel, y: credit, drilldown: `cco03h:${hIdx}` });
+        const floorSorted = Array.from(floorMap.entries())
+          .map(([floor, attMap]) => {
+            let credit2 = 0;
+            for (const a of attMap.values()) credit2 += a.credit;
+            return { floor, attMap, credit: Number(credit2.toFixed(2)) };
+          })
+          .sort((a, b) => b.credit - a.credit || a.floor.localeCompare(b.floor))
+          .slice(0, 50)
+          .sort((a, b) => naturalFloorCompare(a.floor, b.floor));
+        const floorData: DdSeries['data'] = [];
+        floorSorted.forEach(({ floor, attMap, credit: floorCredit }, fIdx) => {
+          floorData.push({ name: floor, y: floorCredit, drilldown: `cco03f:${hIdx}:${fIdx}` });
+          const attSorted = Array.from(attMap.entries())
+            .sort((a, b) => b[1].credit - a[1].credit || a[0].localeCompare(b[0]))
+            .slice(0, 50);
+          const attData: DdSeries['data'] = [];
+          attSorted.forEach(([att, agg], aIdx) => {
+            attData.push({ name: att, y: Number(agg.credit.toFixed(2)), drilldown: `cco03a:${hIdx}:${fIdx}:${aIdx}` });
+            // Leaf: average cleaning duration (mins) per room type, with overall avg first
+            const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+            const rtData = Array.from(agg.roomTypeDur.entries())
+              .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+              .sort((a, b) => b.y - a.y)
+              .slice(0, 50);
+            cco03DdSeries.push({
+              id: `cco03a:${hIdx}:${fIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+              type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
+              data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+            });
+          });
+          cco03DdSeries.push({ id: `cco03f:${hIdx}:${fIdx}`, name: `${floor} — Attendant Credit`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: attData });
+        });
+        cco03DdSeries.push({ id: `cco03h:${hIdx}`, name: `${hotel} — Floors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: floorData });
+      });
+
+      return make('cco-03', 'Hotel → Floor → Attendant Credit → Average Cleaning Duration', 'Cleaning credit earned per hotel and floor. Click a hotel to see its floors, a floor to see its attendants ranked by credit, and an attendant to see average cleaning duration (mins) overall and by room type', 'SUM(cleaning_credit) GROUP BY hotel DRILLDOWN floor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
+        chart: { type: 'column' },
+        title: { text: undefined },
+        xAxis: { type: 'category' },
+        yAxis: { title: { text: 'Cleaning Credit' } },
+        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
+        tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+        series: [{
+          type: 'column',
+          name: 'Cleaning Credit',
+          color: '#0F766E',
+          dataLabels: { enabled: true, format: '{point.y}' },
+          data: cco03Primary,
+        }],
+        drilldown: { series: cco03DdSeries as unknown as Highcharts.SeriesOptionsType[] },
+      });
+    })(),
     make('cco-04', 'Hotel vs Stay Status', 'Hotel-level cleaning order volume with drilldown into stay status', 'COUNT(*) BY hotel_code DRILLDOWN stay_status', {
       chart: { type: 'bar' },
       title: { text: undefined },

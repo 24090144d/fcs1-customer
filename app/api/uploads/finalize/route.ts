@@ -2199,6 +2199,26 @@ export async function POST(req: NextRequest) {
   const moDurDistAcc: Record<string, number> = {};
   const moCatDurAcc: Record<string, { sum: number; count: number }> = {};
   const moItem24hHourAcc: Record<string, Record<string, number>> = {};
+  // cmo-01: created-by department → defect → count
+  const moCreatedDeptDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-02: guest-related vs non-guest-related → defect → count
+  const moGuestDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-13: category → defect → resolution (completed) duration bucket → count
+  const moCatDefectDurAcc: Record<string, Record<string, Record<string, number>>> = {};
+  // cmo-14: resolution (completed) duration bucket → defect → count
+  const moDurDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-15: delayed (escalated/overdue-past-deadline) duration bucket → defect → count
+  const moDelayDurDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-16: hour "0"-"23" → defect → count (all jobs, not just 24h+ ones)
+  const moHourDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-17: floor → defect → count
+  const moFloorDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-18: type (MO/PM) → created-by department → defect → count
+  const moTypeDeptDefectAcc: Record<string, Record<string, Record<string, number>>> = {};
+  // cmo-03: hotel-level average resolution (completed) duration
+  const moHotelDurAcc: { sum: number; count: number } = { sum: 0, count: 0 };
+  // cmo-04: escalation level → defect → count
+  const moEscLevelDefectAcc: Record<string, Record<string, number>> = {};
   const coRowsById = module_code === 'co'
     ? await (async () => {
         const gathered: StagingRow[] = [];
@@ -2463,6 +2483,18 @@ export async function POST(req: NextRequest) {
 
         // mo-04 / mo-05 accumulators (item = defect or asset field)
         const defectKey = toStr(rr.defect) ?? toStr(rr.asset) ?? toStr(rr.job_order) ?? 'Unknown';
+        // cmo-01: created-by department → defect
+        const createdByDeptKey = toStr(rr.created_by_department) ?? 'Unknown';
+        if (!moCreatedDeptDefectAcc[createdByDeptKey]) moCreatedDeptDefectAcc[createdByDeptKey] = {};
+        moCreatedDeptDefectAcc[createdByDeptKey][defectKey] = (moCreatedDeptDefectAcc[createdByDeptKey][defectKey] ?? 0) + 1;
+        // cmo-02: guest-related vs non-guest-related → defect
+        const guestKey = isGuestRelated ? 'Guest Related' : 'Non Guest Related';
+        if (!moGuestDefectAcc[guestKey]) moGuestDefectAcc[guestKey] = {};
+        moGuestDefectAcc[guestKey][defectKey] = (moGuestDefectAcc[guestKey][defectKey] ?? 0) + 1;
+        // cmo-04: escalation level → defect
+        const escLevelKey = `Level ${escalationLevelNum ?? 0}`;
+        if (!moEscLevelDefectAcc[escLevelKey]) moEscLevelDefectAcc[escLevelKey] = {};
+        moEscLevelDefectAcc[escLevelKey][defectKey] = (moEscLevelDefectAcc[escLevelKey][defectKey] ?? 0) + 1;
         if (createdDate) {
           if (!moItemDateAcc[defectKey]) moItemDateAcc[defectKey] = {};
           moItemDateAcc[defectKey][createdDate] = (moItemDateAcc[defectKey][createdDate] ?? 0) + 1;
@@ -2471,6 +2503,9 @@ export async function POST(req: NextRequest) {
           if (!moItemDurAcc[defectKey]) moItemDurAcc[defectKey] = { sum: 0, count: 0 };
           moItemDurAcc[defectKey].sum += resolutionMinutes;
           moItemDurAcc[defectKey].count += 1;
+          // cmo-03: hotel-level average resolution duration
+          moHotelDurAcc.sum += resolutionMinutes;
+          moHotelDurAcc.count += 1;
           // mo-09: duration distribution bucket
           const durBucket = resolutionMinutes < 60 ? '< 1h'
             : resolutionMinutes < 120 ? '1-2h'
@@ -2479,12 +2514,42 @@ export async function POST(req: NextRequest) {
             : resolutionMinutes < 1440 ? '8-24h'
             : '24h+';
           moDurDistAcc[durBucket] = (moDurDistAcc[durBucket] ?? 0) + 1;
+          // cmo-14: resolution (completed) duration bucket → defect
+          if (!moDurDefectAcc[durBucket]) moDurDefectAcc[durBucket] = {};
+          moDurDefectAcc[durBucket][defectKey] = (moDurDefectAcc[durBucket][defectKey] ?? 0) + 1;
+          // cmo-13: category → defect → resolution duration bucket (see catKey below)
+          const cmo13CatKey = toStr(rr.category) ?? 'Uncategorized';
+          if (!moCatDefectDurAcc[cmo13CatKey]) moCatDefectDurAcc[cmo13CatKey] = {};
+          if (!moCatDefectDurAcc[cmo13CatKey][defectKey]) moCatDefectDurAcc[cmo13CatKey][defectKey] = {};
+          moCatDefectDurAcc[cmo13CatKey][defectKey][durBucket] = (moCatDefectDurAcc[cmo13CatKey][defectKey][durBucket] ?? 0) + 1;
+        }
+        // cmo-15: delayed (escalated/overdue-past-deadline) duration bucket → defect
+        if (typeof deadlineVarianceMinutes === 'number' && deadlineVarianceMinutes > 0) {
+          const delayBucket = deadlineVarianceMinutes < 60 ? '< 1h'
+            : deadlineVarianceMinutes < 120 ? '1-2h'
+            : deadlineVarianceMinutes < 240 ? '2-4h'
+            : deadlineVarianceMinutes < 480 ? '4-8h'
+            : deadlineVarianceMinutes < 1440 ? '8-24h'
+            : '24h+';
+          if (!moDelayDurDefectAcc[delayBucket]) moDelayDurDefectAcc[delayBucket] = {};
+          moDelayDurDefectAcc[delayBucket][defectKey] = (moDelayDurDefectAcc[delayBucket][defectKey] ?? 0) + 1;
         }
         // mo-10: 24-hour distribution
         if (createdHour !== null) {
           const hKey = String(createdHour);
           moHourAcc[hKey] = (moHourAcc[hKey] ?? 0) + 1;
+          // cmo-16: hour → defect (all jobs)
+          if (!moHourDefectAcc[hKey]) moHourDefectAcc[hKey] = {};
+          moHourDefectAcc[hKey][defectKey] = (moHourDefectAcc[hKey][defectKey] ?? 0) + 1;
         }
+        // cmo-17: floor → defect
+        const floorKey = toStr(rr.floor) ?? 'Unknown';
+        if (!moFloorDefectAcc[floorKey]) moFloorDefectAcc[floorKey] = {};
+        moFloorDefectAcc[floorKey][defectKey] = (moFloorDefectAcc[floorKey][defectKey] ?? 0) + 1;
+        // cmo-18: type (MO/PM) → created-by department → defect
+        if (!moTypeDeptDefectAcc[type]) moTypeDeptDefectAcc[type] = {};
+        if (!moTypeDeptDefectAcc[type][createdByDeptKey]) moTypeDeptDefectAcc[type][createdByDeptKey] = {};
+        moTypeDeptDefectAcc[type][createdByDeptKey][defectKey] = (moTypeDeptDefectAcc[type][createdByDeptKey][defectKey] ?? 0) + 1;
         // mo-06: category → avg resolution hours (matches normaliseMoForIm: toStr(category) ?? 'Uncategorized')
         const catKey = toStr(rr.category) ?? 'Uncategorized';
         if (resolutionMinutes !== null) {
@@ -2674,6 +2739,10 @@ export async function POST(req: NextRequest) {
         return [cat, flat.length > 0 ? r2(flat.reduce((s, v) => s + v, 0) / flat.length) : 0];
       }),
     );
+    // cjo-02: category → item → escalated count (denominator = category_map / category_item_map)
+    generatedJson.summary.jo_cat_item_escalations = Object.fromEntries(
+      Object.entries(joKpiAcc.catItemEscalations).map(([cat, itemMap]) => [cat, { ...itemMap }]),
+    );
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
     generatedJson.meta.schema = 'mo-v1';
@@ -2698,6 +2767,57 @@ export async function POST(req: NextRequest) {
     );
     generatedJson.summary.mo_cat_duration_map = moCatDurationMap;
     generatedJson.summary.mo_item_24h_hour_map = moItem24hHourMap;
+    const moCreatedDeptDefectMap = Object.fromEntries(
+      Object.entries(moCreatedDeptDefectAcc).map(([dept, dm]) => [dept, { ...dm }]),
+    );
+    const moGuestDefectMap = Object.fromEntries(
+      Object.entries(moGuestDefectAcc).map(([g, dm]) => [g, { ...dm }]),
+    );
+    generatedJson.summary.mo_created_dept_defect_map = moCreatedDeptDefectMap;
+    generatedJson.summary.mo_guest_defect_map = moGuestDefectMap;
+    // cmo-13: category → defect → resolution duration bucket
+    const moCatDefectDurMap = Object.fromEntries(
+      Object.entries(moCatDefectDurAcc).map(([cat, dm]) => [
+        cat,
+        Object.fromEntries(Object.entries(dm).map(([defect, bm]) => [defect, { ...bm }])),
+      ]),
+    );
+    // cmo-14: resolution duration bucket → defect
+    const moDurDefectMap = Object.fromEntries(
+      Object.entries(moDurDefectAcc).map(([bkt, dm]) => [bkt, { ...dm }]),
+    );
+    // cmo-15: delayed (escalated) duration bucket → defect
+    const moDelayDurDefectMap = Object.fromEntries(
+      Object.entries(moDelayDurDefectAcc).map(([bkt, dm]) => [bkt, { ...dm }]),
+    );
+    // cmo-16: hour → defect
+    const moHourDefectMap = Object.fromEntries(
+      Object.entries(moHourDefectAcc).map(([h, dm]) => [h, { ...dm }]),
+    );
+    // cmo-17: floor → defect
+    const moFloorDefectMap = Object.fromEntries(
+      Object.entries(moFloorDefectAcc).map(([floor, dm]) => [floor, { ...dm }]),
+    );
+    // cmo-18: type → created-by department → defect
+    const moTypeDeptDefectMap = Object.fromEntries(
+      Object.entries(moTypeDeptDefectAcc).map(([ty, dm]) => [
+        ty,
+        Object.fromEntries(Object.entries(dm).map(([dept, im]) => [dept, { ...im }])),
+      ]),
+    );
+    generatedJson.summary.mo_cat_defect_dur_map = moCatDefectDurMap;
+    generatedJson.summary.mo_dur_defect_map = moDurDefectMap;
+    generatedJson.summary.mo_delay_dur_defect_map = moDelayDurDefectMap;
+    generatedJson.summary.mo_hour_defect_map = moHourDefectMap;
+    generatedJson.summary.mo_floor_defect_map = moFloorDefectMap;
+    generatedJson.summary.mo_type_dept_defect_map = moTypeDeptDefectMap;
+    // cmo-03: hotel-level average resolution (completed) duration, in hours
+    generatedJson.summary.mo_avg_resolution_hours = moHotelDurAcc.count > 0 ? r2(moHotelDurAcc.sum / moHotelDurAcc.count / 60) : 0;
+    // cmo-04: escalation level → defect
+    const moEscLevelDefectMap = Object.fromEntries(
+      Object.entries(moEscLevelDefectAcc).map(([lvl, dm]) => [lvl, { ...dm }]),
+    );
+    generatedJson.summary.mo_esc_level_defect_map = moEscLevelDefectMap;
     if (generatedJson.summary_by_type?.MO) {
       generatedJson.summary_by_type.MO.mo_item_date_map = moItemDateMap;
       generatedJson.summary_by_type.MO.mo_item_duration_map = moItemDurationMap;
@@ -2705,6 +2825,16 @@ export async function POST(req: NextRequest) {
       generatedJson.summary_by_type.MO.mo_hour_map = { ...moHourAcc };
       generatedJson.summary_by_type.MO.mo_cat_duration_map = moCatDurationMap;
       generatedJson.summary_by_type.MO.mo_item_24h_hour_map = moItem24hHourMap;
+      generatedJson.summary_by_type.MO.mo_created_dept_defect_map = moCreatedDeptDefectMap;
+      generatedJson.summary_by_type.MO.mo_guest_defect_map = moGuestDefectMap;
+      generatedJson.summary_by_type.MO.mo_cat_defect_dur_map = moCatDefectDurMap;
+      generatedJson.summary_by_type.MO.mo_dur_defect_map = moDurDefectMap;
+      generatedJson.summary_by_type.MO.mo_delay_dur_defect_map = moDelayDurDefectMap;
+      generatedJson.summary_by_type.MO.mo_hour_defect_map = moHourDefectMap;
+      generatedJson.summary_by_type.MO.mo_floor_defect_map = moFloorDefectMap;
+      generatedJson.summary_by_type.MO.mo_type_dept_defect_map = moTypeDeptDefectMap;
+      generatedJson.summary_by_type.MO.mo_avg_resolution_hours = moHotelDurAcc.count > 0 ? r2(moHotelDurAcc.sum / moHotelDurAcc.count / 60) : 0;
+      generatedJson.summary_by_type.MO.mo_esc_level_defect_map = moEscLevelDefectMap;
     }
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);

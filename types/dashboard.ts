@@ -87,6 +87,16 @@ export interface HotelSummary {
   mo_hour_map?: Record<string, number>;                      // hour "0"-"23" → count (mo-10)
   mo_cat_duration_map?: Record<string, number>;              // category → avg resolution hours (mo-06)
   mo_item_24h_hour_map?: Record<string, Record<string, number>>; // defect → hour "0"-"23" → count (24h+ only, mo-11)
+  mo_created_dept_defect_map?: Record<string, Record<string, number>>; // created-by department → defect → count (cmo-01/mo-01)
+  mo_guest_defect_map?: Record<string, Record<string, number>>; // 'Guest Related'|'Non Guest Related' → defect → count (cmo-02/mo-02)
+  mo_cat_defect_dur_map?: Record<string, Record<string, Record<string, number>>>; // category → defect → resolution duration bucket → count (cmo-13)
+  mo_dur_defect_map?: Record<string, Record<string, number>>; // resolution duration bucket → defect → count (cmo-14)
+  mo_delay_dur_defect_map?: Record<string, Record<string, number>>; // delayed (escalated/overdue) duration bucket → defect → count (cmo-15)
+  mo_hour_defect_map?: Record<string, Record<string, number>>; // hour "0"-"23" → defect → count, all jobs (cmo-16)
+  mo_floor_defect_map?: Record<string, Record<string, number>>; // floor → defect → count (cmo-17)
+  mo_type_dept_defect_map?: Record<string, Record<string, Record<string, number>>>; // type (MO/PM) → created-by department → defect → count (cmo-18)
+  mo_avg_resolution_hours?: number; // hotel-level average resolution (completed) duration, in hours (cmo-03)
+  mo_esc_level_defect_map?: Record<string, Record<string, number>>; // escalation level ("Level N") → defect → count (cmo-04)
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;
@@ -104,6 +114,7 @@ export interface HotelSummary {
   jo_sla_cat_total?: Record<string, number>; // category → total completed count
   jo_cat_res_p90?: Record<string, number>;   // category → P90 resolution minutes
   jo_cat_res_avg?: Record<string, number>;   // category → average resolution minutes (jo-04)
+  jo_cat_item_escalations?: Record<string, Record<string, number>>; // category → item → escalated count (cjo-02)
   jo_vip_hour_map?: Record<string, number>;  // hour → VIP job count
   jo_vip_hour_item_map?: Record<string, Record<string, number>>; // hour → item → VIP count
   jo_hour_item_map?: Record<string, Record<string, number>>;     // hour → item → all-job count

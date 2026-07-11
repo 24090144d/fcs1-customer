@@ -1442,6 +1442,8 @@ interface JoKpiAcc {
   itemDurBkt: Record<string, Record<string, number>>;
   // ── cjo-04: delayed jobs (delay > 0) → duration bucket → assigned dept → assigned to (user) → count ──
   delayBktDeptAssignedMap: Record<string, Record<string, Record<string, number>>>;
+  // ── jo-02: delayed jobs (delay > 0) → duration bucket → service item → count ──
+  delayDurBktItemMap: Record<string, Record<string, number>>;
 }
 
 function newJoKpiAcc(): JoKpiAcc {
@@ -1499,6 +1501,7 @@ function newJoKpiAcc(): JoKpiAcc {
     itemDateMap: {},
     itemDurBkt: {},
     delayBktDeptAssignedMap: {},
+    delayDurBktItemMap: {},
   };
 }
 
@@ -1572,6 +1575,8 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   if (delayMin !== null && delayMin > 0) inc2(acc.catItemBreachMins, category, item, delayMin);
   // cjo-04: delayed jobs → duration bucket → assigned dept → assigned to (user)
   if (delayMin !== null && delayMin > 0) inc3(acc.delayBktDeptAssignedMap, durBucket(delayMin), assignedDept, assignedTo);
+  // jo-02: delayed jobs → duration bucket → service item
+  if (delayMin !== null && delayMin > 0) inc2(acc.delayDurBktItemMap, durBucket(delayMin), item);
 
   const createdAt = toStr(rr.created_datetime);
   const ackAt = toStr(rr.acknowledged_datetime);
@@ -2606,6 +2611,7 @@ export async function POST(req: NextRequest) {
     generatedJson.summary.jo_response_dur_map   = joKpiAcc.responseDurMap;
     generatedJson.summary.jo_escalated_dur_map  = joKpiAcc.escalatedDurMap;
     generatedJson.summary.jo_delay_bkt_dept_assigned_map = joKpiAcc.delayBktDeptAssignedMap;
+    generatedJson.summary.jo_delay_dur_bkt_item_map = joKpiAcc.delayDurBktItemMap;
     generatedJson.summary.jo_sla_cat_map        = joKpiAcc.slaCatMap;
     generatedJson.summary.jo_sla_cat_total      = joKpiAcc.slaCatTotal;
     // ── 24-hour bucket maps for cjo-23..cjo-26 ────────────────────────────────
@@ -2660,6 +2666,13 @@ export async function POST(req: NextRequest) {
         cat,
         percentile(Object.values(itemMap).flat(), 90) ?? 0,
       ]),
+    );
+    // jo-04: average resolution (service) duration per category
+    generatedJson.summary.jo_cat_res_avg = Object.fromEntries(
+      Object.entries(joKpiAcc.catItemResolution).map(([cat, itemMap]) => {
+        const flat = Object.values(itemMap).flat();
+        return [cat, flat.length > 0 ? r2(flat.reduce((s, v) => s + v, 0) / flat.length) : 0];
+      }),
     );
   } else if (module_code === 'mo') {
     generatedJson = buildMoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);

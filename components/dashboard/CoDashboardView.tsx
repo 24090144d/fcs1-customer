@@ -2484,7 +2484,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
 
   // ── cco-43 / cco-44: Hotel → Floor → Attendant nested aggregation ──────────
-  type CcoAttAgg = { count: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
+  type CcoAttAgg = { count: number; credit: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
   const ccoHotelFloorAtt = new Map<string, Map<string, Map<string, CcoAttAgg>>>();
   for (const row of completedRows) {
     const hotel = normText(row.hotel_code) || 'Unknown Hotel';
@@ -2494,9 +2494,10 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     const floorMap = ccoHotelFloorAtt.get(hotel)!;
     if (!floorMap.has(floor)) floorMap.set(floor, new Map());
     const attMap = floorMap.get(floor)!;
-    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    if (!attMap.has(att)) attMap.set(att, { count: 0, credit: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
     const agg = attMap.get(att)!;
     agg.count += 1;
+    agg.credit += typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
     const dur = toMinutes(row);
     if (dur !== null && Number.isFinite(dur)) {
       agg.durations.push(dur);
@@ -2592,9 +2593,10 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     const inspMap = ccoHotelInspAtt.get(hotel)!;
     if (!inspMap.has(insp)) inspMap.set(insp, new Map());
     const attMap = inspMap.get(insp)!;
-    if (!attMap.has(att)) attMap.set(att, { count: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
+    if (!attMap.has(att)) attMap.set(att, { count: 0, credit: 0, durations: [], roomTypeDur: new Map(), hourCount: new Map() });
     const agg = attMap.get(att)!;
     agg.count += 1;
+    agg.credit += typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
     const dur = toMinutes(row);
     if (dur !== null && Number.isFinite(dur)) {
       agg.durations.push(dur);
@@ -2671,38 +2673,62 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     makeChartBase(id, title, `${note} ${suffix}.`, `${formula} WHERE ${clause}`, options);
 
   return [
-    make('cco-01', 'Hotel → Cleaning Status', 'Distribution of cleaning orders by hotel with drilldown into cleaning status', 'COUNT(*) GROUP BY hotel_code DRILLDOWN status_normalized', {
-      chart: { type: 'pie' },
-      title: { text: undefined },
-      plotOptions: {
-        pie: {
-          innerSize: '58%',
+    (() => {
+      // cco-01: Hotel → Top Average Credit by Inspector → Top Average Credit
+      // by Attendant (3-level donut). Reuses the shared ccoHotelInspAtt
+      // aggregation (same source as cco-04/45/46), pivoting levels 2-3 to
+      // AVERAGE cleaning_credit (sum ÷ completed orders) instead of raw count.
+      const cco01Dd: Highcharts.SeriesOptionsType[] = [];
+      ccoInspHotelsSorted.forEach(({ inspMap }, hIdx) => {
+        const inspAvgSorted = Array.from(inspMap.entries())
+          .map(([insp, attMap]) => {
+            let credit = 0, count = 0;
+            for (const a of attMap.values()) { credit += a.credit; count += a.count; }
+            return { insp, avg: count > 0 ? Number((credit / count).toFixed(2)) : 0, attMap };
+          })
+          .sort((a, b) => b.avg - a.avg || a.insp.localeCompare(b.insp))
+          .slice(0, 20);
+        cco01Dd.push({
+          id: `cco01h:${hIdx}`,
+          name: 'Top Average Credit by Inspector',
+          type: 'pie', innerSize: '58%',
           dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
-          showInLegend: true,
+          data: inspAvgSorted.map(({ insp, avg }, iIdx) => ({ name: insp, y: avg, drilldown: `cco01i:${hIdx}:${iIdx}` })),
+        } as Highcharts.SeriesOptionsType);
+        inspAvgSorted.forEach(({ insp, attMap }, iIdx) => {
+          const attAvgSorted = Array.from(attMap.entries())
+            .map(([att, agg]) => ({ att, avg: agg.count > 0 ? Number((agg.credit / agg.count).toFixed(2)) : 0 }))
+            .sort((a, b) => b.avg - a.avg || a.att.localeCompare(b.att))
+            .slice(0, 20);
+          cco01Dd.push({
+            id: `cco01i:${hIdx}:${iIdx}`,
+            name: `${insp} — Top Average Credit by Attendant`,
+            type: 'pie', innerSize: '58%',
+            dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+            data: attAvgSorted.map(({ att, avg }) => ({ name: att, y: avg })),
+          } as Highcharts.SeriesOptionsType);
+        });
+      });
+
+      return make('cco-01', 'Hotel → Top Average Credit by Inspector → Top Average Credit by Attendant', 'Completed orders per hotel. Click a hotel to see inspectors ranked by average cleaning credit, then an inspector to see their attendants ranked by average cleaning credit', 'COUNT(*) GROUP BY hotel_code DRILLDOWN AVG(cleaning_credit) BY supervisor DRILLDOWN AVG(cleaning_credit) BY attendant', {
+        chart: { type: 'pie' },
+        title: { text: undefined },
+        plotOptions: {
+          pie: {
+            innerSize: '58%',
+            dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+            showInLegend: true,
+          },
         },
-      },
-      tooltip: { pointFormat: '<b>{point.y}</b> orders' },
-      series: [{
-        type: 'pie',
-        name: 'Hotel',
-        data: hotelCodes.map((hotel) => ({
-          name: hotel,
-          y: hotelTotalMap[hotel] ?? 0,
-          drilldown: hotel,
-        })),
-      }],
-      drilldown: {
-        series: hotelCodes.map((hotel) => ({
-          id: hotel,
-          name: `${hotel} — Cleaning Status`,
-          type: 'pie' as const,
-          innerSize: '58%',
-          data: topStatuses
-            .map(([statusName]) => ({ name: statusName, y: hotelStatusMap.get(hotel)?.get(statusName) ?? 0 }))
-            .filter((point) => point.y > 0),
-        })),
-      },
-    }),
+        tooltip: { pointFormat: '<b>{point.y}</b>' },
+        series: [{
+          type: 'pie',
+          name: 'Completed Orders',
+          data: ccoInspHotelsSorted.map(({ hotel, n }, hIdx) => ({ name: hotel, y: n, drilldown: `cco01h:${hIdx}` })),
+        }],
+        drilldown: { series: cco01Dd },
+      });
+    })(),
     make('cco-02', 'Hotel vs Average Cleaning Duration', 'Hotel-to-hotel cleaning speed comparison with workload context', 'COUNT(*) + AVG(actual_duration_minutes) GROUP BY hotel_code', {
       chart: { type: 'column' },
       title: { text: undefined },
@@ -2814,36 +2840,73 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
         drilldown: { series: cco03DdSeries as unknown as Highcharts.SeriesOptionsType[] },
       });
     })(),
-    make('cco-04', 'Hotel vs Stay Status', 'Hotel-level cleaning order volume with drilldown into stay status', 'COUNT(*) BY hotel_code DRILLDOWN stay_status', {
-      chart: { type: 'bar' },
-      title: { text: undefined },
-      xAxis: { type: 'category' },
-      yAxis: { title: { text: 'Orders' } },
-      plotOptions: {
-        bar: { dataLabels: { enabled: true, format: '{point.y}' } },
-      },
-      tooltip: { pointFormat: '<b>{point.y}</b> orders' },
-      series: [
-        {
-          type: 'bar',
-          name: 'Orders',
-          color: '#0f766e',
-          data: hotelCodes.map((hotel) => ({
-            name: hotel,
-            y: hotelTotalMap[hotel] ?? 0,
-            drilldown: `cco-stay:${hotel}`,
-          })),
+    (() => {
+      // cco-04: Hotel → Inspector → Room Attendant → Average Cleaning Duration
+      // (by Room Type) — 4-level donut drilldown. Reuses the same
+      // ccoHotelInspAtt aggregation already computed for cco-45 (identical
+      // dimensional structure), just rendered as pie/donut instead of column.
+      const cco04Dd: Highcharts.SeriesOptionsType[] = [];
+      ccoInspHotelsSorted.forEach(({ hotel, inspMap }, hIdx) => {
+        const inspSorted = Array.from(inspMap.entries())
+          .map(([insp, attMap]) => {
+            let m = 0;
+            for (const a of attMap.values()) m += a.count;
+            return { insp, attMap, m };
+          })
+          .sort((a, b) => b.m - a.m || a.insp.localeCompare(b.insp))
+          .slice(0, 50);
+        const insp04Data: Array<{ name: string; y: number; drilldown: string }> = [];
+        inspSorted.forEach(({ insp, attMap }, iIdx) => {
+          insp04Data.push({ name: insp, y: [...attMap.values()].reduce((s, a) => s + a.count, 0), drilldown: `cco04i:${hIdx}:${iIdx}` });
+          const attSorted = Array.from(attMap.entries())
+            .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+            .slice(0, 50);
+          const att04Data: Array<{ name: string; y: number; drilldown: string }> = [];
+          attSorted.forEach(([att, agg], aIdx) => {
+            att04Data.push({ name: att, y: agg.count, drilldown: `cco04a:${hIdx}:${iIdx}:${aIdx}` });
+            const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
+            const rtData = Array.from(agg.roomTypeDur.entries())
+              .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
+              .sort((a, b) => b.y - a.y)
+              .slice(0, 50);
+            cco04Dd.push({
+              id: `cco04a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
+              type: 'pie', innerSize: '58%', dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+              data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
+            } as Highcharts.SeriesOptionsType);
+          });
+          cco04Dd.push({
+            id: `cco04i:${hIdx}:${iIdx}`, name: `${insp} — Attendants`,
+            type: 'pie', innerSize: '58%', dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+            data: att04Data,
+          } as Highcharts.SeriesOptionsType);
+        });
+        cco04Dd.push({
+          id: `cco04h:${hIdx}`, name: `${hotel} — Inspectors`,
+          type: 'pie', innerSize: '58%', dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+          data: insp04Data,
+        } as Highcharts.SeriesOptionsType);
+      });
+
+      return make('cco-04', 'Hotel → Inspector → Room Attendant → Average Cleaning Duration (by Room Type)', 'Completed orders per hotel. Click a hotel to see its inspectors, an inspector to see their room attendants, and an attendant to see average cleaning duration (mins) overall and by room type', 'COUNT(*) GROUP BY hotel DRILLDOWN supervisor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
+        chart: { type: 'pie' },
+        title: { text: undefined },
+        plotOptions: {
+          pie: {
+            innerSize: '58%',
+            dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+            showInLegend: true,
+          },
         },
-      ],
-      drilldown: {
-        series: hotelCodes.map((hotel) => ({
-          id: `cco-stay:${hotel}`,
-          name: `${hotel} - Stay Status`,
-          type: 'bar' as const,
-          data: topEntries(Object.fromEntries((hotelStayStatusMap.get(hotel) ?? new Map<string, number>()).entries()), 20).map(([name, y]) => ({ name, y })),
-        })),
-      },
-    }),
+        tooltip: { pointFormat: '<b>{point.y}</b> orders' },
+        series: [{
+          type: 'pie',
+          name: 'Completed Orders',
+          data: ccoInspHotelsSorted.map(({ hotel, n }, hIdx) => ({ name: hotel, y: n, drilldown: `cco04h:${hIdx}` })),
+        }],
+        drilldown: { series: cco04Dd },
+      });
+    })(),
     make('cco-05', 'Hotel vs Room Type', 'Hotel-level cleaning order volume with drilldown into room type', 'COUNT(*) BY hotel_code DRILLDOWN room_type', {
       chart: { type: 'bar' },
       title: { text: undefined },

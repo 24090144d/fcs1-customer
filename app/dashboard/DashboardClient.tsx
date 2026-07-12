@@ -2792,12 +2792,12 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         ],
         plotOptions: {
           column: { stacking: 'normal', dataLabels: { enabled: true } },
-          line: { dataLabels: { enabled: true, format: '{point.y:.1f}' }, marker: { enabled: true } },
+          spline: { dataLabels: { enabled: true, format: '{point.y:.1f}' }, marker: { enabled: true } },
         },
         tooltip: { shared: true },
         series: [
           ...statusSeries,
-          { type: 'line', name: 'Avg Resolution Duration (h)', yAxis: 1, color: '#1E293B', lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 },
+          { type: 'spline', name: 'Avg Resolution Duration (h)', yAxis: 1, color: '#1E293B', lineWidth: 3, zIndex: 10, marker: { enabled: true, radius: 4 },
             data: entries.map((e) => e.summary.mo_avg_resolution_hours ?? 0),
           },
         ],
@@ -4581,16 +4581,6 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
         {(moLongCharts.length > 0 || isCorp) && (
           <section>
             <SectionHead label={t('dashboard_ui.section_long_charts', 'Long Charts')} dark={dark} />
-            {isCorp && (
-              <div className="mb-4">
-                <CorpMoPerformanceTable
-                  entries={activeCorpEntries}
-                  dark={dark}
-                  index={nextChartIndex()}
-                  maintenanceType={maintenanceType}
-                />
-              </div>
-            )}
             <div className="chart-grid-long mt-5 grid grid-cols-1 gap-4">
               {moLongCharts.map((def) => (
                 (() => {
@@ -4612,6 +4602,20 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
                   );
                 })()
               ))}
+            </div>
+          </section>
+        )}
+
+        {isCorp && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
+            <div className="mt-5">
+              <CorpMoPerformanceTable
+                entries={activeCorpEntries}
+                dark={dark}
+                index={nextChartIndex()}
+                maintenanceType={maintenanceType}
+              />
             </div>
           </section>
         )}
@@ -6880,29 +6884,37 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         ) && (
           <section>
             <SectionHead label={t('dashboard_ui.section_long_charts', 'Long Charts')} dark={dark} />
-            {isCorp && !isJo && corpImTopCharts.length > 0 && (
-              <div className="mb-4">
-                <CorpImPerformanceTable
-                  entries={activeChainEntries}
-                  dark={dark}
-                  index={corpImTopCharts.length + 1}
-                />
-              </div>
-            )}
-            {isCorp && isJo && corpJoCharts.length > 0 && (
-              <div className="mb-4">
-                <CorpJoPerformanceTable
-                  entries={activeChainEntries}
-                  dark={dark}
-                  index={nextChartIndex()}
-                />
-              </div>
-            )}
             <div className="chart-grid-long mt-5 grid grid-cols-1 gap-4">
               {(isJo ? joLongCharts : [...imLongCharts, ...corpImLongCharts]).map((def) => {
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
+            </div>
+          </section>
+        )}
+
+        {isCorp && !isJo && corpImTopCharts.length > 0 && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
+            <div className="mt-5">
+              <CorpImPerformanceTable
+                entries={activeChainEntries}
+                dark={dark}
+                index={corpImTopCharts.length + 1}
+              />
+            </div>
+          </section>
+        )}
+
+        {isCorp && isJo && corpJoCharts.length > 0 && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
+            <div className="mt-5">
+              <CorpJoPerformanceTable
+                entries={activeChainEntries}
+                dark={dark}
+                index={nextChartIndex()}
+              />
             </div>
           </section>
         )}

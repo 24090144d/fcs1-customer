@@ -4342,13 +4342,19 @@ export function CoDashboardView({
                   />
                 )
               ))}
-              {isCorp && (
-                <CorpCoPerformanceTable
-                  rows={scopedRows}
-                  dark={dark}
-                  codeLabel={`CCO-${String(charts.length + 1).padStart(2, '0')}`}
-                />
-              )}
+            </div>
+          </section>
+        )}
+
+        {isCorp && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
+            <div className="mt-5">
+              <CorpCoPerformanceTable
+                rows={scopedRows}
+                dark={dark}
+                codeLabel={`CCO-${String(charts.length + 1).padStart(2, '0')}`}
+              />
             </div>
           </section>
         )}

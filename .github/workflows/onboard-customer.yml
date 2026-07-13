@@ -106,6 +106,8 @@ jobs:
           DATABASE_URL_UNPOOLED_MY: ${{ secrets.DATABASE_URL_UNPOOLED_MY }}
           DATABASE_URL_MO: ${{ secrets.DATABASE_URL_MO }}
           DATABASE_URL_UNPOOLED_MO: ${{ secrets.DATABASE_URL_UNPOOLED_MO }}
+          DATABASE_URL_JP: ${{ secrets.DATABASE_URL_JP }}
+          DATABASE_URL_UNPOOLED_JP: ${{ secrets.DATABASE_URL_UNPOOLED_JP }}
         run: |
           resolve_secret() {
             local secret_name="$1"
@@ -122,6 +124,8 @@ jobs:
               DATABASE_URL_UNPOOLED_MY) echo "$DATABASE_URL_UNPOOLED_MY" ;;
               DATABASE_URL_MO) echo "$DATABASE_URL_MO" ;;
               DATABASE_URL_UNPOOLED_MO) echo "$DATABASE_URL_UNPOOLED_MO" ;;
+              DATABASE_URL_JP) echo "$DATABASE_URL_JP" ;;
+              DATABASE_URL_UNPOOLED_JP) echo "$DATABASE_URL_UNPOOLED_JP" ;;
               *)
                 echo ""
                 ;;

@@ -59,15 +59,15 @@ else {
   Write-Host "Existing database detected; skipping baseline schema.sql"
 }
 
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/001_upload_tracking.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/002_jo_schema_alignment.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/003_record_scope_columns.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/004_bigint_id_defaults.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/005_ai_chart_playground.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/006_ai_chart_publish.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/007_ai_chart_display_order.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/008_mo_schema.sql")
-Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/009_co_schema.sql")
+# sql/schema.sql is a consolidated dump that already bakes in the effect of
+# migrations 001-013 (confirmed: jo_records already has vip_code/respond_time/
+# total_minute_between_created_to_completed etc. from 010-013, and
+# ai_chart_definitions/mo_records/co_records from 005-009). Re-running those
+# numbered files here would fail on a database created from schema.sql, since
+# none of them guard with IF NOT EXISTS. Only 014 adds columns schema.sql
+# predates, and it is itself IF-NOT-EXISTS-guarded, so it's safe to apply
+# whether the database came from schema.sql just now or was provisioned before.
+Invoke-PsqlFile -SqlFile (Join-Path $sqlRoot "migrations/014_upload_jobs_hotel_identity.sql")
 
 $escapedCode = $CustomerCode.Replace("'", "''")
 $escapedName = $CustomerName.Replace("'", "''")

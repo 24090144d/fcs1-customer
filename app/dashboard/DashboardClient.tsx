@@ -66,8 +66,8 @@ const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: st
 
 const CORP_IM_LONG_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
   { code: 'cim-16', id: 'cim-16', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
-  { code: 'cim-18', id: 'cim-18', title: 'Hotel -> Incident Category -> Incident Item -> Average Resolution Duration Distribution', note: 'Drilldown from hotel totals to category, item, then the item\'s resolution duration distribution (hours) for root-cause and SLA review. Benchmark: Good when most items resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY incident_category per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+category; Level 4 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel+category+item' },
-  { code: 'cim-19', id: 'cim-19', title: 'Hotel -> Average Resolution Duration Distribution (Hours) -> Top Incident Items', note: 'Drilldown from hotel totals to their resolution duration distribution (hours), then the top incident items within a duration bucket, for SLA and staffing review. Benchmark: Good when most incidents resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+bucket' },
+  { code: 'cim-18', id: 'cim-18', title: 'Hotel -> Incident Category -> Incident Item -> Resolution Duration Distribution', note: 'Drilldown from hotel totals to category, item, then the item\'s resolution duration distribution (hours) for root-cause and SLA review. Benchmark: Good when most items resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY incident_category per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+category; Level 4 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel+category+item' },
+  { code: 'cim-19', id: 'cim-19', title: 'Hotel -> Resolution Duration Distribution (Hours) -> Top Incident Items', note: 'Drilldown from hotel totals to their resolution duration distribution (hours), then the top incident items within a duration bucket, for SLA and staffing review. Benchmark: Good when most incidents resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+bucket' },
   { code: 'cim-20', id: 'cim-20', title: '🟣 Top Incident vs Completion Rate (Chain)', note: 'Top 10 incident items by volume (bars, left axis) with completion rate % per item (line, right axis). Shows both workload and resolution effectiveness.', formula: 'Bars: COUNT by incident_item_name (chain); Line: completed / total × 100% per item' },
   { code: 'cim-22', id: 'cim-22', title: 'Hotel -> Incident Category -> Incident Items', note: 'Three-level hotel drilldown from total incident volume to category and item detail for deep root-cause review.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY category per hotel; Level 3 = COUNT(incident_case) BY item per category' },
   { code: 'cim-23', id: 'cim-23', title: 'Hotel -> Department -> Incident Category -> Incident Items', note: 'Four-level hotel drilldown from incident volume to department, category, and item detail for ownership tracing.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY department per hotel; Level 3 = COUNT(incident_case) BY category per department; Level 4 = COUNT(incident_case) BY item per category' },
@@ -1222,7 +1222,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
         }
       }
       level2.push({
-        id: `cim19-dur:${hKey}`, type: 'column', name: `${e.hotel_code} Avg Resolution Duration Distribution`, color: ORANGE,
+        id: `cim19-dur:${hKey}`, type: 'column', name: `${e.hotel_code} Resolution Duration Distribution`, color: ORANGE,
         dataLabels: { enabled: true },
         data: DUR_BUCKETS.map((b) => ({
           name: b,
@@ -1301,7 +1301,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
         for (const [item] of items) {
           const bm = catItemDurMap[cat]?.[item] ?? {};
           level4.push({
-            id: `cim18-dur:${hKey}:${cim18IdPart(cat)}:${cim18IdPart(item)}`, type: 'column', name: `${e.hotel_code} — ${item} Avg Resolution Duration (h)`, color: BLUE,
+            id: `cim18-dur:${hKey}:${cim18IdPart(cat)}:${cim18IdPart(item)}`, type: 'column', name: `${e.hotel_code} — ${item} Resolution Duration (h)`, color: BLUE,
             dataLabels: { enabled: true },
             data: DUR_BUCKETS.map((b) => ({ name: b, y: bm[b] ?? 0 })),
           } as Highcharts.SeriesOptionsType);

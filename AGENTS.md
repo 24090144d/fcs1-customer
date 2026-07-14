@@ -198,3 +198,4 @@ The Highcharts drilldown module crashes (`TypeError: Cannot read properties of u
 - For schema changes, confirm the migration applies cleanly to the target Postgres (Neon) database.
 - Before claiming a release is complete, verify the intended Vercel project is linked to `main` and the target customer database matches the requested customer code.
 - Before pushing, ensure `lib/dash-config-defs.ts` is tracked (`git add lib/dash-config-defs.ts` if untracked).
+- Every time you push to GitHub/Vercel, identify and report the rollback point: the last known-good commit hash/version before the push. State both after pushing, e.g. "Pushed v1.1.9 (`1810141`); rollback point is v1.1.8 (`3c30c9d`)." Prefer `git revert <new-commit>` (safe, non-destructive, auto-redeploys via Vercel) over `git reset --hard` + force-push, which needs explicit user confirmation every time.

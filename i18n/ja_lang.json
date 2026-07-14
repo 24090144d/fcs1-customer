@@ -362,8 +362,8 @@
     "cim-15": "🟢 Department Risk Heatmap",
     "cim-16": "🟢 Root Cause Pareto Chart",
     "cim-17": "🟣 トップインシデント → 日次トレンド（チェーン全体）",
-    "cim-18": "🟢 Hotel -> Incident Category -> Incident Item -> Average Resolution Duration Distribution",
-    "cim-19": "🟢 Hotel -> Average Resolution Duration Distribution (Hours) -> Top Incident Items",
+    "cim-18": "🟢 Hotel -> Incident Category -> Incident Item -> Resolution Duration Distribution",
+    "cim-19": "🟢 Hotel -> Resolution Duration Distribution (Hours) -> Top Incident Items",
     "cim-20": "🟣 Top Incident vs Completion Rate (Chain)"
   },
   "chart_notes_im": {

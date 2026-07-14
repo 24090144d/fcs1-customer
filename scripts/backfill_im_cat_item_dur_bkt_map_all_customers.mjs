@@ -1,7 +1,10 @@
 // One-time orchestrator: runs the im_cat_item_dur_bkt_map backfill (cim-18/cim-19
 // data) against every customer's production Neon database listed in .env.neon,
-// without needing a CSV re-upload. Reuses the same bucket logic as
-// scripts/backfill_im_cat_item_dur_bkt_map.mjs and app/api/uploads/finalize/route.ts.
+// without needing a CSV re-upload. Close time = investigation_updated_on_2,
+// falling back to investigation_updated_on_1; if neither is present, a fixed
+// 48h duration is assumed (24h+ bucket) rather than dropping the record.
+// Reuses the same logic as scripts/backfill_im_cat_item_dur_bkt_map.mjs and
+// app/api/uploads/finalize/route.ts.
 //
 // Usage: node scripts/backfill_im_cat_item_dur_bkt_map_all_customers.mjs
 
@@ -52,15 +55,22 @@ async function backfillCustomer(code) {
 
     for (const dash of dashRows) {
       const agg = (await client.query(
-        `SELECT COALESCE(NULLIF(TRIM(incident_category), ''), 'Unknown') AS category,
-                COALESCE(NULLIF(TRIM(incident_item_name), ''), 'Unknown') AS item,
-                EXTRACT(EPOCH FROM (investigation_updated_on_2 - COALESCE(incident_datetime, created_date))) / 3600.0 AS hours
-           FROM im_records
-          WHERE upload_job_id = $1
-            AND investigation_updated_on_2 IS NOT NULL
-            AND COALESCE(incident_datetime, created_date) IS NOT NULL
-            AND investigation_updated_on_2 >= COALESCE(incident_datetime, created_date)
-            AND EXTRACT(EPOCH FROM (investigation_updated_on_2 - COALESCE(incident_datetime, created_date))) / 3600.0 < 3650 * 24`,
+        `WITH base AS (
+           SELECT COALESCE(NULLIF(TRIM(incident_category), ''), 'Unknown') AS category,
+                  COALESCE(NULLIF(TRIM(incident_item_name), ''), 'Unknown') AS item,
+                  COALESCE(investigation_updated_on_2, investigation_updated_on_1) AS closed_ts,
+                  COALESCE(incident_datetime, created_date) AS start_ts
+             FROM im_records
+            WHERE upload_job_id = $1
+              AND COALESCE(incident_datetime, created_date) IS NOT NULL
+         )
+         SELECT category, item,
+                CASE WHEN closed_ts IS NULL THEN 48
+                     ELSE EXTRACT(EPOCH FROM (closed_ts - start_ts)) / 3600.0
+                END AS hours
+           FROM base
+          WHERE closed_ts IS NULL
+             OR (closed_ts >= start_ts AND EXTRACT(EPOCH FROM (closed_ts - start_ts)) / 3600.0 < 3650 * 24)`,
         [dash.upload_job_id]
       )).rows;
 

@@ -618,21 +618,22 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
         if (!acc.itemDailyMap[item]) acc.itemDailyMap[item] = {};
         acc.itemDailyMap[item][dayKey] = (acc.itemDailyMap[item][dayKey] ?? 0) + 1;
 
-        const closedRaw = toStr(rr.investigation_updated_on_2);
-        if (closedRaw) {
-          const t2 = new Date(closedRaw).getTime();
-          const t1 = new Date(rawDate).getTime();
-          const hours = (t2 - t1) / 3_600_000;
-          if (hours >= 0 && hours < 3650 * 24) {
-            if (!acc.itemDurationMap[item]) acc.itemDurationMap[item] = { sum: 0, count: 0 };
-            acc.itemDurationMap[item].sum += hours;
-            acc.itemDurationMap[item].count++;
+        // Resolution close time: investigation_updated_on_2, falling back to
+        // investigation_updated_on_1 when cycle 2 was never filled in. If
+        // neither is present, assume a fixed 48h duration (falls in the 24h+
+        // bucket) rather than dropping the record entirely.
+        const closedRaw = toStr(rr.investigation_updated_on_2) ?? toStr(rr.investigation_updated_on_1);
+        const t1 = new Date(rawDate).getTime();
+        const hours = closedRaw ? (new Date(closedRaw).getTime() - t1) / 3_600_000 : 48;
+        if (hours >= 0 && hours < 3650 * 24) {
+          if (!acc.itemDurationMap[item]) acc.itemDurationMap[item] = { sum: 0, count: 0 };
+          acc.itemDurationMap[item].sum += hours;
+          acc.itemDurationMap[item].count++;
 
-            const bkt = hours < 1 ? '< 1h' : hours < 2 ? '1-2h' : hours < 4 ? '2-4h' : hours < 8 ? '4-8h' : hours < 24 ? '8-24h' : '24h+';
-            if (!acc.catItemDurBktMap[category]) acc.catItemDurBktMap[category] = {};
-            if (!acc.catItemDurBktMap[category][item]) acc.catItemDurBktMap[category][item] = {};
-            acc.catItemDurBktMap[category][item][bkt] = (acc.catItemDurBktMap[category][item][bkt] ?? 0) + 1;
-          }
+          const bkt = hours < 1 ? '< 1h' : hours < 2 ? '1-2h' : hours < 4 ? '2-4h' : hours < 8 ? '4-8h' : hours < 24 ? '8-24h' : '24h+';
+          if (!acc.catItemDurBktMap[category]) acc.catItemDurBktMap[category] = {};
+          if (!acc.catItemDurBktMap[category][item]) acc.catItemDurBktMap[category][item] = {};
+          acc.catItemDurBktMap[category][item][bkt] = (acc.catItemDurBktMap[category][item][bkt] ?? 0) + 1;
         }
       }
 

@@ -1208,6 +1208,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     const cim19IdPart = (value: string) => encodeURIComponent(value);
     const level2: Highcharts.SeriesOptionsType[] = [];
     const level3: Highcharts.SeriesOptionsType[] = [];
+    const hotelDurTotals: Record<string, number> = {};
     for (const e of entries) {
       const hKey = cim19IdPart(e.hotel_code);
       const catItemDurMap = (e.summary.im_cat_item_dur_bkt_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
@@ -1221,6 +1222,12 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
           }
         }
       }
+      // Level 1 must reflect only incidents that have resolution-duration data
+      // (not the hotel's full incident total), so it matches the sum of Level 2's buckets.
+      hotelDurTotals[e.hotel_code] = Object.values(durItemMap).reduce(
+        (s, itemCounts) => s + Object.values(itemCounts).reduce((s2, v) => s2 + v, 0),
+        0
+      );
       level2.push({
         id: `cim19-dur:${hKey}`, type: 'column', name: `${e.hotel_code} Resolution Duration Distribution`, color: ORANGE,
         dataLabels: { enabled: true },
@@ -1243,8 +1250,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       xAxis: { type: 'category', title: { text: 'Hotel' } },
       yAxis: { min: 0, title: { text: 'Incidents' } },
       series: [{
-        type: 'column', name: 'Incidents', color: GREEN,
-        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cim19-dur:${cim19IdPart(e.hotel_code)}` })),
+        type: 'column', name: 'Incidents with Resolution Duration', color: GREEN,
+        data: entries.map((e) => ({ name: e.hotel_code, y: hotelDurTotals[e.hotel_code] ?? 0, drilldown: `cim19-dur:${cim19IdPart(e.hotel_code)}` })),
         dataLabels: { enabled: true },
       }],
       plotOptions: { column: { dataLabels: { enabled: true } } },
@@ -1276,6 +1283,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     const level2: Highcharts.SeriesOptionsType[] = [];
     const level3: Highcharts.SeriesOptionsType[] = [];
     const level4: Highcharts.SeriesOptionsType[] = [];
+    const hotelDurTotals: Record<string, number> = {};
     for (const e of entries) {
       const hKey = cim18IdPart(e.hotel_code);
       const catItemDurMap = (e.summary.im_cat_item_dur_bkt_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
@@ -1283,6 +1291,9 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
         .map(([cat, im]): [string, number] => [cat, Object.values(im).reduce((s, bm) => s + Object.values(bm).reduce((s2, v) => s2 + v, 0), 0)])
         .filter(([, v]) => v > 0)
         .sort(([, a], [, b]) => b - a);
+      // Level 1 must reflect only incidents that have resolution-duration data
+      // (not the hotel's full incident total), so it matches the sum of Level 2's categories.
+      hotelDurTotals[e.hotel_code] = cats.reduce((s, [, v]) => s + v, 0);
       level2.push({
         id: `cim18-cat:${hKey}`, type: 'column', name: `${e.hotel_code} Categories`, color: ORANGE,
         dataLabels: { enabled: true },
@@ -1313,8 +1324,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       xAxis: { type: 'category', title: { text: 'Hotel' } },
       yAxis: { min: 0, title: { text: 'Incidents' } },
       series: [{
-        type: 'column', name: 'Incidents', color: GREEN,
-        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cim18-cat:${cim18IdPart(e.hotel_code)}` })),
+        type: 'column', name: 'Incidents with Resolution Duration', color: GREEN,
+        data: entries.map((e) => ({ name: e.hotel_code, y: hotelDurTotals[e.hotel_code] ?? 0, drilldown: `cim18-cat:${cim18IdPart(e.hotel_code)}` })),
         dataLabels: { enabled: true },
       }],
       plotOptions: { column: { dataLabels: { enabled: true } } },

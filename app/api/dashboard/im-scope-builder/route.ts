@@ -239,10 +239,15 @@ export async function GET(req: NextRequest) {
         b.by_category[cat] = (b.by_category[cat] ?? 0) + 1;
       }
 
+      // Close time: investigation_updated_on_2, falling back to
+      // investigation_updated_on_1 when cycle 2 was never filled in. If
+      // neither is present, assume a fixed 48h duration rather than
+      // dropping the record — matches app/api/uploads/finalize/route.ts.
       const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
-      const end = r.investigation_updated_on_2 ? new Date(r.investigation_updated_on_2) : null;
-      if (dt && !Number.isNaN(dt.getTime()) && end && !Number.isNaN(end.getTime()) && end.getTime() >= dt.getTime()) {
-        const hours = (end.getTime() - dt.getTime()) / 3_600_000;
+      const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+      const end = endRaw ? new Date(endRaw) : null;
+      if (dt && !Number.isNaN(dt.getTime())) {
+        const hours = end && !Number.isNaN(end.getTime()) ? (end.getTime() - dt.getTime()) / 3_600_000 : 48;
         if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
           category_duration_map[cat].sum += hours;
           category_duration_map[cat].count += 1;

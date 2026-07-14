@@ -906,6 +906,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         booking_source: string | null;
         created_date: string | null;
         incident_datetime: string | null;
+        investigation_updated_on_1: string | null;
         investigation_updated_on_2: string | null;
         organization_id: string | null;
       };
@@ -924,7 +925,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         const bookingByHotel: Record<string, Record<string, number>> = {};
         const batch = await supabase
           .from('im_records')
-          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_2, organization_id')
+          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, organization_id')
           .in('hotel_code', hotelCodes) as unknown as SbResult<SrcRow[]>;
         const rows = batch.data ?? [];
         // orgTimezone is resolved live above (shared across all modules in this request).
@@ -976,11 +977,14 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
               hourDeptItemByHotel[hotel][hour][dept][item] = (hourDeptItemByHotel[hotel][hour][dept][item] ?? 0) + 1;
             }
           }
-          const endRaw = r.investigation_updated_on_2;
-          if (rawDate && endRaw) {
+          // Close time: investigation_updated_on_2, falling back to
+          // investigation_updated_on_1 when cycle 2 was never filled in. If
+          // neither is present, assume a fixed 48h duration rather than
+          // dropping the record — matches app/api/uploads/finalize/route.ts.
+          const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+          if (rawDate) {
             const start = new Date(rawDate).getTime();
-            const end = new Date(endRaw).getTime();
-            const hours = (end - start) / 3_600_000;
+            const hours = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
             if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
               if (!itemDurationByHotel[hotel]) itemDurationByHotel[hotel] = {};
               if (!itemDurationByHotel[hotel][item]) itemDurationByHotel[hotel][item] = { sum: 0, count: 0 };

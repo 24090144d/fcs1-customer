@@ -426,6 +426,7 @@ interface ImAcc {
   itemDailyMap:     Record<string, Record<string, number>>;
   itemDurationMap:  Record<string, { sum: number; count: number }>;
   itemCompletedMap: Record<string, number>;
+  catItemDurBktMap: Record<string, Record<string, Record<string, number>>>; // category → item → resolution duration bucket → count
   sevDailyMap:   Record<string, Record<string, number>>;
   monthSevMap:   Record<string, Record<string, number>>;
   wdMonthMap:    Record<string, Record<number, number>>;
@@ -456,7 +457,7 @@ function newImAcc(): ImAcc {
     deptMap: {}, sourceMap: {}, hourMap: {}, weekMap: {},
     bookingMap: {},
     dailyMap: {}, monthMap: {}, weekdayMap: {},
-    catStatusMap: {}, catSevMap: {}, catDailyMap: {}, itemDailyMap: {}, itemDurationMap: {}, itemCompletedMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
+    catStatusMap: {}, catSevMap: {}, catDailyMap: {}, itemDailyMap: {}, itemDurationMap: {}, itemCompletedMap: {}, catItemDurBktMap: {}, sevDailyMap: {}, monthSevMap: {}, wdMonthMap: {},
     weekSourceMap: {},
     statusDeptMap: {}, statusCreatedDeptMap: {}, sourceDeptMap: {}, deptSourceMap: {}, deptCatMap: {}, deptItemMap: {}, hourCatMap: {}, hourDeptMap: {}, hourCatItemMap: {}, hourDeptItemMap: {}, vipDeptMap: {}, vipHourMap: {},
     repeatMap: new Map(),
@@ -626,6 +627,11 @@ function accumulate(acc: ImAcc, rr: Record<string, unknown>, timezone = 'UTC') {
             if (!acc.itemDurationMap[item]) acc.itemDurationMap[item] = { sum: 0, count: 0 };
             acc.itemDurationMap[item].sum += hours;
             acc.itemDurationMap[item].count++;
+
+            const bkt = hours < 1 ? '< 1h' : hours < 2 ? '1-2h' : hours < 4 ? '2-4h' : hours < 8 ? '4-8h' : hours < 24 ? '8-24h' : '24h+';
+            if (!acc.catItemDurBktMap[category]) acc.catItemDurBktMap[category] = {};
+            if (!acc.catItemDurBktMap[category][item]) acc.catItemDurBktMap[category][item] = {};
+            acc.catItemDurBktMap[category][item][bkt] = (acc.catItemDurBktMap[category][item][bkt] ?? 0) + 1;
           }
         }
       }
@@ -1333,6 +1339,7 @@ function buildImJson(acc: ImAcc, upload_job_id: string, source_name: string, hot
       Object.entries(acc.itemDurationMap).map(([k, v]) => [k, v.count > 0 ? v.sum / v.count : 0])
     ),
     im_item_completed_map: acc.itemCompletedMap,
+    im_cat_item_dur_bkt_map: acc.catItemDurBktMap,
     week_source_map: acc.weekSourceMap,
     dept_source_map: acc.deptSourceMap,
     status_dept_map: acc.statusDeptMap,

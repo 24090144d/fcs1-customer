@@ -158,6 +158,8 @@ export interface HotelSummary {
   im_hour_map?:             Record<string, number>;
   // im-04: VIP incidents → hour "0"-"23" → count (24-hour VIP distribution)
   im_vip_hour_map?:         Record<string, number>;
+  // cim-18: incident category → incident item → resolution duration bucket → count
+  im_cat_item_dur_bkt_map?: Record<string, Record<string, Record<string, number>>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

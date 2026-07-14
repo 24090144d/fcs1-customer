@@ -349,7 +349,7 @@
     "cim-02": "🟢 Total Incident vs Status by Hotel",
     "cim-03": "🟢 VIP Closure Rate vs VIP Incident by Hotel",
     "cim-04": "🟢 Hotel Incident -> Top 10 Incident Category",
-    "cim-05": "🟢 Chain — Repeat Incident Rate by Hotel",
+    "cim-05": "🟢 Hotel Repeat Incident Rate -> Top Incident Item",
     "cim-06": "🟢 Worldmap Incident by Hotel",
     "cim-07": "🟢 Hotel -> Department",
     "cim-08": "🟢 Hotel -> Source of Complaint",
@@ -362,8 +362,8 @@
     "cim-15": "🟢 Department Risk Heatmap",
     "cim-16": "🟢 Root Cause Pareto Chart",
     "cim-17": "🟣 熱門事件 → 每日趨勢（集團）",
-    "cim-18": "🟢 Hotel x Department Matrix",
-    "cim-19": "🟢 Chain Weekly Incident Trend",
+    "cim-18": "🟢 Hotel -> Incident Category -> Incident Item -> Average Resolution Duration Distribution",
+    "cim-19": "🟢 Hotel -> Average Resolution Duration Distribution (Hours) -> Top Incident Items",
     "cim-20": "🟣 Top Incident vs Completion Rate (Chain)"
   },
   "chart_notes_im": {
@@ -440,7 +440,7 @@
     "cim-02": "Compares hotel volume and status mix to detect closure imbalance.",
     "cim-03": "Dual-axis chart for premium guest risk and recovery effectiveness.",
     "cim-04": "Drilldown from hotel totals to top 10 categories for root-cause governance.",
-    "cim-05": "Shows recurrence pressure by hotel to flag unresolved systemic issues.",
+    "cim-05": "Shows recurrence pressure by hotel to flag unresolved systemic issues; click a hotel to see its top incident items.",
     "cim-06": "Country-level map with hotel-level labels for cross-region executive visibility.",
     "cim-07": "Hotel-to-department drilldown for operational ownership alignment.",
     "cim-08": "Hotel-to-source drilldown for channel quality control.",
@@ -453,8 +453,8 @@
     "cim-15": "Shows department risk intensity by hotel to target governance actions.",
     "cim-16": "Ranks root causes and cumulative contribution for improvement prioritization.",
     "cim-17": "Highlights unresolved critical burden by hotel for escalation governance.",
-    "cim-18": "Cross-hotel department matrix for fast benchmarking and imbalance detection.",
-    "cim-19": "Weekly chain-level incident trend with 4-week moving average for momentum monitoring.",
+    "cim-18": "Drilldown from hotel totals to category, item, then the item's resolution duration distribution (hours) for root-cause and SLA review.",
+    "cim-19": "Drilldown from hotel totals to their resolution duration distribution (hours), then top incident items within a duration bucket.",
     "cim-20": "Ranks hotels by SLA breach rate to expose service delivery failures across the chain."
   },
   "chart_formulas_im": {
@@ -1061,8 +1061,8 @@
     "cim-15": "#15 · Department Heatmap — department risk intensity by hotel drives targeted governance actions.",
     "cim-16": "#16 · Pareto — cumulative root-cause analysis focuses improvement effort on the highest-impact failure types.",
     "cim-17": "#17 · Aging Dashboard — open critical case aging by hotel triggers immediate escalation governance.",
-    "cim-18": "#18 · Department Matrix — cross-hotel department matrix benchmarks accountability distribution chain-wide.",
-    "cim-19": "#19 · Weekly Trend — chain incident trajectory and moving average reveal momentum shifts requiring proactive management.",
+    "cim-18": "#18 · Resolution Duration Root Cause — traces slow-resolving incident items down to their duration distribution for SLA and staffing action.",
+    "cim-19": "#19 · Resolution Duration Root Cause — traces slow-resolving hotels down to the incident items driving long resolution times.",
     "cim-20": "#20 · SLA Breach Ranking — hotel-level SLA breach rate ranking exposes service delivery gaps for targeted remediation."
   },
   "chart_bv_co": {

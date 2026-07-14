@@ -21,8 +21,8 @@ const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m =>
 
 const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-65']);
 const GAUGE_CHARTS = new Set(['im-67', 'im-68', 'im-69', 'im-09', 'im-10', 'im-35']);
-const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20']);
-const CORP_IM_LONG_IDS = new Set(['cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26']);
+const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14', 'cim-15', 'cim-17']);
+const CORP_IM_LONG_IDS = new Set(['cim-16', 'cim-18', 'cim-19', 'cim-20', 'cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-02', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-07', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12', 'mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18'];
@@ -50,7 +50,7 @@ const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: st
   { code: 'cim-02', id: 'cim-02', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
   { code: 'cim-03', id: 'cim-03', title: 'VIP Closure Rate vs VIP Incident by Hotel', note: 'Dual-axis chart for premium guest risk and recovery effectiveness. Benchmark: Good VIP Closure >= 95%; Bad < 90%.', formula: 'VIP Incidents = COUNT(vip_code valid) GROUP BY hotel; VIP Closure % = VIP Completed / VIP Incidents * 100' },
   { code: 'cim-04', id: 'cim-04', title: '⏰ Hotel -> Department -> Incident Category -> Incident Items', note: 'Drilldown from hotel totals to department, then incident category, then incident items for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_category per hotel+department; Level 4 = COUNT(incident_case) GROUP BY incident_item_name per hotel+department+category' },
-  { code: 'cim-05', id: 'cim-05', title: 'Chain — Repeat Incident Rate by Hotel', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Repeat Rate % = repeat_count / total_cases * 100 per hotel' },
+  { code: 'cim-05', id: 'cim-05', title: 'Hotel Repeat Incident Rate -> Top Incident Item', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues; click a hotel to see its top incident items. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Level 1 = Repeat Rate % = repeat_count / total_cases * 100 per hotel; Level 2 = COUNT(incident_case) GROUP BY incident_item_name per hotel' },
   { code: 'cim-06', id: 'cim-06', title: 'Worldmap Incident by Hotel', note: 'Country-level map with hotel-level labels for cross-region executive visibility. Benchmark: Good when no single country exceeds 50% of chain incidents; Bad when one country > 70%.', formula: 'Country Value = SUM(total_cases) GROUP BY country_code; Label = CONCAT(hotel_code, incident_count) list per country' },
   { code: 'cim-07', id: 'cim-07', title: 'Hotel -> Department', note: 'Hotel-to-department drilldown for operational ownership alignment. Benchmark: Good when no department exceeds 25% of hotel incidents; Bad > 40%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel' },
   { code: 'cim-08', id: 'cim-08', title: 'Hotel -> Source of Complaint', note: 'Hotel-to-source drilldown for channel quality control. Benchmark: Good when Unknown Source <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY source_of_complaint per hotel' },
@@ -61,14 +61,14 @@ const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: st
   { code: 'cim-13', id: 'cim-13', title: 'Severity vs Volume Quadrant', note: 'Bubble quadrant for strategic risk classification (high volume + high severity = immediate focus). Benchmark: Good when no hotel in top-right high-risk quadrant; Bad when multiple hotels cluster there.', formula: 'X=COUNT(cases), Y=AVG(severity score), Bubble=VIP cases, Color=country/region' },
   { code: 'cim-14', id: 'cim-14', title: 'Regional Risk Heatmap', note: 'Region matrix compares critical, VIP, SLA breach and trend intensity. Benchmark: Good when all risk cells trend down or stay green; Bad when >=2 metrics red in same region.', formula: 'Regional KPI = AVG(metric by hotel in region); Regional Risk = aggregate of weighted KPI intensities' },
   { code: 'cim-15', id: 'cim-15', title: 'Department Risk Heatmap', note: 'Shows department risk intensity by hotel to target governance actions. Benchmark: Good when top department risk <= 20% of hotel total; Bad > 35%.', formula: 'Department Risk Proxy = COUNT(cases) by hotel_code + department (or weighted severity where available)' },
-  { code: 'cim-16', id: 'cim-16', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
   { code: 'cim-17', id: 'cim-17', title: '🟣 Top Incident → Daily Trend (Chain)', note: 'Ranks the most reported incident items across all chain hotels. Click a bar to see its daily count trend.', formula: 'COUNT by incident_item_name (chain); drilldown: COUNT by created_date' },
-  { code: 'cim-18', id: 'cim-18', title: 'Hotel x Department Matrix', note: 'Cross-hotel department matrix for fast benchmarking and imbalance detection. Benchmark: Good when cross-hotel variance is balanced; Bad when one department dominates across multiple hotels.', formula: 'Matrix Cell = COUNT(incident_case) GROUP BY hotel_code, department' },
-  { code: 'cim-19', id: 'cim-19', title: 'Chain Weekly Incident Trend', note: 'Weekly chain-level incident trend with 4-week moving average for momentum and trajectory monitoring. Benchmark: Good when moving average is flat or declining; Bad when rising >10% WoW.', formula: 'Weekly Incidents = SUM(total) GROUP BY ISO_WEEK; Moving Avg = 4-week rolling average' },
-  { code: 'cim-20', id: 'cim-20', title: '🟣 Top Incident vs Completion Rate (Chain)', note: 'Top 10 incident items by volume (bars, left axis) with completion rate % per item (line, right axis). Shows both workload and resolution effectiveness.', formula: 'Bars: COUNT by incident_item_name (chain); Line: completed / total × 100% per item' },
 ];
 
 const CORP_IM_LONG_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
+  { code: 'cim-16', id: 'cim-16', title: 'Root Cause Pareto Chart', note: 'Ranks root causes and cumulative contribution for improvement prioritization. Benchmark: Good when top 5 causes <= 45%; Bad when top 5 > 60%.', formula: 'Bars = COUNT(incident_category/item); Cumulative % = running_total / total_cases * 100' },
+  { code: 'cim-18', id: 'cim-18', title: 'Hotel -> Incident Category -> Incident Item -> Average Resolution Duration Distribution', note: 'Drilldown from hotel totals to category, item, then the item\'s resolution duration distribution (hours) for root-cause and SLA review. Benchmark: Good when most items resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY incident_category per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+category; Level 4 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel+category+item' },
+  { code: 'cim-19', id: 'cim-19', title: 'Hotel -> Average Resolution Duration Distribution (Hours) -> Top Incident Items', note: 'Drilldown from hotel totals to their resolution duration distribution (hours), then the top incident items within a duration bucket, for SLA and staffing review. Benchmark: Good when most incidents resolve <= 4h; Bad when a large share falls in 24h+.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY resolution_duration_bucket (hours) per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_item_name per hotel+bucket' },
+  { code: 'cim-20', id: 'cim-20', title: '🟣 Top Incident vs Completion Rate (Chain)', note: 'Top 10 incident items by volume (bars, left axis) with completion rate % per item (line, right axis). Shows both workload and resolution effectiveness.', formula: 'Bars: COUNT by incident_item_name (chain); Line: completed / total × 100% per item' },
   { code: 'cim-22', id: 'cim-22', title: 'Hotel -> Incident Category -> Incident Items', note: 'Three-level hotel drilldown from total incident volume to category and item detail for deep root-cause review.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY category per hotel; Level 3 = COUNT(incident_case) BY item per category' },
   { code: 'cim-23', id: 'cim-23', title: 'Hotel -> Department -> Incident Category -> Incident Items', note: 'Four-level hotel drilldown from incident volume to department, category, and item detail for ownership tracing.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY department per hotel; Level 3 = COUNT(incident_case) BY category per department; Level 4 = COUNT(incident_case) BY item per category' },
   { code: 'cim-24', id: 'cim-24', title: 'Hotel -> Incident Category -> Top Average Completed Duration (Hour) by Incident Item', note: 'Three-level hotel drilldown focused on item-level completed duration in hours to expose slow items inside each category.', formula: 'Level 1 = COUNT(incident_case) BY hotel_code; Level 2 = COUNT(incident_case) BY category per hotel; Level 3 = AVG(completed_duration_hours) BY incident_item_name per category' },
@@ -838,7 +838,53 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
 
-  if (id === 'cim-05') return buildChainOptions('cim-09', entries); // Repeat rate
+  if (id === 'cim-05') {
+    const topLevel = entries.map((e) => {
+      const { total, repeat_count } = e.summary;
+      const rate = total > 0 ? r1((repeat_count / total) * 100) : 0;
+      return { name: e.hotel_code, y: rate, drilldown: `hotel:${e.hotel_code}` };
+    });
+    const drillSeries: Array<{
+      id: string;
+      name: string;
+      type: 'column';
+      data: Array<{ name: string; y: number }>;
+      dataLabels: { enabled: boolean; format: string };
+    }> = [];
+
+    for (const e of entries) {
+      const hotel = e.hotel_code;
+      const topItems = Object.entries(e.summary.item_map ?? {})
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 24);
+
+      drillSeries.push({
+        id: `hotel:${hotel}`,
+        name: `${hotel} Top Incident Item`,
+        type: 'column',
+        data: topItems.map(([item, count]) => ({ name: item, y: count })),
+        dataLabels: { enabled: true, format: '{point.y}' },
+      });
+    }
+
+    return hcOpts({
+      chart: { type: 'column' },
+      xAxis: { type: 'category' },
+      yAxis: { title: { text: 'Repeat Rate (%)' }, min: 0, max: 100 },
+      series: [{
+        name: 'Repeat Rate %',
+        type: 'column',
+        color: '#f59e0b',
+        data: topLevel,
+        dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+      }],
+      drilldown: {
+        series: drillSeries,
+        activeAxisLabelStyle: { textDecoration: 'none' },
+      },
+      tooltip: { pointFormat: '<b>{point.y}</b>' },
+    });
+  }
   if (id === 'cim-01') {
     const topLevel = entries.map((e) => ({
       name: e.hotel_code,
@@ -1156,32 +1202,58 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   }
 
   if (id === 'cim-19') {
-    const weekAgg: Record<string, number> = {};
-    for (const e of entries) for (const [w, v] of Object.entries(e.summary.week_map ?? {})) weekAgg[w] = (weekAgg[w] ?? 0) + v;
-    let weeks = Object.keys(weekAgg).sort();
-    let raw = weeks.map((w) => weekAgg[w] ?? 0);
-    // Fallback when weekly buckets are not present in legacy corp summaries.
-    if (weeks.length === 0) {
-      weeks = entries.map((e) => e.hotel_code);
-      raw = entries.map((e) => e.summary.total);
+    // Hotel → Average Resolution Duration Distribution (Hours) → Top Incident Items (3-level vertical-bar drilldown)
+    const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+    const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
+    const cim19IdPart = (value: string) => encodeURIComponent(value);
+    const level2: Highcharts.SeriesOptionsType[] = [];
+    const level3: Highcharts.SeriesOptionsType[] = [];
+    for (const e of entries) {
+      const hKey = cim19IdPart(e.hotel_code);
+      const catItemDurMap = (e.summary.im_cat_item_dur_bkt_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
+      // Flatten category → item → bucket → count into bucket → item → count for this hotel.
+      const durItemMap: Record<string, Record<string, number>> = {};
+      for (const itemMap of Object.values(catItemDurMap)) {
+        for (const [item, bm] of Object.entries(itemMap)) {
+          for (const [bkt, cnt] of Object.entries(bm)) {
+            if (!durItemMap[bkt]) durItemMap[bkt] = {};
+            durItemMap[bkt][item] = (durItemMap[bkt][item] ?? 0) + cnt;
+          }
+        }
+      }
+      level2.push({
+        id: `cim19-dur:${hKey}`, type: 'column', name: `${e.hotel_code} Avg Resolution Duration Distribution`, color: ORANGE,
+        dataLabels: { enabled: true },
+        data: DUR_BUCKETS.map((b) => ({
+          name: b,
+          y: Object.values(durItemMap[b] ?? {}).reduce((s, v) => s + v, 0),
+          drilldown: `cim19-item:${hKey}:${cim19IdPart(b)}`,
+        })),
+      } as Highcharts.SeriesOptionsType);
+      for (const b of DUR_BUCKETS) {
+        level3.push({
+          id: `cim19-item:${hKey}:${cim19IdPart(b)}`, type: 'column', name: `${e.hotel_code} — ${b} Top Incident Items`, color: PURPLE,
+          dataLabels: { enabled: true },
+          data: topN(durItemMap[b] ?? {}, 24).map(([name, y]) => ({ name, y })),
+        } as Highcharts.SeriesOptionsType);
+      }
     }
-    const ma = raw.map((_, i) => {
-      const s = Math.max(0, i - 3);
-      const slice = raw.slice(s, i + 1);
-      return slice.reduce((a, b) => a + b, 0) / Math.max(slice.length, 1);
-    });
-    return hcOpts({
-      chart: { type: 'line' },
-      xAxis: { categories: weeks },
-      yAxis: { title: { text: 'Incidents' }, min: 0 },
-      series: [
-        { type: 'line', name: 'Weekly Incidents', data: raw, color: '#0E7470' },
-        { type: 'line', name: 'Moving Average', data: ma.map((v) => r1(v)), color: '#C55A10', dashStyle: 'ShortDot' },
-      ],
-    });
+    return withDrilldownXAxisTitles(hcOpts({
+      chart: { type: 'column' },
+      xAxis: { type: 'category', title: { text: 'Hotel' } },
+      yAxis: { min: 0, title: { text: 'Incidents' } },
+      series: [{
+        type: 'column', name: 'Incidents', color: GREEN,
+        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cim19-dur:${cim19IdPart(e.hotel_code)}` })),
+        dataLabels: { enabled: true },
+      }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+      drilldown: { series: [...level2, ...level3] },
+      tooltip: { shared: true },
+    }), 'Hotel');
   }
 
-  if (id === 'cim-15' || id === 'cim-18') {
+  if (id === 'cim-15') {
     const depts = Array.from(new Set(entries.flatMap((e) => Object.keys(e.summary.dept_map ?? {}))))
       .sort((a, b) => (entries.reduce((s, e) => s + (e.summary.dept_map[b] ?? 0), 0)) - (entries.reduce((s, e) => s + (e.summary.dept_map[a] ?? 0), 0)))
       .slice(0, 24);
@@ -1192,8 +1264,63 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       xAxis: { categories: entries.map((e) => e.hotel_code) },
       yAxis: { categories: depts, title: { text: null }, reversed: true },
       colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#0E7470' },
-      series: [{ type: 'heatmap', name: id === 'cim-15' ? 'Department Risk' : 'Department Cases', data, dataLabels: { enabled: true } }],
+      series: [{ type: 'heatmap', name: 'Department Risk', data, dataLabels: { enabled: true } }],
     });
+  }
+
+  if (id === 'cim-18') {
+    // Hotel → Incident Category → Incident Item → Resolution Duration Distribution (4-level vertical-bar drilldown)
+    const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+    const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED', BLUE = '#0E7490';
+    const cim18IdPart = (value: string) => encodeURIComponent(value);
+    const level2: Highcharts.SeriesOptionsType[] = [];
+    const level3: Highcharts.SeriesOptionsType[] = [];
+    const level4: Highcharts.SeriesOptionsType[] = [];
+    for (const e of entries) {
+      const hKey = cim18IdPart(e.hotel_code);
+      const catItemDurMap = (e.summary.im_cat_item_dur_bkt_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
+      const cats = Object.entries(catItemDurMap)
+        .map(([cat, im]): [string, number] => [cat, Object.values(im).reduce((s, bm) => s + Object.values(bm).reduce((s2, v) => s2 + v, 0), 0)])
+        .filter(([, v]) => v > 0)
+        .sort(([, a], [, b]) => b - a);
+      level2.push({
+        id: `cim18-cat:${hKey}`, type: 'column', name: `${e.hotel_code} Categories`, color: ORANGE,
+        dataLabels: { enabled: true },
+        data: cats.map(([cat, v]) => ({ name: cat, y: v, drilldown: `cim18-item:${hKey}:${cim18IdPart(cat)}` })),
+      } as Highcharts.SeriesOptionsType);
+      for (const [cat] of cats) {
+        const items = Object.entries(catItemDurMap[cat] ?? {})
+          .map(([item, bm]): [string, number] => [item, Object.values(bm).reduce((s, v) => s + v, 0)])
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 24);
+        level3.push({
+          id: `cim18-item:${hKey}:${cim18IdPart(cat)}`, type: 'column', name: `${e.hotel_code} — ${cat} Top Incident Items`, color: PURPLE,
+          dataLabels: { enabled: true },
+          data: items.map(([item, v]) => ({ name: item, y: v, drilldown: `cim18-dur:${hKey}:${cim18IdPart(cat)}:${cim18IdPart(item)}` })),
+        } as Highcharts.SeriesOptionsType);
+        for (const [item] of items) {
+          const bm = catItemDurMap[cat]?.[item] ?? {};
+          level4.push({
+            id: `cim18-dur:${hKey}:${cim18IdPart(cat)}:${cim18IdPart(item)}`, type: 'column', name: `${e.hotel_code} — ${item} Avg Resolution Duration (h)`, color: BLUE,
+            dataLabels: { enabled: true },
+            data: DUR_BUCKETS.map((b) => ({ name: b, y: bm[b] ?? 0 })),
+          } as Highcharts.SeriesOptionsType);
+        }
+      }
+    }
+    return withDrilldownXAxisTitles(hcOpts({
+      chart: { type: 'column' },
+      xAxis: { type: 'category', title: { text: 'Hotel' } },
+      yAxis: { min: 0, title: { text: 'Incidents' } },
+      series: [{
+        type: 'column', name: 'Incidents', color: GREEN,
+        data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cim18-cat:${cim18IdPart(e.hotel_code)}` })),
+        dataLabels: { enabled: true },
+      }],
+      plotOptions: { column: { dataLabels: { enabled: true } } },
+      drilldown: { series: [...level2, ...level3, ...level4] },
+      tooltip: { shared: true },
+    }), 'Hotel');
   }
 
   if (id === 'cim-16') {

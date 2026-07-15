@@ -2438,7 +2438,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     return topEntries(m, 50).map(([name, y]) => ({ name, y }));
   });
 
-  // cco-31-42: Dimension → 24-Hour / Cleaning Duration drilldowns
+  // cco-31-42: Hotel → Dimension → 24-Hour / Cleaning Duration drilldowns (3-level)
   const _ccog1ByHour = (rows: CoRow[]) => {
     const counts = new Array(24).fill(0);
     for (const r of rows) {
@@ -2453,35 +2453,64 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       y: rows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && _durBucketFns[bi](v); }).length,
     }));
 
-  const ccoDim24hSS = topEntries(groupCount(allRows, (r) => normText(r.stay_status) || 'Unknown'), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
-  const ccoDim24hCS = topEntries(groupCount(allRows, rowStatus), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => rowStatus(r) === name)) }));
-  const ccoDim24hRT = topEntries(groupCount(allRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
-    .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
-  const ccoDim24hOTD = [
-    { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _ccog1ByHour(completedRows.filter(isOnTime)) },
-    { name: 'Delayed', total: completedRows.filter(isDelayed).length, drill: _ccog1ByHour(completedRows.filter(isDelayed)) },
+  // Groups rows into top-N named buckets for a dimension getter (e.g. stay_status).
+  const _ccoDimBuckets = (rows: CoRow[], dimFn: (r: CoRow) => string | null | undefined, capN: number) =>
+    topEntries(groupCount(rows, dimFn), capN).map(([name]) => ({
+      name,
+      rows: rows.filter((r) => (normText(dimFn(r)) || 'Unknown') === name),
+    }));
+  // On-Time/Delayed uses fixed two-bucket predicates rather than a groupCount dimension.
+  const _ccoOtdBuckets = (rows: CoRow[]) => [
+    { name: 'On Time', rows: rows.filter(isOnTime) },
+    { name: 'Delayed', rows: rows.filter(isDelayed) },
   ];
-  const ccoDim24hCT = topEntries(groupCount(allRows, (r) => normText(r.cleaning_type) || 'Unknown'), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(allRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
-  const ccoDim24hAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 50)
-    .map(([name, total]) => ({ name, total, drill: _ccog1ByHour(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
 
-  const ccoDimDurSS = topEntries(groupCount(completedRows, (r) => normText(r.stay_status) || 'Unknown'), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.stay_status) || 'Unknown') === name)) }));
-  const ccoDimDurCS = topEntries(groupCount(completedRows, rowStatus), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => rowStatus(r) === name)) }));
-  const ccoDimDurRT = topEntries(groupCount(completedRows, (r) => normText(r.room_type) || 'Unknown Room Type'), 50)
-    .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.room_type) || 'Unknown Room Type') === name)) }));
-  const ccoDimDurOTD = [
-    { name: 'On Time', total: completedRows.filter(isOnTime).length, drill: _ccog2ByDur(completedRows.filter(isOnTime)) },
-    { name: 'Delayed', total: completedRows.filter(isDelayed).length, drill: _ccog2ByDur(completedRows.filter(isDelayed)) },
-  ];
-  const ccoDimDurCT = topEntries(groupCount(completedRows, (r) => normText(r.cleaning_type) || 'Unknown'), 12)
-    .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.cleaning_type) || 'Unknown') === name)) }));
-  const ccoDimDurAtt = topEntries(groupCount(completedRows, (r) => normText(r.attendant) || 'Unknown Attendant'), 50)
-    .map(([name, total]) => ({ name, total, drill: _ccog2ByDur(completedRows.filter((r) => (normText(r.attendant) || 'Unknown Attendant') === name)) }));
+  // Builds Hotel → Dimension → (24-hour | duration-bucket) 3-level drilldown series.
+  function ccoBuildHotelDrilldown(
+    rows: CoRow[],
+    bucketFn: (hotelRows: CoRow[]) => Array<{ name: string; rows: CoRow[] }>,
+    level3Fn: (rows: CoRow[]) => Array<{ name: string; y: number }>,
+    idPrefix: string,
+  ) {
+    const hotels = topEntries(groupCount(rows, (r) => normText(r.hotel_code) || 'Unknown Hotel'), 50);
+    const level2: Highcharts.SeriesOptionsType[] = [];
+    const level3: Highcharts.SeriesOptionsType[] = [];
+    const level1 = hotels.map(([hotel, total]) => ({
+      name: hotel, y: total, drilldown: `${idPrefix}-h:${encodeURIComponent(hotel)}`,
+    }));
+    for (const [hotel] of hotels) {
+      const hotelRows = rows.filter((r) => (normText(r.hotel_code) || 'Unknown Hotel') === hotel);
+      const hKey = encodeURIComponent(hotel);
+      const buckets = bucketFn(hotelRows);
+      level2.push({
+        id: `${idPrefix}-h:${hKey}`, type: 'column', name: hotel, color: '#16a34a',
+        dataLabels: { enabled: true, format: '{point.y}' },
+        data: buckets.map((b) => ({ name: b.name, y: b.rows.length, drilldown: `${idPrefix}-d:${hKey}:${encodeURIComponent(b.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+      for (const b of buckets) {
+        level3.push({
+          id: `${idPrefix}-d:${hKey}:${encodeURIComponent(b.name)}`, type: 'bar', name: `${hotel} — ${b.name}`, color: '#B45309',
+          dataLabels: { enabled: true, format: '{point.y}' },
+          data: level3Fn(b.rows),
+        } as Highcharts.SeriesOptionsType);
+      }
+    }
+    return { level1, level2, level3 };
+  }
+
+  const ccoH31 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.stay_status) || 'Unknown', 12), _ccog1ByHour, 'cco31');
+  const ccoH32 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, rowStatus, 12), _ccog1ByHour, 'cco32');
+  const ccoH33 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _ccog1ByHour, 'cco33');
+  const ccoH34 = ccoBuildHotelDrilldown(completedRows, _ccoOtdBuckets, _ccog1ByHour, 'cco34');
+  const ccoH35 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _ccog1ByHour, 'cco35');
+  const ccoH36 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.attendant) || 'Unknown Attendant', 50), _ccog1ByHour, 'cco36');
+
+  const ccoH37 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.stay_status) || 'Unknown', 12), _ccog2ByDur, 'cco37');
+  const ccoH38 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, rowStatus, 12), _ccog2ByDur, 'cco38');
+  const ccoH39 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _ccog2ByDur, 'cco39');
+  const ccoH40 = ccoBuildHotelDrilldown(completedRows, _ccoOtdBuckets, _ccog2ByDur, 'cco40');
+  const ccoH41 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _ccog2ByDur, 'cco41');
+  const ccoH42 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.attendant) || 'Unknown Attendant', 50), _ccog2ByDur, 'cco42');
 
   // ── cco-43 / cco-44: Hotel → Floor → Attendant nested aggregation ──────────
   type CcoAttAgg = { count: number; credit: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
@@ -3355,113 +3384,113 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyrt:${h}` })) }],
       drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyrt:${h}`, name: `${label} — Room Type`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourRoomType[h] })) },
     }),
-    make('cco-31', 'Stay Status → 24-Hour Cleaning Distribution', 'Orders by stay status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY stay_status DRILLDOWN HOUR(any_time)', {
+    make('cco-31', 'Hotel → Stay Status → 24-Hour Cleaning Distribution', 'Orders by hotel and stay status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, stay_status DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Stay Status' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hSS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimss24h:${i}` })) }],
-      drilldown: { series: ccoDim24hSS.map((d, i) => ({ id: `cco-dimss24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH31.level1 }],
+      drilldown: { series: [...ccoH31.level2, ...ccoH31.level3] },
     }),
-    make('cco-32', 'Cleaning Status → 24-Hour Cleaning Distribution', 'Orders by cleaning status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY status_normalized DRILLDOWN HOUR(any_time)', {
+    make('cco-32', 'Hotel → Cleaning Status → 24-Hour Cleaning Distribution', 'Orders by hotel and cleaning status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, status_normalized DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Cleaning Status' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hCS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimcs24h:${i}` })) }],
-      drilldown: { series: ccoDim24hCS.map((d, i) => ({ id: `cco-dimcs24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH32.level1 }],
+      drilldown: { series: [...ccoH32.level2, ...ccoH32.level3] },
     }),
-    make('cco-33', 'Room Type → 24-Hour Cleaning Distribution', 'Orders by room type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY room_type DRILLDOWN HOUR(any_time)', {
+    make('cco-33', 'Hotel → Room Type → 24-Hour Cleaning Distribution', 'Orders by hotel and room type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, room_type DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Room Type' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hRT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimrt24h:${i}` })) }],
-      drilldown: { series: ccoDim24hRT.map((d, i) => ({ id: `cco-dimrt24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH33.level1 }],
+      drilldown: { series: [...ccoH33.level2, ...ccoH33.level3] },
     }),
-    make('cco-34', 'On-Time/Delayed → 24-Hour Cleaning Distribution', 'Completed orders by on-time/delayed status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY is_on_time DRILLDOWN HOUR(any_time)', {
+    make('cco-34', 'Hotel → On-Time/Delayed → 24-Hour Cleaning Distribution', 'Completed orders by hotel and on-time/delayed status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, is_on_time DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'On-Time / Delayed' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#16a34a', data: ccoDim24hOTD.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimotd24h:${i}` })) }],
-      drilldown: { series: ccoDim24hOTD.map((d, i) => ({ id: `cco-dimotd24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: ccoH34.level1 }],
+      drilldown: { series: [...ccoH34.level2, ...ccoH34.level3] },
     }),
-    make('cco-35', 'Cleaning Type → 24-Hour Cleaning Distribution', 'Orders by cleaning type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN HOUR(any_time)', {
+    make('cco-35', 'Hotel → Cleaning Type → 24-Hour Cleaning Distribution', 'Orders by hotel and cleaning type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, cleaning_type DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Cleaning Type' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Orders', color: '#16a34a', data: ccoDim24hCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimct24h:${i}` })) }],
-      drilldown: { series: ccoDim24hCT.map((d, i) => ({ id: `cco-dimct24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH35.level1 }],
+      drilldown: { series: [...ccoH35.level2, ...ccoH35.level3] },
     }),
-    make('cco-36', 'Top 50 Attendants → 24-Hour Cleaning Distribution', 'Top 50 attendants by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY attendant TOP 50 DRILLDOWN HOUR(any_time)', {
+    make('cco-36', 'Hotel → Top 50 Attendants → 24-Hour Cleaning Distribution', 'Top 50 attendants per hotel by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, attendant TOP 50 DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders — click to see hourly split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#16a34a', data: ccoDim24hAtt.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimatt24h:${i}` })) }],
-      drilldown: { series: ccoDim24hAtt.map((d, i) => ({ id: `cco-dimatt24h:${i}`, name: `${d.name} — By Hour`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: ccoH36.level1 }],
+      drilldown: { series: [...ccoH36.level2, ...ccoH36.level3] },
     }),
-    make('cco-37', 'Stay Status → Cleaning Duration Distribution', 'Completed orders by stay status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY stay_status DRILLDOWN duration_bin', {
+    make('cco-37', 'Hotel → Stay Status → Cleaning Duration Distribution', 'Completed orders by hotel and stay status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, stay_status DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Stay Status' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurSS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimssdr:${i}` })) }],
-      drilldown: { series: ccoDimDurSS.map((d, i) => ({ id: `cco-dimssdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH37.level1 }],
+      drilldown: { series: [...ccoH37.level2, ...ccoH37.level3] },
     }),
-    make('cco-38', 'Cleaning Status → Cleaning Duration Distribution', 'Completed orders by cleaning status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY status_normalized DRILLDOWN duration_bin', {
+    make('cco-38', 'Hotel → Cleaning Status → Cleaning Duration Distribution', 'Completed orders by hotel and cleaning status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, status_normalized DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Cleaning Status' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurCS.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimcsdr:${i}` })) }],
-      drilldown: { series: ccoDimDurCS.map((d, i) => ({ id: `cco-dimcsdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH38.level1 }],
+      drilldown: { series: [...ccoH38.level2, ...ccoH38.level3] },
     }),
-    make('cco-39', 'Room Type → Cleaning Duration Distribution', 'Completed orders by room type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY room_type DRILLDOWN duration_bin', {
+    make('cco-39', 'Hotel → Room Type → Cleaning Duration Distribution', 'Completed orders by hotel and room type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, room_type DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Room Type' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurRT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimrtdr:${i}` })) }],
-      drilldown: { series: ccoDimDurRT.map((d, i) => ({ id: `cco-dimrtdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH39.level1 }],
+      drilldown: { series: [...ccoH39.level2, ...ccoH39.level3] },
     }),
-    make('cco-40', 'On-Time/Delayed → Cleaning Duration Distribution', 'Completed orders by on-time/delayed status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY is_on_time DRILLDOWN duration_bin', {
+    make('cco-40', 'Hotel → On-Time/Delayed → Cleaning Duration Distribution', 'Completed orders by hotel and on-time/delayed status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, is_on_time DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'On-Time / Delayed' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurOTD.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimotddr:${i}` })) }],
-      drilldown: { series: ccoDimDurOTD.map((d, i) => ({ id: `cco-dimotddr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH40.level1 }],
+      drilldown: { series: [...ccoH40.level2, ...ccoH40.level3] },
     }),
-    make('cco-41', 'Cleaning Type → Cleaning Duration Distribution', 'Completed orders by cleaning type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY cleaning_type DRILLDOWN duration_bin', {
+    make('cco-41', 'Hotel → Cleaning Type → Cleaning Duration Distribution', 'Completed orders by hotel and cleaning type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, cleaning_type DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Cleaning Type' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurCT.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimctdr:${i}` })) }],
-      drilldown: { series: ccoDimDurCT.map((d, i) => ({ id: `cco-dimctdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH41.level1 }],
+      drilldown: { series: [...ccoH41.level2, ...ccoH41.level3] },
     }),
-    make('cco-42', 'Top 50 Attendants → Cleaning Duration Distribution', 'Top 50 attendants by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY attendant TOP 50 DRILLDOWN duration_bin', {
+    make('cco-42', 'Hotel → Top 50 Attendants → Cleaning Duration Distribution', 'Top 50 attendants per hotel by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, attendant TOP 50 DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Attendant' } },
+      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
       yAxis: { title: { text: 'Completed Orders' } },
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders — click to see duration split' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoDimDurAtt.map((d, i) => ({ name: d.name, y: d.total, drilldown: `cco-dimattdr:${i}` })) }],
-      drilldown: { series: ccoDimDurAtt.map((d, i) => ({ id: `cco-dimattdr:${i}`, name: `${d.name} — Duration`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: d.drill })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
+      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH42.level1 }],
+      drilldown: { series: [...ccoH42.level2, ...ccoH42.level3] },
     }),
     make('cco-43', 'Hotel → Floor → Room Attendant → Average Cleaning Duration', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see its room attendants, and an attendant to see average cleaning duration (mins) overall and by room type', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
       chart: { type: 'column' }, title: { text: undefined },

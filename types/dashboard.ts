@@ -160,6 +160,17 @@ export interface HotelSummary {
   im_vip_hour_map?:         Record<string, number>;
   // cim-18: incident category → incident item → resolution duration bucket → count
   im_cat_item_dur_bkt_map?: Record<string, Record<string, Record<string, number>>>;
+  // cim-15: incident category → incident item → { count, repeat (room+category+item
+  // combos occurring 2+ times, same definition as the hotel-level repeat_count KPI),
+  // avgDurationHours }. Computed live from raw im_records, not baked at upload time.
+  im_cat_item_stats_map?:   Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>;
+  // cim-16..28: generic dimension → dimension-value → incident item → { count, repeat,
+  // avgDurationHours }, one slice per dimension key (dept, vip, source, booking,
+  // severity, hour, durbkt, profile, status, repeatbkt, month, day). Same repeat/
+  // duration definitions as im_cat_item_stats_map, just grouped by a different
+  // first-level dimension instead of incident category. Computed live from raw
+  // im_records, not baked at upload time.
+  im_dim_item_stats_map?:   Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

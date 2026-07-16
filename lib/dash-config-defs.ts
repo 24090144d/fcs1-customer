@@ -142,6 +142,8 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(seq('im-', 1, 39), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
       // Corp IM charts — actual dashboard IDs cim-01..cim-20
       ...items(seq('cim-', 1, 20), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // Corp IM Long Charts — actual dashboard IDs cim-22..cim-28 (cim-21 does not exist)
+      ...items(['cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26', 'cim-27', 'cim-28'], 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
     ],
   },
 };

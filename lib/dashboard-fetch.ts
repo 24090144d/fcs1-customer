@@ -909,6 +909,11 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         investigation_updated_on_1: string | null;
         investigation_updated_on_2: string | null;
         organization_id: string | null;
+        room_no: string | null;
+        vip_code: string | null;
+        severity: string | null;
+        profile_type: string | null;
+        incident_status: string | null;
       };
       const hotelCodes = chainEntries.map((e) => e.hotel_code).filter(Boolean);
       if (hotelCodes.length > 0) {
@@ -923,9 +928,62 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         const hourDeptItemByHotel: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
         const itemDurationByHotel: Record<string, Record<string, { sum: number; count: number }>> = {};
         const bookingByHotel: Record<string, Record<string, number>> = {};
+        // cim-15: category → item → room_no → count, and category → item → {sum,count}
+        // duration, both keyed by hotel — used to derive per-item repeat rate (same
+        // room+category+item combo appearing 2+ times, matching the repeat_count KPI's
+        // definition) and average resolution duration.
+        const catItemRoomByHotel: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+        const catItemDurationByHotel: Record<string, Record<string, Record<string, { sum: number; count: number }>>> = {};
+
+        // cim-16..28: generic dimension → dimension-value → item accumulator, shared
+        // across all 11 dimension charts (dept/vip/source/booking/severity/hour/durbkt/
+        // profile/status/repeatbkt/month/day). counts/rooms/durations mirror the
+        // cat-item-* structures above, just keyed by an extra "dim" level so one loop
+        // can feed every chart instead of duplicating the row scan per dimension.
+        const DIM_KEYS = ['dept', 'vip', 'source', 'booking', 'severity', 'hour', 'durbkt', 'profile', 'status', 'repeatbkt', 'month', 'day'] as const;
+        type DimKey = typeof DIM_KEYS[number];
+        const dimCounts: Record<DimKey, Record<string, Record<string, Record<string, number>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, number>>>>;
+        const dimRooms: Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>>;
+        const dimDurations: Record<DimKey, Record<string, Record<string, Record<string, { sum: number; count: number }>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, { sum: number; count: number }>>>>;
+        const DUR_BUCKETS_IM = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+        const durBucketLabel = (hours: number): string => {
+          if (hours < 1) return DUR_BUCKETS_IM[0];
+          if (hours < 2) return DUR_BUCKETS_IM[1];
+          if (hours < 4) return DUR_BUCKETS_IM[2];
+          if (hours < 8) return DUR_BUCKETS_IM[3];
+          if (hours < 24) return DUR_BUCKETS_IM[4];
+          return DUR_BUCKETS_IM[5];
+        };
+        const repeatCountBucketLabel = (n: number): string => {
+          if (n <= 1) return '1';
+          if (n <= 3) return '2-3';
+          if (n <= 6) return '4-6';
+          if (n <= 10) return '7-10';
+          return '11+';
+        };
+        const addDim = (dim: DimKey, hotel: string, dimValue: string, item: string, room: string, hours: number | null) => {
+          const counts = dimCounts[dim];
+          if (!counts[hotel]) counts[hotel] = {};
+          if (!counts[hotel][dimValue]) counts[hotel][dimValue] = {};
+          counts[hotel][dimValue][item] = (counts[hotel][dimValue][item] ?? 0) + 1;
+          const rooms = dimRooms[dim];
+          if (!rooms[hotel]) rooms[hotel] = {};
+          if (!rooms[hotel][dimValue]) rooms[hotel][dimValue] = {};
+          if (!rooms[hotel][dimValue][item]) rooms[hotel][dimValue][item] = {};
+          rooms[hotel][dimValue][item][room] = (rooms[hotel][dimValue][item][room] ?? 0) + 1;
+          if (hours !== null) {
+            const durations = dimDurations[dim];
+            if (!durations[hotel]) durations[hotel] = {};
+            if (!durations[hotel][dimValue]) durations[hotel][dimValue] = {};
+            if (!durations[hotel][dimValue][item]) durations[hotel][dimValue][item] = { sum: 0, count: 0 };
+            durations[hotel][dimValue][item].sum += hours;
+            durations[hotel][dimValue][item].count += 1;
+          }
+        };
+
         const batch = await supabase
           .from('im_records')
-          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, organization_id')
+          .select('hotel_code, department, incident_category, source_of_complaint, incident_item_name, booking_source, created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, organization_id, room_no, vip_code, severity, profile_type, incident_status')
           .in('hotel_code', hotelCodes) as unknown as SbResult<SrcRow[]>;
         const rows = batch.data ?? [];
         // orgTimezone is resolved live above (shared across all modules in this request).
@@ -951,6 +1009,12 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           if (!categoryItemByHotel[hotel]) categoryItemByHotel[hotel] = {};
           if (!categoryItemByHotel[hotel][cat]) categoryItemByHotel[hotel][cat] = {};
           categoryItemByHotel[hotel][cat][item] = (categoryItemByHotel[hotel][cat][item] ?? 0) + 1;
+          const roomRaw = r.room_no;
+          const room = roomRaw === null || roomRaw === undefined || String(roomRaw).trim() === '' ? 'Unknown Room' : String(roomRaw);
+          if (!catItemRoomByHotel[hotel]) catItemRoomByHotel[hotel] = {};
+          if (!catItemRoomByHotel[hotel][cat]) catItemRoomByHotel[hotel][cat] = {};
+          if (!catItemRoomByHotel[hotel][cat][item]) catItemRoomByHotel[hotel][cat][item] = {};
+          catItemRoomByHotel[hotel][cat][item][room] = (catItemRoomByHotel[hotel][cat][item][room] ?? 0) + 1;
           const rawDate = r.incident_datetime ?? r.created_date;
           const hourRawDate = r.created_date ?? r.incident_datetime;
           if (hourRawDate) {
@@ -982,20 +1046,78 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           // neither is present, assume a fixed 48h duration rather than
           // dropping the record — matches app/api/uploads/finalize/route.ts.
           const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+          let hours: number | null = null;
           if (rawDate) {
             const start = new Date(rawDate).getTime();
-            const hours = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
-            if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
+            const h = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
+            if (Number.isFinite(h) && h >= 0 && h < 3650 * 24) {
+              hours = h;
               if (!itemDurationByHotel[hotel]) itemDurationByHotel[hotel] = {};
               if (!itemDurationByHotel[hotel][item]) itemDurationByHotel[hotel][item] = { sum: 0, count: 0 };
               itemDurationByHotel[hotel][item].sum += hours;
               itemDurationByHotel[hotel][item].count += 1;
+              if (!catItemDurationByHotel[hotel]) catItemDurationByHotel[hotel] = {};
+              if (!catItemDurationByHotel[hotel][cat]) catItemDurationByHotel[hotel][cat] = {};
+              if (!catItemDurationByHotel[hotel][cat][item]) catItemDurationByHotel[hotel][cat][item] = { sum: 0, count: 0 };
+              catItemDurationByHotel[hotel][cat][item].sum += hours;
+              catItemDurationByHotel[hotel][cat][item].count += 1;
             }
           }
           const bookingRaw = r.booking_source;
           const booking = bookingRaw === null || bookingRaw === undefined ? 'Unknown' : String(bookingRaw);
           if (!bookingByHotel[hotel]) bookingByHotel[hotel] = {};
           bookingByHotel[hotel][booking] = (bookingByHotel[hotel][booking] ?? 0) + 1;
+
+          // cim-16..28: feed the generic per-dimension accumulators from this same row.
+          const vipLabel = isVipLike(r.vip_code) ? 'VIP' : 'Non-VIP';
+          const severityLabel = r.severity === null || r.severity === undefined || String(r.severity).trim() === '' ? 'Unknown' : String(r.severity);
+          const profileLabel = r.profile_type === null || r.profile_type === undefined || String(r.profile_type).trim() === '' ? 'Unknown' : String(r.profile_type);
+          const statusLabel = r.incident_status === null || r.incident_status === undefined || String(r.incident_status).trim() === '' ? 'Unknown' : String(r.incident_status);
+          addDim('dept', hotel, dept, item, room, hours);
+          addDim('vip', hotel, vipLabel, item, room, hours);
+          addDim('source', hotel, src, item, room, hours);
+          addDim('booking', hotel, booking, item, room, hours);
+          addDim('severity', hotel, severityLabel, item, room, hours);
+          addDim('profile', hotel, profileLabel, item, room, hours);
+          addDim('status', hotel, statusLabel, item, room, hours);
+          if (hourRawDate) {
+            const d = new Date(hourRawDate);
+            if (!Number.isNaN(d.getTime())) addDim('hour', hotel, String(localHour(d, orgTimezone)).padStart(2, '0'), item, room, hours);
+          }
+          if (hours !== null) addDim('durbkt', hotel, durBucketLabel(hours), item, room, hours);
+          if (rawDate) {
+            // rawDate may arrive as a genuine Date object (not a string) depending
+            // on the driver, so String(rawDate) would yield Date.toString() (e.g.
+            // "Fri Jan 02 2026...") instead of an ISO date — always route through
+            // Date + toISOString() first to guarantee a 'YYYY-MM-DD...' string.
+            const dateStr = new Date(rawDate).toISOString();
+            addDim('month', hotel, dateStr.slice(0, 7), item, room, hours);
+            addDim('day', hotel, dateStr.slice(0, 10), item, room, hours);
+          }
+        }
+
+        // cim-26: repeat-count bucket needs each row's own room+category+item combo
+        // TOTAL, which is only known after catItemRoomByHotel is fully built above —
+        // second pass over the same rows.
+        for (const r of rows) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const catRaw = r.incident_category;
+          const cat = catRaw === null || catRaw === undefined || String(catRaw).trim() === '' ? 'Uncategorized' : String(catRaw);
+          const itemRaw = r.incident_item_name;
+          const item = itemRaw === null || itemRaw === undefined || String(itemRaw).trim() === '' ? 'Unknown Item' : String(itemRaw);
+          const roomRaw = r.room_no;
+          const room = roomRaw === null || roomRaw === undefined || String(roomRaw).trim() === '' ? 'Unknown Room' : String(roomRaw);
+          const comboTotal = catItemRoomByHotel[hotel]?.[cat]?.[item]?.[room] ?? 0;
+          const rawDate = r.incident_datetime ?? r.created_date;
+          const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+          let hours: number | null = null;
+          if (rawDate) {
+            const start = new Date(rawDate).getTime();
+            const h = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
+            if (Number.isFinite(h) && h >= 0 && h < 3650 * 24) hours = h;
+          }
+          addDim('repeatbkt', hotel, repeatCountBucketLabel(comboTotal), item, room, hours);
         }
 
         for (const entry of chainEntries) {
@@ -1015,6 +1137,52 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           entry.summary.im_hour_dept_map = hourDeptByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_map ?? {};
           entry.summary.im_hour_category_item_map = hourCategoryItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_category_item_map ?? {};
           entry.summary.im_hour_dept_item_map = hourDeptItemByHotel[entry.hotel_code] ?? entry.summary.im_hour_dept_item_map ?? {};
+          // cim-15: category → item → { count, repeat, avgDurationHours }. Repeat
+          // uses the same room+category+item combo definition as the repeat_count
+          // KPI: a room's incidents all count as "repeat" once that combo hits 2+.
+          const catItemCounts = categoryItemByHotel[entry.hotel_code] ?? {};
+          const catItemRooms = catItemRoomByHotel[entry.hotel_code] ?? {};
+          const catItemDur = catItemDurationByHotel[entry.hotel_code] ?? {};
+          const statsMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>> = {};
+          for (const [cat, items] of Object.entries(catItemCounts)) {
+            statsMap[cat] = {};
+            for (const [item, count] of Object.entries(items)) {
+              const roomCounts = Object.values(catItemRooms[cat]?.[item] ?? {});
+              const repeat = roomCounts.reduce((s, c) => s + (c >= 2 ? c : 0), 0);
+              const dur = catItemDur[cat]?.[item];
+              statsMap[cat][item] = {
+                count,
+                repeat,
+                avgDurationHours: dur && dur.count > 0 ? dur.sum / dur.count : 0,
+              };
+            }
+          }
+          entry.summary.im_cat_item_stats_map = statsMap;
+
+          // cim-16..28: same { count, repeat, avgDurationHours } shape as
+          // im_cat_item_stats_map above, one slice per generic dimension key.
+          const dimStatsMap: Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>> = {};
+          for (const dim of DIM_KEYS) {
+            const counts = dimCounts[dim][entry.hotel_code] ?? {};
+            const rooms = dimRooms[dim][entry.hotel_code] ?? {};
+            const durations = dimDurations[dim][entry.hotel_code] ?? {};
+            const dimMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>> = {};
+            for (const [dimValue, items] of Object.entries(counts)) {
+              dimMap[dimValue] = {};
+              for (const [item, count] of Object.entries(items)) {
+                const roomCounts = Object.values(rooms[dimValue]?.[item] ?? {});
+                const repeat = roomCounts.reduce((s, c) => s + (c >= 2 ? c : 0), 0);
+                const dur = durations[dimValue]?.[item];
+                dimMap[dimValue][item] = {
+                  count,
+                  repeat,
+                  avgDurationHours: dur && dur.count > 0 ? dur.sum / dur.count : 0,
+                };
+              }
+            }
+            dimStatsMap[dim] = dimMap;
+          }
+          entry.summary.im_dim_item_stats_map = dimStatsMap;
         }
       }
     } else if (String(moduleCode ?? '').toLowerCase() === 'jo') {

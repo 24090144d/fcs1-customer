@@ -12,7 +12,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.1.12** (as of 2026-07-15) |
+| Version | **v1.1.13** (as of 2026-07-16) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` (`npm run dev`) |
@@ -205,6 +205,39 @@ dataLabels: {
 }
 ```
 
+### "Daily Performance" leaf — 3-series dual-axis combo drilldown (cco-03/43/44 pattern)
+
+For a drilldown leaf that shows **multiple metrics at once** (e.g. Total Credit + Orders as columns, Avg Duration as a spline on a secondary axis), Highcharts' single-series drilldown shorthand (`point.drilldown: 'id'` + `chart.addSeriesAsDrilldown()`) only supports **one** series per click — calling `addSeriesAsDrilldown()` a 2nd/3rd time on the same click corrupts the chart's internal drilldown state and throws `TypeError: Cannot read properties of undefined (reading 'xAxis')`.
+
+The correct pattern is a custom `chart.events.drilldown` handler using `addSingleSeriesAsDrilldown` (register-only, no redraw) for each series, followed by one `applyDrilldown()`:
+
+```ts
+chart: {
+  events: {
+    drilldown: function (this: Highcharts.Chart, e: Highcharts.DrilldownEventObject) {
+      if (e.seriesOptions) return; // let standard drilldown.series levels (e.g. hotel/floor) pass through
+      const leafId = (e.point as unknown as { drilldown?: string }).drilldown;
+      const days = leafId ? leafData[leafId] : undefined; // leafData: custom record, NOT in drilldown.series
+      if (!days) return;
+      const chart = this as unknown as Highcharts.Chart & {
+        addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+        applyDrilldown: () => void;
+      };
+      chart.addSingleSeriesAsDrilldown(e.point, { id: `${leafId}-credit`, type: 'column', name: 'Total Credit', color: CCO_L3, data: days.map(d => [d.date, d.credit]) } as Highcharts.SeriesOptionsType);
+      chart.addSingleSeriesAsDrilldown(e.point, { id: `${leafId}-orders`, type: 'column', name: 'Orders', color: '#0E7490', data: days.map(d => [d.date, d.count]) } as Highcharts.SeriesOptionsType);
+      chart.addSingleSeriesAsDrilldown(e.point, { id: `${leafId}-avgdur`, type: 'spline', name: 'Avg Duration (min)', color: '#EA580C', yAxis: 1, data: days.map(d => [d.date, d.avgDur]) } as Highcharts.SeriesOptionsType);
+      chart.applyDrilldown();
+    },
+  },
+},
+yAxis: [
+  { title: { text: 'Cleaning Credit' } },
+  { title: { text: 'Avg Duration (min)' }, opposite: true },
+],
+```
+
+The leaf level's data must be looked up in a **custom** `leafData` record keyed by drilldown id — it is deliberately excluded from the chart's own `drilldown.series` array (which only holds the registered single-series levels above it, e.g. hotel → floor → attendant/inspector). `addSingleSeriesAsDrilldown`/`applyDrilldown` aren't in the official Highcharts type defs, hence the `as unknown as ...` cast on `chart`.
+
 ---
 
 ## Section Structure: KPI / Simple Charts / Long Charts
@@ -315,6 +348,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.13** | 2026-07-16 | Three CCO charts (cco-03, cco-43, cco-44) redesigned so their leaf drilldown level shows a multi-metric "Daily Performance" view instead of a single aggregate: **cco-03** (`Hotel → Floor → Attendant Credit → Daily Performance`), **cco-43** (`Hotel → Floor → Attendant Average Credit → Daily Performance`), **cco-44** (`Hotel → Floor → Inspector Average Credit → Daily Performance`, ⏰ prefix removed — no longer a 24-hour chart, also dropped from `CO_24H_CHART_IDS`) — each leaf shows 3 series per date (Total Credit + Orders as columns, Avg Duration as a secondary-axis spline) for the clicked attendant/inspector. New shared helpers in `CoDashboardView.tsx`: `ccoAccumulateFloorDaily()` (generic Hotel→Floor→Attendant-or-Inspector daily aggregator), `ccoBuildFloorAvgCreditDrilldown()` (builds the 3-level primary/dd/leafData structure for cco-43/44), `ccoDailyPerformanceDrilldownHandler()` (factory for the shared leaf-level drilldown handler, reused identically by cco-03/43/44). **Found and fixed a real Highcharts bug** while building this: `chart.addSeriesAsDrilldown()` — the standard single-series drilldown helper — corrupts the chart's internal drilldown state if called more than once per click, throwing `TypeError: Cannot read properties of undefined (reading 'xAxis')` on the 2nd/3rd call; fixed by switching to `chart.addSingleSeriesAsDrilldown()` (register-only) called once per series followed by a single `chart.applyDrilldown()` — see new "Daily Performance leaf" pattern documented above in this file. i18n titles/notes/BV updated across all 4 languages for cco-03/43/44; `tsc --noEmit` clean; all three charts verified live via real 4-level drilldown clicks with exact data checks (e.g. cco-44: PAR → L14 → PM Andaquig Christian79018 → 2026-07-03 showing Total Credit=2, Orders=1, Avg Duration=60min), no functional console errors (only the previously-confirmed-benign dev-mode Fast Refresh warnings). |
 | **v1.1.12** | 2026-07-15 | Corp CO (CCO) charts cco-31 through cco-42 restructured from 2-level (`Dimension → Distribution`) to 3-level (`Hotel → Dimension → 24-Hour/Duration Distribution`) drilldowns: cco-31 Stay Status, cco-32 Cleaning Status, cco-33 Room Type, cco-34 On-Time/Delayed, cco-35 Cleaning Type, cco-36 Top 50 Attendants (all → 24-Hour Cleaning Distribution); cco-37–42 mirror the same six dimensions → Cleaning Duration Distribution. New shared `ccoBuildHotelDrilldown()` helper in `CoDashboardView.tsx` generates all 12 charts' 3-level series from one reusable function (replacing 12 near-duplicate 2-level chart definitions and their `ccoDim24h*`/`ccoDimDur*` precomputed arrays). Titles/notes/formulas updated in code and all 4 i18n languages, preserving existing ⏰/🟢 emoji conventions. `tsc --noEmit` clean; verified live via real drilldown clicks through all 3 levels (Hotel → Stay Status → 24-Hour, confirmed PAR → StayOver → hourly peak at 14:00). |
 | **v1.1.11** | 2026-07-14 | Two IM duration-calculation fixes, both traced from a real report that cim-18/cim-19's Level 1 hotel totals didn't match the sum of their own drilldown levels (e.g. CON showed 811 at Level 1 but only 155 in the duration-bucket drilldown). (1) **Level 1/Level 2 mismatch fixed**: cim-18/cim-19's Level 1 bar previously used the hotel's full incident count (`e.summary.total`); it now sums the same duration-tagged data used by the drilldown (`hotelDurTotals`), so the two levels always agree — series renamed to "Incidents with Resolution Duration" for clarity. (2) **Duration formula given a two-tier fallback**: `investigation_updated_on_2` (close date) now falls back to `investigation_updated_on_1` when cycle 2 was never filled in, and defaults to a fixed 48h duration (24h+ bucket) when *neither* investigation timestamp is present, instead of silently dropping the record — applied consistently across all 4 places IM duration is computed: `app/api/uploads/finalize/route.ts` (bakes `im_item_duration_map`/`im_cat_item_dur_bkt_map` at upload time), `lib/dashboard-fetch.ts` (live corp override of `im_item_duration_map`, feeds cim-24), and `app/api/dashboard/im-scope/route.ts` + `im-scope-builder/route.ts` (department-scoped duration maps). Both backfill scripts updated to match via SQL `CASE`/`COALESCE`; re-run against the local dev DB — every hotel's cim-18/cim-19 totals now exactly equal their real incident counts (previously SND showed 0 duration records at all; now shows all 169, mostly in the 24h+ fallback bucket). `tsc --noEmit` clean; verified live via real drilldown clicks confirming exact sums (e.g. SND: 0+2+0+2+6+159 = 169) and no regressions on cim-24. **Production note:** the 6 production databases still have pre-fallback duration data — `scripts/backfill_im_cat_item_dur_bkt_map_all_customers.mjs` needs to be re-run against them (or a fresh CSV re-upload) to apply the same fallback there. |
 | **v1.1.10** | 2026-07-14 | Renamed cim-18/cim-19 titles to drop the word "Average" — the level-4/level-2 chart already showed a bucketed count distribution (`< 1h`/`1-2h`/`2-4h`/`4-8h`/`8-24h`/`24h+`), never an average value, so "Average Resolution Duration Distribution" was a misnomer. cim-18 → `Hotel -> Incident Category -> Incident Item -> Resolution Duration Distribution`; cim-19 → `Hotel -> Resolution Duration Distribution (Hours) -> Top Incident Items`. Also fixed the matching internal drilldown series names (`Avg Resolution Duration...` → `Resolution Duration...`). No logic/data change. i18n titles updated across all 4 languages; `tsc --noEmit` clean; verified live on localhost. Also ran the `im_cat_item_dur_bkt_map` backfill (added in v1.1.9) directly against all 6 production Neon databases (CN, HK, JP, MO, MY, NEON) via a new one-off `scripts/backfill_im_cat_item_dur_bkt_map_all_customers.mjs`, so cim-18/cim-19 show real duration-distribution data in production without requiring a CSV re-upload — hotels with no `investigation_updated_on_2` (close date) filled in still render blank for those charts, which is a genuine data gap, not a bug. |

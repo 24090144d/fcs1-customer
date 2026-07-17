@@ -1,0 +1,15 @@
+import pg from 'pg';
+import { readFileSync } from 'fs';
+const envText = readFileSync('.env.neon', 'utf8');
+const match = envText.match(/^FCS1_MO2_DATABASE_URL_UNPOOLED=(.+)$/m);
+const url = match[1].trim().replace(/^"(.*)"$/, '$1');
+const { Client } = pg;
+const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+await client.connect();
+const res = await client.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name");
+console.log(res.rows.map(r => r.table_name).join('\n'));
+const cols = await client.query("SELECT column_name FROM information_schema.columns WHERE table_name='upload_jobs' AND column_name IN ('chain_code','hotel_code','hotel_name','country_code','data_range')");
+console.log('\nupload_jobs hotel-identity columns:', cols.rows.map(r=>r.column_name).join(', '));
+const org = await client.query('SELECT organization_code, organization_name, timezone FROM public.organizations');
+console.log('\norganizations:', JSON.stringify(org.rows));
+await client.end();

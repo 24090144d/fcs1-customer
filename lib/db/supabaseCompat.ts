@@ -180,10 +180,32 @@ function buildPoolConfig(connectionString: string) {
 let pool: Pool | null = null;
 const poolByConnectionString = new Map<string, Pool>();
 
+// Primary/secondary Neon failover: every customer Vercel project can carry a
+// second backing Neon project (e.g. fcs1-mo's DATABASE_URL_SECONDARY pointing
+// at a "fcs1-mo2" Neon project) alongside its usual DATABASE_URL. NEON_DB_SLOT
+// picks which one is active — 'primary' (default, unset) or 'secondary'. This
+// lets a customer be switched onto a backup Neon project (e.g. after the
+// primary project hits its data-transfer quota) purely via a Vercel env var
+// change + redeploy, with no code change and no new Vercel project needed.
+export function resolveDatabaseUrl(pooled = true): string {
+  const slot = (process.env.NEON_DB_SLOT || 'primary').trim().toLowerCase();
+  const primaryVar = pooled ? 'DATABASE_URL' : 'DATABASE_URL_UNPOOLED';
+  const secondaryVar = `${primaryVar}_SECONDARY`;
+  if (slot === 'secondary') {
+    const secondary = process.env[secondaryVar];
+    if (secondary) return secondary;
+    // Fall through to primary if the secondary slot isn't configured yet —
+    // never leave the app with no connection string just because the switch
+    // was flipped before the secondary vars were set.
+  }
+  const primary = process.env[primaryVar];
+  if (!primary) throw new Error(`${primaryVar} is not set. Add Neon connection string to .env.local.`);
+  return primary;
+}
+
 export function getPool() {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) throw new Error('DATABASE_URL is not set. Add Neon pooled connection string to .env.local.');
+    const connectionString = resolveDatabaseUrl(true);
     pool = new Pool(buildPoolConfig(connectionString));
   }
   return pool;

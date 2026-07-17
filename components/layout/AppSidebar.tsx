@@ -632,7 +632,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                 <span
                   className="font-mono shrink-0"
                   style={{
-                    fontSize:    '0.52rem',
+                    fontSize:    'calc(0.52rem + 2px)',
                     letterSpacing: '0.04em',
                     color:       t.accent,
                     border:      `1px solid ${t.accent}55`,

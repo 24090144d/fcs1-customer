@@ -2230,6 +2230,16 @@ export async function POST(req: NextRequest) {
   const moHotelDurAcc: { sum: number; count: number } = { sum: 0, count: 0 };
   // cmo-04: escalation level → defect → count
   const moEscLevelDefectAcc: Record<string, Record<string, number>> = {};
+  // cmo-14..22: dimension ('category'|'department'|'guest'|'ontime'|'type'|'durbkt'|
+  // 'hour'|'esclevel'|'status') → dimension value → defect → { count, durSum (hours),
+  // delayed }. Duration here uses the "Duration = 0 when not yet Completed" rule (a job
+  // with no completed_datetime isn't Completed/Delayed, so it contributes 0 hours rather
+  // than being excluded) — distinct from moCatDurAcc/moHotelDurAcc above, which still
+  // exclude uncompleted jobs entirely for their own (pre-existing) averages.
+  type MoDefectAcc = { count: number; durSum: number; delayed: number };
+  const moDimDefectAcc: Record<string, Record<string, Record<string, MoDefectAcc>>> = {};
+  // cmo-13: completed-by person → defect → { count, durSum (hours), delayed }
+  const moCompletedByDefectAcc: Record<string, Record<string, MoDefectAcc>> = {};
   const coRowsById = module_code === 'co'
     ? await (async () => {
         const gathered: StagingRow[] = [];
@@ -2503,7 +2513,7 @@ export async function POST(req: NextRequest) {
         if (!moGuestDefectAcc[guestKey]) moGuestDefectAcc[guestKey] = {};
         moGuestDefectAcc[guestKey][defectKey] = (moGuestDefectAcc[guestKey][defectKey] ?? 0) + 1;
         // cmo-04: escalation level → defect
-        const escLevelKey = `Level ${escalationLevelNum ?? 0}`;
+        const escLevelKey = `E${escalationLevelNum ?? 0}`;
         if (!moEscLevelDefectAcc[escLevelKey]) moEscLevelDefectAcc[escLevelKey] = {};
         moEscLevelDefectAcc[escLevelKey][defectKey] = (moEscLevelDefectAcc[escLevelKey][defectKey] ?? 0) + 1;
         if (createdDate) {
@@ -2561,6 +2571,49 @@ export async function POST(req: NextRequest) {
         if (!moTypeDeptDefectAcc[type]) moTypeDeptDefectAcc[type] = {};
         if (!moTypeDeptDefectAcc[type][createdByDeptKey]) moTypeDeptDefectAcc[type][createdByDeptKey] = {};
         moTypeDeptDefectAcc[type][createdByDeptKey][defectKey] = (moTypeDeptDefectAcc[type][createdByDeptKey][defectKey] ?? 0) + 1;
+        // cmo-14..22: shared defect-level stats pipeline. "Duration = 0 when not yet
+        // Completed" — a job with no completed_datetime isn't Completed/Delayed, so it
+        // contributes 0 hours (and lands in the '< 1h' duration bucket) rather than being
+        // dropped, so every job counts toward Total Order regardless of completion state.
+        const moDurHoursForStats = createdAt && completedAt
+          ? Math.max(0, (completedAt.getTime() - createdAt.getTime()) / 3600000)
+          : 0;
+        const moDurMinForBkt = moDurHoursForStats * 60;
+        const moDurBktKey = moDurMinForBkt < 60 ? '< 1h'
+          : moDurMinForBkt < 120 ? '1-2h'
+          : moDurMinForBkt < 240 ? '2-4h'
+          : moDurMinForBkt < 480 ? '4-8h'
+          : moDurMinForBkt < 1440 ? '8-24h'
+          : '24h+';
+        const moOnTimeKey = isOverdue ? 'Delayed' : 'On Time';
+        const moJobStatusKey = toStr(rr.job_status) ?? 'Unknown';
+        const moCompletedByKey = toStr(rr.completed_by) ?? 'Unknown';
+        const bumpMoDim = (dim: string, dimVal: string): void => {
+          if (!moDimDefectAcc[dim]) moDimDefectAcc[dim] = {};
+          if (!moDimDefectAcc[dim][dimVal]) moDimDefectAcc[dim][dimVal] = {};
+          if (!moDimDefectAcc[dim][dimVal][defectKey]) moDimDefectAcc[dim][dimVal][defectKey] = { count: 0, durSum: 0, delayed: 0 };
+          const a = moDimDefectAcc[dim][dimVal][defectKey];
+          a.count += 1;
+          a.durSum += moDurHoursForStats;
+          if (isOverdue) a.delayed += 1;
+        };
+        bumpMoDim('category', toStr(rr.category) ?? 'Uncategorized');
+        bumpMoDim('department', createdByDeptKey);
+        bumpMoDim('guest', guestKey);
+        bumpMoDim('ontime', moOnTimeKey);
+        bumpMoDim('type', type);
+        bumpMoDim('durbkt', moDurBktKey);
+        bumpMoDim('hour', createdHour !== null ? String(createdHour).padStart(2, '0') : 'Unknown');
+        bumpMoDim('esclevel', escLevelKey);
+        bumpMoDim('status', moJobStatusKey);
+        if (!moCompletedByDefectAcc[moCompletedByKey]) moCompletedByDefectAcc[moCompletedByKey] = {};
+        if (!moCompletedByDefectAcc[moCompletedByKey][defectKey]) moCompletedByDefectAcc[moCompletedByKey][defectKey] = { count: 0, durSum: 0, delayed: 0 };
+        {
+          const a = moCompletedByDefectAcc[moCompletedByKey][defectKey];
+          a.count += 1;
+          a.durSum += moDurHoursForStats;
+          if (isOverdue) a.delayed += 1;
+        }
         // mo-06: category → avg resolution hours (matches normaliseMoForIm: toStr(category) ?? 'Uncategorized')
         const catKey = toStr(rr.category) ?? 'Uncategorized';
         if (resolutionMinutes !== null) {
@@ -2829,6 +2882,27 @@ export async function POST(req: NextRequest) {
       Object.entries(moEscLevelDefectAcc).map(([lvl, dm]) => [lvl, { ...dm }]),
     );
     generatedJson.summary.mo_esc_level_defect_map = moEscLevelDefectMap;
+    // cmo-14..22: shared dimension → dimension value → defect stats map
+    const toMoDefectStatsMap = (
+      dm: Record<string, MoDefectAcc>,
+    ): Record<string, { count: number; avgDurationHours: number; delayRate: number }> =>
+      Object.fromEntries(Object.entries(dm).map(([defect, a]) => [defect, {
+        count: a.count,
+        avgDurationHours: a.count > 0 ? r2(a.durSum / a.count) : 0,
+        delayRate: a.count > 0 ? r1((a.delayed / a.count) * 100) : 0,
+      }]));
+    const moDimDefectStatsMap = Object.fromEntries(
+      Object.entries(moDimDefectAcc).map(([dim, dimMap]) => [
+        dim,
+        Object.fromEntries(Object.entries(dimMap).map(([dimVal, dm]) => [dimVal, toMoDefectStatsMap(dm)])),
+      ]),
+    );
+    // cmo-13: completed-by person → defect stats map
+    const moCompletedByDefectStatsMap = Object.fromEntries(
+      Object.entries(moCompletedByDefectAcc).map(([person, dm]) => [person, toMoDefectStatsMap(dm)]),
+    );
+    generatedJson.summary.mo_dim_defect_stats_map = moDimDefectStatsMap;
+    generatedJson.summary.mo_completedby_defect_stats_map = moCompletedByDefectStatsMap;
     if (generatedJson.summary_by_type?.MO) {
       generatedJson.summary_by_type.MO.mo_item_date_map = moItemDateMap;
       generatedJson.summary_by_type.MO.mo_item_duration_map = moItemDurationMap;
@@ -2846,6 +2920,8 @@ export async function POST(req: NextRequest) {
       generatedJson.summary_by_type.MO.mo_type_dept_defect_map = moTypeDeptDefectMap;
       generatedJson.summary_by_type.MO.mo_avg_resolution_hours = moHotelDurAcc.count > 0 ? r2(moHotelDurAcc.sum / moHotelDurAcc.count / 60) : 0;
       generatedJson.summary_by_type.MO.mo_esc_level_defect_map = moEscLevelDefectMap;
+      generatedJson.summary_by_type.MO.mo_dim_defect_stats_map = moDimDefectStatsMap;
+      generatedJson.summary_by_type.MO.mo_completedby_defect_stats_map = moCompletedByDefectStatsMap;
     }
   } else if (module_code === 'co') {
     generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);

@@ -1,11 +1,11 @@
 // Backfill mo_avg_resolution_hours (hotel-level average resolution/completed
-// duration, in hours) and mo_esc_level_defect_map (escalation level "Level N"
+// duration, in hours) and mo_esc_level_defect_map (escalation level "EN"
 // → defect → count) into stored MO dashboard summaries.
 //
 // Mirrors the TS accumulation added to the MO row loop in
 // app/api/uploads/finalize/route.ts:
 //   - resolution duration = resolution_minutes column, averaged then /60 for hours
-//   - escalation level = `Level ${escalation_level ?? 0}`
+//   - escalation level = `E${escalation_level ?? 0}`
 //   - defect = defect ?? asset ?? job_order ?? 'Unknown'
 //
 // Usage: node scripts/backfill_mo_avgres_esclevel.mjs [DATABASE_URL]
@@ -47,7 +47,7 @@ for (const dash of dashRows) {
       durSum += Number(resolution_min);
       durCount += 1;
     }
-    const lvlKey = `Level ${escalation_level}`;
+    const lvlKey = `E${escalation_level}`;
     if (!escLevelDefect[lvlKey]) escLevelDefect[lvlKey] = {};
     escLevelDefect[lvlKey][defect] = (escLevelDefect[lvlKey][defect] ?? 0) + 1;
   }

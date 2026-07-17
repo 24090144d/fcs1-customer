@@ -97,6 +97,14 @@ export interface HotelSummary {
   mo_type_dept_defect_map?: Record<string, Record<string, Record<string, number>>>; // type (MO/PM) → created-by department → defect → count (cmo-18)
   mo_avg_resolution_hours?: number; // hotel-level average resolution (completed) duration, in hours (cmo-03)
   mo_esc_level_defect_map?: Record<string, Record<string, number>>; // escalation level ("Level N") → defect → count (cmo-04)
+  // cmo-14..22: dimension ('category'|'department'|'guest'|'ontime'|'type'|'durbkt'|
+  // 'hour'|'esclevel'|'status') → dimension value → defect → { count, avgDurationHours,
+  // delayRate }. avgDurationHours uses the "Duration = 0 when not yet Completed" rule
+  // (an uncompleted job contributes 0 hours rather than being excluded), so count reflects
+  // every job in that dimension value, not just completed ones.
+  mo_dim_defect_stats_map?: Record<string, Record<string, Record<string, { count: number; avgDurationHours: number; delayRate: number }>>>;
+  // cmo-13: completed-by person → defect → { count, avgDurationHours, delayRate } (same stats shape/rule as above)
+  mo_completedby_defect_stats_map?: Record<string, Record<string, { count: number; avgDurationHours: number; delayRate: number }>>;
   booking_map:   Record<string, number>;
   source_map:    Record<string, number>;
   severity_map:  Record<string, number>;

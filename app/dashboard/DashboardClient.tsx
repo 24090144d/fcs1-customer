@@ -26,11 +26,11 @@ const CORP_IM_LONG_IDS = new Set(['cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-1
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-02', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-07', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12', 'mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18'];
-const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-03', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-12', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18'];
+const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-03', 'cmo-04', 'cmo-05', 'cmo-06', 'cmo-07', 'cmo-08', 'cmo-09', 'cmo-10', 'cmo-11', 'cmo-12', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18', 'cmo-19', 'cmo-20', 'cmo-21', 'cmo-22'];
 
 // Multi-level drilldown charts rendered full-width (1 per row) in the "Long Charts" section.
 // Membership is opt-in per chart id, moved in only when explicitly requested.
-const MO_LONG_CHART_IDS = new Set<string>(['mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18']);
+const MO_LONG_CHART_IDS = new Set<string>(['mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18', 'cmo-19', 'cmo-20', 'cmo-21', 'cmo-22']);
 const JO_LONG_CHART_IDS = new Set<string>(['jo-23', 'jo-24', 'jo-25', 'jo-26', 'cjo-21', 'cjo-22', 'cjo-23', 'cjo-24', 'cjo-25', 'cjo-26', 'cjo-27', 'cjo-28', 'cjo-29', 'cjo-30']);
 const IM_LONG_CHART_IDS = new Set<string>(['im-41', 'im-42', 'im-43', 'im-44', 'im-45']);
 // ⏰ 24-hour-of-day distribution charts — always full period (date filter ignored),
@@ -755,6 +755,316 @@ function buildJoDelayRateDistDrilldown(entries: ChainEntry[], chartPrefix: strin
   }
 
   return buildJoLeafChart(chartPrefix, entries, hotelTotals, level2, level3, leafData, { ORANGE, PURPLE, GREEN, ROSE, BLUE, AMBER });
+}
+
+type MoDefectStats = { count: number; avgDurationHours: number; delayRate: number };
+
+// cmo-14..22: shared 4-level drilldown — Hotel → [dimension value] → Defect Dist
+// (rank-range bucket of defects, via imRankDistBuckets) → Defect (leaf, 3-series
+// dual-axis combo: Total Order column on the primary axis, Completed Duration (h) +
+// Delay Rate (%) splines on the secondary axis). Mirrors buildJoDimItemDrilldown;
+// differs only in series count/shape at the leaf and in reading mo_dim_defect_stats_map.
+function buildMoDimDefectDrilldown(
+  entries: ChainEntry[],
+  chartPrefix: string,
+  getDimMap: (e: ChainEntry) => Record<string, Record<string, MoDefectStats>>,
+  dimAxisTitle: string,
+  order: 'count-desc' | 'natural-sort' | string[],
+): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; durationHours: number; delayRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const dimMap = getDimMap(e) ?? {};
+    const dimCounts: Array<[string, number]> = Object.entries(dimMap)
+      .map(([dv, defects]): [string, number] => [dv, Object.values(defects).reduce((s, v) => s + v.count, 0)])
+      .filter(([, v]) => v > 0);
+    hotelTotals[e.hotel_code] = dimCounts.reduce((s, [, v]) => s + v, 0);
+    const dimCountMap = Object.fromEntries(dimCounts);
+
+    let orderedDimValues: string[];
+    if (Array.isArray(order)) {
+      orderedDimValues = order.filter((dv) => (dimCountMap[dv] ?? 0) > 0);
+    } else if (order === 'natural-sort') {
+      orderedDimValues = dimCounts.map(([dv]) => dv).sort();
+    } else {
+      orderedDimValues = [...dimCounts].sort((a, b) => b[1] - a[1]).map(([dv]) => dv);
+    }
+
+    level2.push({
+      id: `${chartPrefix}-dim:${hKey}`, type: 'column', name: `${e.hotel_code} ${dimAxisTitle}`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: orderedDimValues.map((dv) => ({ name: dv, y: dimCountMap[dv] ?? 0, drilldown: `${chartPrefix}-defect:${hKey}:${idPart(dv)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const dv of orderedDimValues) {
+      const dvKey = idPart(dv);
+      const defectStats = dimMap[dv] ?? {};
+      const defectCounts: Array<[string, number]> = Object.entries(defectStats).map(([defect, s]) => [defect, s.count]);
+      const defectBuckets = imRankDistBuckets(defectCounts);
+      level3.push({
+        id: `${chartPrefix}-defect:${hKey}:${dvKey}`, type: 'column', name: `${e.hotel_code} — ${dv} — Defect Dist`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: defectBuckets.map((db) => ({ name: db.name, y: db.total, drilldown: `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(db.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const defectBucket of defectBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(defectBucket.name)}`;
+        leafData[leafId] = defectBucket.keys
+          .map((defect) => {
+            const s = defectStats[defect];
+            return { name: defect, count: s.count, durationHours: s.avgDurationHours, delayRate: s.delayRate };
+          })
+          .sort((a, b) => b.count - a.count);
+      }
+    }
+  }
+
+  return buildMoLeafChart(chartPrefix, entries, hotelTotals, level2, level3, leafData);
+}
+
+// Shared Level-1 root + leaf-handler scaffold for cmo-13..22 — factored out so the
+// dimension-based and completed-by builders don't duplicate the
+// addSingleSeriesAsDrilldown x3 + applyDrilldown() leaf wiring. Level 1 "Hotel" root
+// series uses colorByPoint/legendType/showInLegend so each hotel gets its own legend color.
+function buildMoLeafChart(
+  chartPrefix: string,
+  entries: ChainEntry[],
+  hotelTotals: Record<string, number>,
+  level2: Highcharts.SeriesOptionsType[],
+  level3: Highcharts.SeriesOptionsType[],
+  leafData: Record<string, Array<{ name: string; count: number; durationHours: number; delayRate: number }>>,
+  extraDrilldownSeries: Highcharts.SeriesOptionsType[] = [],
+): Highcharts.Options {
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C';
+  const idPart = (v: string) => encodeURIComponent(v);
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Completed Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.durationHours })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-delay`, type: 'spline', name: 'Delay Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.delayRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category', title: { text: 'Hotel' } },
+    yAxis: [
+      { min: 0, title: { text: 'Total Order' } },
+      { title: { text: 'Completed Duration (h) / Delay Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Order', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: entries.map((e) => ({ name: e.hotel_code, y: hotelTotals[e.hotel_code] ?? 0, drilldown: `${chartPrefix}-dim:${idPart(e.hotel_code)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3, ...extraDrilldownSeries] },
+    tooltip: { shared: true },
+  };
+}
+
+// cmo-01: Hotel → Department → Defect Dist → Defect (4-level donut drilldown). Levels
+// 1-3 are pie/donut; the leaf switches to the shared 3-series cartesian combo (Total
+// Order column, Completed Duration + Delay Rate splines on a secondary axis) via a
+// custom chart.events.drilldown handler, mirroring cjo-01's pie-rooted pattern —
+// including its xAxis fix: a chart that starts pure pie (no cartesian axis at init)
+// silently ignores a declared xAxis.type/categories until the first cartesian series
+// arrives via drilldown (Highcharts creates a default LINEAR axis instead), and
+// switching axis type AFTER series/points are added doesn't retroactively convert
+// already-plotted numeric x-positions back into named categories — so the axis
+// type+categories must be set immediately BEFORE addSingleSeriesAsDrilldown.
+function buildMoDonutDimDefectDrilldown(
+  entries: ChainEntry[],
+  chartPrefix: string,
+  getDimMap: (e: ChainEntry) => Record<string, Record<string, MoDefectStats>>,
+): Highcharts.Options {
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; durationHours: number; delayRate: number }>> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const dimMap = getDimMap(e) ?? {};
+    const dimCounts: Array<[string, number]> = Object.entries(dimMap)
+      .map(([dv, defects]): [string, number] => [dv, Object.values(defects).reduce((s, v) => s + v.count, 0)])
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    level2.push({
+      id: `${chartPrefix}-dim:${hKey}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Departments`,
+      data: dimCounts.map(([dv, v]) => ({ name: dv, y: v, drilldown: `${chartPrefix}-defect:${hKey}:${idPart(dv)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const [dv] of dimCounts) {
+      const dvKey = idPart(dv);
+      const defectStats = dimMap[dv] ?? {};
+      const defectCounts: Array<[string, number]> = Object.entries(defectStats).map(([defect, s]) => [defect, s.count]);
+      const defectBuckets = imRankDistBuckets(defectCounts);
+      level3.push({
+        id: `${chartPrefix}-defect:${hKey}:${dvKey}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} — ${dv} — Defect Dist`,
+        data: defectBuckets.map((db) => ({ name: db.name, y: db.total, drilldown: `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(db.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const defectBucket of defectBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(defectBucket.name)}`;
+        leafData[leafId] = defectBucket.keys
+          .map((defect) => {
+            const s = defectStats[defect];
+            return { name: defect, count: s.count, durationHours: s.avgDurationHours, delayRate: s.delayRate };
+          })
+          .sort((a, b) => b.count - a.count);
+      }
+    }
+  }
+
+  return {
+    chart: {
+      type: 'pie',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Completed Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.durationHours })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-delay`, type: 'spline', name: 'Delay Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.delayRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Order' } },
+      { title: { text: 'Completed Duration (h) / Delay Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'pie', innerSize: '45%', name: 'Orders',
+      data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `${chartPrefix}-dim:${idPart(e.hotel_code)}` })),
+    }] as Highcharts.SeriesOptionsType[],
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  };
+}
+
+// cmo-13: Hotel → Completed by Dist → Completed by → Defect Dist → Defect (5-level
+// drilldown — the only MO chart with TWO rank-range "Dist" bucket layers, since
+// "Completed by" (the technician who closed the job) is itself high-cardinality,
+// unlike the low-cardinality dimensions (Category, Department, etc.) the other
+// cmo-14..22 charts key on directly without their own Dist step).
+function buildMoCompletedByDefectDrilldown(entries: ChainEntry[], chartPrefix: string): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', BLUE = '#0E7490';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const level4: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; durationHours: number; delayRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const personMap = (e.summary.mo_completedby_defect_stats_map ?? {}) as Record<string, Record<string, MoDefectStats>>;
+    const personCounts: Array<[string, number]> = Object.entries(personMap)
+      .map(([person, defects]): [string, number] => [person, Object.values(defects).reduce((s, v) => s + v.count, 0)])
+      .filter(([, v]) => v > 0);
+    hotelTotals[e.hotel_code] = personCounts.reduce((s, [, v]) => s + v, 0);
+    const personBuckets = imRankDistBuckets(personCounts);
+    const personCountMap = Object.fromEntries(personCounts);
+
+    level2.push({
+      id: `${chartPrefix}-dim:${hKey}`, type: 'column', name: `${e.hotel_code} Completed by Dist`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: personBuckets.map((pb) => ({ name: pb.name, y: pb.total, drilldown: `${chartPrefix}-person:${hKey}:${idPart(pb.name)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const personBucket of personBuckets) {
+      const pbKey = idPart(personBucket.name);
+      level3.push({
+        id: `${chartPrefix}-person:${hKey}:${pbKey}`, type: 'column', name: `${e.hotel_code} — Completed by ${personBucket.name}`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: personBucket.keys.map((person) => ({
+          name: person, y: personCountMap[person] ?? 0, drilldown: `${chartPrefix}-defect:${hKey}:${pbKey}:${idPart(person)}`,
+        })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const person of personBucket.keys) {
+        const defectStats = personMap[person] ?? {};
+        const defectCounts: Array<[string, number]> = Object.entries(defectStats).map(([defect, s]) => [defect, s.count]);
+        const defectBuckets = imRankDistBuckets(defectCounts);
+        const personKey = idPart(person);
+        level4.push({
+          id: `${chartPrefix}-defect:${hKey}:${pbKey}:${personKey}`, type: 'column', name: `${e.hotel_code} — ${person} — Defect Dist`, color: BLUE,
+          dataLabels: { enabled: true },
+          data: defectBuckets.map((db) => ({ name: db.name, y: db.total, drilldown: `${chartPrefix}-leaf:${hKey}:${pbKey}:${personKey}:${idPart(db.name)}` })),
+        } as Highcharts.SeriesOptionsType);
+
+        for (const defectBucket of defectBuckets) {
+          const leafId = `${chartPrefix}-leaf:${hKey}:${pbKey}:${personKey}:${idPart(defectBucket.name)}`;
+          leafData[leafId] = defectBucket.keys
+            .map((defect) => {
+              const s = defectStats[defect];
+              return { name: defect, count: s.count, durationHours: s.avgDurationHours, delayRate: s.delayRate };
+            })
+            .sort((a, b) => b.count - a.count);
+        }
+      }
+    }
+  }
+
+  return buildMoLeafChart(chartPrefix, entries, hotelTotals, level2, level3, leafData, level4);
 }
 
 function buildBuilderOverride(def: ChartDef, fd: FilteredData | null, deptSummary: DeptScopedSummary | null): Highcharts.Options | undefined {
@@ -2814,67 +3124,16 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
   });
 
   return [
-    // cmo-01: Hotel → Department (created-by) → Top Defects (3-level donut drilldown)
-    (() => {
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const deptMap = (e.summary.mo_created_dept_defect_map ?? {}) as Record<string, Record<string, number>>;
-        const depts = Object.entries(deptMap)
-          .map(([dept, dm]): [string, number] => [dept, Object.values(dm).reduce((s, v) => s + v, 0)])
-          .filter(([, v]) => v > 0)
-          .sort(([, a], [, b]) => b - a);
-        level2.push({
-          id: `cmo01-dept:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Departments`,
-          data: depts.map(([dept, v]) => ({ name: dept, y: v, drilldown: `cmo01-defect:${e.hotel_code}:${dept}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const [dept] of depts) {
-          level3.push({
-            id: `cmo01-defect:${e.hotel_code}:${dept}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} — ${dept} Top Defects`,
-            data: topN(deptMap[dept] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-01', 'Hotel → Department → Top Defects', 'Outer donut shows total MO work orders by hotel. Click a hotel slice to see the created-by department mix, then click a department to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY created_by_department, then TOP defect WITHIN department WHERE type = MO', {
-        chart: { type: 'pie' },
-        series: [{ type: 'pie', innerSize: '45%', name: 'Orders', data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo01-dept:${e.hotel_code}` })) }],
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
-    // cmo-02: Hotel → Guest/Non-Guest → Top Defects (3-level vertical-bar drilldown)
-    (() => {
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const guestMap = (e.summary.mo_guest_defect_map ?? {}) as Record<string, Record<string, number>>;
-        const GUEST_KEYS = ['Guest Related', 'Non Guest Related'];
-        const guestTotals = GUEST_KEYS.map((k): [string, number] => [k, Object.values(guestMap[k] ?? {}).reduce((s, v) => s + v, 0)]);
-        level2.push({
-          id: `cmo02-guest:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} — Guest vs Non-Guest`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: guestTotals.map(([k, v]) => ({ name: k, y: v, drilldown: `cmo02-defect:${e.hotel_code}:${k}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const [k] of guestTotals) {
-          level3.push({
-            id: `cmo02-defect:${e.hotel_code}:${k}`, type: 'column', name: `${e.hotel_code} — ${k} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: topN(guestMap[k] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-02', 'Hotel → Guest/Non-Guest → Top Defects', 'Columns show total MO work orders by hotel. Click a hotel to see the guest-related vs non-guest-related split, then click a slice to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY guest_related, then TOP defect WITHIN guest_related WHERE type = MO', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo02-guest:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
+    // cmo-01: Hotel → Department → Defect Dist → Defect (4-level donut drilldown, shared builder)
+    make('cmo-01', '🟢 Hotel → Department → Defect Dist → Defect',
+      'Drills from hotel into created department, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY created_by_department per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDonutDimDefectDrilldown(entries, 'cmo01', (e) => e.summary.mo_dim_defect_stats_map?.department ?? {}) as unknown as Record<string, unknown>),
+    // cmo-02: Hotel → Guest/Non-Guest → Defect Dist → Defect (4-level donut drilldown, shared builder)
+    make('cmo-02', '🟢 Hotel → Guest/Non-Guest → Defect Dist → Defect',
+      'Drills from hotel into guest-related vs non-guest-related, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY guest_related per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDonutDimDefectDrilldown(entries, 'cmo02', (e) => e.summary.mo_dim_defect_stats_map?.guest ?? {}) as unknown as Record<string, unknown>),
     // cmo-03: Hotel by Job Status (stacked column, primary axis) vs Average Resolution Duration (line, secondary axis)
     (() => {
       const STATUS_COLORS = ['#0F766E', '#C2410C', '#7C3AED', '#0E7490', '#BE123C', '#CA8A04', '#4D7C0F', '#1D4ED8'];
@@ -2912,7 +3171,7 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         const levels = Object.entries(escMap)
           .map(([lvl, dm]): [string, number] => [lvl, Object.values(dm).reduce((s, v) => s + v, 0)])
           .filter(([, v]) => v > 0)
-          .sort(([a], [b]) => (parseInt(a.replace('Level ', ''), 10) || 0) - (parseInt(b.replace('Level ', ''), 10) || 0));
+          .sort(([a], [b]) => (parseInt(a.replace('E', ''), 10) || 0) - (parseInt(b.replace('E', ''), 10) || 0));
         level2.push({
           id: `cmo04-esc:${e.hotel_code}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Escalation Levels`,
           data: levels.map(([lvl, v]) => ({ name: lvl, y: v, drilldown: `cmo04-defect:${e.hotel_code}:${lvl}` })),
@@ -3000,11 +3259,11 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         { type: 'bar', name: 'Non Guest Related', data: entries.map((e) => Math.max((e.summary.total ?? 0) - (e.summary.vip_total ?? 0), 0)) },
       ],
     }),
-    make('cmo-08', 'Severity Index by Hotel', 'Average severity comparison across hotels.', 'AVG(severity_weight) BY hotel_code WHERE type = MO', {
-      chart: { type: 'column' },
-      xAxis: { categories: hotelCodes },
-      series: [{ type: 'column', name: 'Severity Index', data: entries.map((e) => e.summary.total > 0 ? r2((e.summary.severity_sum ?? 0) / e.summary.total) : 0) }],
-    }),
+    // cmo-08: Hotel → On Time/Delayed → Defect Dist → Defect (4-level donut drilldown, shared builder)
+    make('cmo-08', '🟢 Hotel → On Time/Delayed → Defect Dist → Defect',
+      'Drills from hotel into on-time vs delayed (past deadline) jobs, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY (is_overdue ? Delayed : On Time) per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDonutDimDefectDrilldown(entries, 'cmo08', (e) => e.summary.mo_dim_defect_stats_map?.ontime ?? {}) as unknown as Record<string, unknown>),
     // cmo-09: Work Order Duration Distribution (Chain) — drilldown to per-hotel count
     make('cmo-09', 'Work Order Duration Distribution (Chain)', 'Chain-wide distribution of work orders by resolution time. Click a bucket to see per-hotel breakdown.', 'COUNT(*) BY duration_bucket WHERE type = MO DRILLDOWN COUNT(*) BY hotel_code WITHIN bucket', (() => {
       const BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
@@ -3057,279 +3316,69 @@ function buildCorpMoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
       };
     })()),
-    // cmo-11: Top 10 Defect > 24h (Chain) — drilldown to per-hotel count
-    make('cmo-11', 'Top 10 Defect > 24 Hours (Chain)', 'Top 10 defects with resolution > 24 hours across the chain. Click a bar to see per-hotel breakdown.', 'COUNT(*) BY defect WHERE resolution_minutes >= 1440 AND type = MO DRILLDOWN COUNT(*) BY hotel_code WITHIN defect', (() => {
-      const chainDefectTotals: Record<string, number> = {};
-      for (const e of entries) {
-        for (const [defect, hm] of Object.entries(e.summary.mo_item_24h_hour_map ?? {})) {
-          const total = Object.values(hm as Record<string, number>).reduce((a, c) => a + c, 0);
-          chainDefectTotals[defect] = (chainDefectTotals[defect] ?? 0) + total;
-        }
-      }
-      const top10 = topN(chainDefectTotals, 24);
-      return {
-        chart: { type: 'bar' },
-        xAxis: { type: 'category', title: { text: null } },
-        yAxis: { title: { text: 'Work Orders (> 24h)' }, min: 0 },
-        series: [{
-          type: 'bar', name: 'Work Orders (> 24h)', colorByPoint: true,
-          data: top10.map(([name, y]) => ({ name, y, drilldown: `cmo11:${name}` })),
-          dataLabels: { enabled: true, format: '{point.y}' },
-        }],
-        drilldown: {
-          series: top10.map(([defect]) => ({
-            id: `cmo11:${defect}`, type: 'column', name: `${defect} — By Hotel`,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: entries
-              .map((e) => ({
-                name: e.hotel_code,
-                y: Object.values(e.summary.mo_item_24h_hour_map?.[defect] ?? {}).reduce((a, c) => a + (c as number), 0),
-              }))
-              .filter((p) => p.y > 0)
-              .sort((a, bb) => bb.y - a.y),
-          })),
-        },
-        tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} orders' },
-      };
-    })()),
+    // cmo-11: Hotel → Escalation Level → Defect Dist → Defect (4-level donut drilldown, shared builder)
+    make('cmo-11', '🟢 Hotel → Escalation Level → Defect Dist → Defect',
+      'Drills from hotel into escalation level, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY escalation_level per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDonutDimDefectDrilldown(entries, 'cmo11', (e) => e.summary.mo_dim_defect_stats_map?.esclevel ?? {}) as unknown as Record<string, unknown>),
     make('cmo-12', 'Top Assets / Defects Across Chain', 'Treemap of the most frequent maintenance assets or defects across the chain.', 'COUNT(*) BY defect_or_asset WHERE type = MO', {
       chart: { type: 'treemap' },
       series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: topItems.map(([name, value]) => ({ name, value })) }],
     }),
-    // cmo-13: Hotel → Category → Defects → Resolution Duration Distribution (4-level vertical-bar drilldown)
-    (() => {
-      const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED', BLUE = '#0E7490';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      const level4: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const catMap = (e.summary.mo_cat_defect_dur_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
-        const cats = Object.entries(catMap)
-          .map(([cat, dm]): [string, number] => [cat, Object.values(dm).reduce((s, bm) => s + Object.values(bm).reduce((s2, v) => s2 + v, 0), 0)])
-          .filter(([, v]) => v > 0)
-          .sort(([, a], [, b]) => b - a);
-        level2.push({
-          id: `cmo13-cat:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} Categories`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: cats.map(([cat, v]) => ({ name: cat, y: v, drilldown: `cmo13-defect:${e.hotel_code}:${cat}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const [cat] of cats) {
-          const defects = Object.entries(catMap[cat] ?? {})
-            .map(([defect, bm]): [string, number] => [defect, Object.values(bm).reduce((s, v) => s + v, 0)])
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 24);
-          level3.push({
-            id: `cmo13-defect:${e.hotel_code}:${cat}`, type: 'column', name: `${e.hotel_code} — ${cat} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: defects.map(([defect, v]) => ({ name: defect, y: v, drilldown: `cmo13-dur:${e.hotel_code}:${cat}:${defect}` })),
-          } as Highcharts.SeriesOptionsType);
-          for (const [defect] of defects) {
-            const bm = catMap[cat]?.[defect] ?? {};
-            level4.push({
-              id: `cmo13-dur:${e.hotel_code}:${cat}:${defect}`, type: 'column', name: `${e.hotel_code} — ${defect} Resolution Duration`, color: BLUE,
-              dataLabels: { enabled: true },
-              data: DUR_BUCKETS.map((b) => ({ name: b, y: bm[b] ?? 0 })),
-            } as Highcharts.SeriesOptionsType);
-          }
-        }
-      }
-      return make('cmo-13', 'Hotel → Category → Defects → Resolution Duration Distribution', 'Columns show total MO work orders by hotel. Click a hotel to see its category mix, a category to see its top defects, then a defect to see its resolution (completed) duration distribution.', 'COUNT(*) BY hotel_code, then COUNT(*) BY category, then TOP defect WITHIN category, then COUNT(*) BY resolution_duration_bucket WITHIN defect WHERE type = MO', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo13-cat:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3, ...level4] },
-      });
-    })(),
-    // cmo-14: Hotel → Resolution Duration Distribution → Defects (3-level vertical-bar drilldown)
-    (() => {
-      const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const durMap = (e.summary.mo_dur_defect_map ?? {}) as Record<string, Record<string, number>>;
-        level2.push({
-          id: `cmo14-dur:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} Resolution Duration`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: DUR_BUCKETS.map((b) => ({ name: b, y: Object.values(durMap[b] ?? {}).reduce((s, v) => s + v, 0), drilldown: `cmo14-defect:${e.hotel_code}:${b}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const b of DUR_BUCKETS) {
-          level3.push({
-            id: `cmo14-defect:${e.hotel_code}:${b}`, type: 'column', name: `${e.hotel_code} — ${b} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: topN(durMap[b] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-14', 'Hotel → Resolution Duration Distribution → Defects', 'Columns show total MO work orders by hotel. Click a hotel to see its resolution (completed) duration distribution, then click a bucket to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY resolution_duration_bucket, then TOP defect WITHIN bucket WHERE type = MO', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo14-dur:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
-    // cmo-15: Hotel → Delayed Duration Distribution → Defects (3-level vertical-bar drilldown)
-    // "Delayed Duration" = escalated/overdue-past-deadline duration (completed_datetime - deadline_datetime, when positive)
-    (() => {
-      const DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const delayMap = (e.summary.mo_delay_dur_defect_map ?? {}) as Record<string, Record<string, number>>;
-        level2.push({
-          id: `cmo15-dur:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} Delayed Duration`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: DUR_BUCKETS.map((b) => ({ name: b, y: Object.values(delayMap[b] ?? {}).reduce((s, v) => s + v, 0), drilldown: `cmo15-defect:${e.hotel_code}:${b}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const b of DUR_BUCKETS) {
-          level3.push({
-            id: `cmo15-defect:${e.hotel_code}:${b}`, type: 'column', name: `${e.hotel_code} — ${b} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: topN(delayMap[b] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-15', 'Hotel → Delayed Duration Distribution → Defects', 'Columns show total MO work orders by hotel. Click a hotel to see its delayed (escalated, past-deadline) duration distribution, then click a bucket to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY delayed_duration_bucket, then TOP defect WITHIN bucket WHERE type = MO AND deadline_variance_minutes > 0', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo15-dur:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
-    // cmo-16: Hotel → 24-Hour Distribution → Defects (3-level vertical-bar drilldown)
-    (() => {
-      const hours = Array.from({ length: 24 }, (_, i) => i);
-      const hl = (h: number) => `${String(h).padStart(2, '0')}:00`;
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const hourMap = (e.summary.mo_hour_defect_map ?? {}) as Record<string, Record<string, number>>;
-        level2.push({
-          id: `cmo16-hour:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} 24-Hour Distribution`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: hours.map((h) => ({ name: hl(h), y: Object.values(hourMap[String(h)] ?? {}).reduce((s, v) => s + v, 0), drilldown: `cmo16-defect:${e.hotel_code}:${h}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const h of hours) {
-          level3.push({
-            id: `cmo16-defect:${e.hotel_code}:${h}`, type: 'column', name: `${e.hotel_code} — ${hl(h)} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: topN(hourMap[String(h)] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-16', 'Hotel → 24-Hour Distribution → Defects', 'Columns show total MO work orders by hotel. Click a hotel to see its 24-hour creation distribution, then click an hour to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY HOUR(created_datetime), then TOP defect WITHIN hour WHERE type = MO', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo16-hour:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
-    // cmo-17: Hotel → Floor → Defects (3-level vertical-bar drilldown)
-    (() => {
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const floorMap = (e.summary.mo_floor_defect_map ?? {}) as Record<string, Record<string, number>>;
-        const floors = Object.entries(floorMap)
-          .map(([floor, dm]): [string, number] => [floor, Object.values(dm).reduce((s, v) => s + v, 0)])
-          .filter(([, v]) => v > 0)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 24);
-        level2.push({
-          id: `cmo17-floor:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} Floors`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: floors.map(([floor, v]) => ({ name: floor, y: v, drilldown: `cmo17-defect:${e.hotel_code}:${floor}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const [floor] of floors) {
-          level3.push({
-            id: `cmo17-defect:${e.hotel_code}:${floor}`, type: 'column', name: `${e.hotel_code} — Floor ${floor} Top Defects`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: topN(floorMap[floor] ?? {}, 24).map(([name, y]) => ({ name, y })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-      return make('cmo-17', 'Hotel → Floor → Defects', 'Columns show total MO work orders by hotel. Click a hotel to see its floor breakdown, then click a floor to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY floor, then TOP defect WITHIN floor WHERE type = MO', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo17-floor:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3] },
-      });
-    })(),
-    // cmo-18: Hotel → Type → Department → Defects (4-level vertical-bar drilldown)
-    // "Type" = job type MO or PM
-    (() => {
-      const TYPES = ['MO', 'PM'];
-      const GREEN = '#0F766E', ORANGE = '#C2410C', PURPLE = '#7C3AED', BLUE = '#0E7490';
-      const level2: Highcharts.SeriesOptionsType[] = [];
-      const level3: Highcharts.SeriesOptionsType[] = [];
-      const level4: Highcharts.SeriesOptionsType[] = [];
-      for (const e of entries) {
-        const typeMap = (e.summary.mo_type_dept_defect_map ?? {}) as Record<string, Record<string, Record<string, number>>>;
-        level2.push({
-          id: `cmo18-type:${e.hotel_code}`, type: 'column', name: `${e.hotel_code} Type`, color: ORANGE,
-          dataLabels: { enabled: true },
-          data: TYPES.map((ty) => ({ name: ty, y: Object.values(typeMap[ty] ?? {}).reduce((s, dm) => s + Object.values(dm).reduce((s2, v) => s2 + v, 0), 0), drilldown: `cmo18-dept:${e.hotel_code}:${ty}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const ty of TYPES) {
-          const depts = Object.entries(typeMap[ty] ?? {})
-            .map(([dept, dm]): [string, number] => [dept, Object.values(dm).reduce((s, v) => s + v, 0)])
-            .filter(([, v]) => v > 0)
-            .sort(([, a], [, b]) => b - a);
-          level3.push({
-            id: `cmo18-dept:${e.hotel_code}:${ty}`, type: 'column', name: `${e.hotel_code} — ${ty} Departments`, color: PURPLE,
-            dataLabels: { enabled: true },
-            data: depts.map(([dept, v]) => ({ name: dept, y: v, drilldown: `cmo18-defect:${e.hotel_code}:${ty}:${dept}` })),
-          } as Highcharts.SeriesOptionsType);
-          for (const [dept] of depts) {
-            level4.push({
-              id: `cmo18-defect:${e.hotel_code}:${ty}:${dept}`, type: 'column', name: `${e.hotel_code} — ${ty} — ${dept} Top Defects`, color: BLUE,
-              dataLabels: { enabled: true },
-              data: topN(typeMap[ty]?.[dept] ?? {}, 24).map(([name, y]) => ({ name, y })),
-            } as Highcharts.SeriesOptionsType);
-          }
-        }
-      }
-      return make('cmo-18', 'Hotel → Type → Department → Defects', 'Columns show total MO work orders by hotel. Click a hotel to see its MO/PM type split, a type to see its created-by department mix, then a department to drill into its top defects.', 'COUNT(*) BY hotel_code, then COUNT(*) BY type, then COUNT(*) BY created_by_department WITHIN type, then TOP defect WITHIN department WHERE type = MO OR type = PM', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Orders' } },
-        series: [{ type: 'column', name: 'Orders', color: GREEN,
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cmo18-type:${e.hotel_code}` })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: { series: [...level2, ...level3, ...level4] },
-      });
-    })(),
+    // cmo-13: Hotel → Completed by Dist → Completed by → Defect Dist → Defect (5-level drilldown, shared builder)
+    make('cmo-13', '🟢 Hotel → Completed by Dist → Completed by → Defect Dist → Defect',
+      'Drills from hotel into a rank-grouped range of completed-by technicians, then the technician, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = rank-ranges of COUNT(jobs) GROUP BY completed_by per hotel (width = 50 if distinct count > 500, 20 if > 200, else 10); Defect Dist = rank-ranges of COUNT(jobs) BY defect WITHIN technician; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoCompletedByDefectDrilldown(entries, 'cmo13') as unknown as Record<string, unknown>),
+    // cmo-14: Hotel → Category → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-14', '🟢 Hotel → Category → Defect Dist → Defect',
+      'Drills from hotel into category, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY category per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo14', (e) => e.summary.mo_dim_defect_stats_map?.category ?? {}, 'Category', 'count-desc') as unknown as Record<string, unknown>),
+    // cmo-15: Hotel → Department → Defect Dist → Defect (4-level drilldown, shared builder)
+    // "Department" = created department
+    make('cmo-15', '🟢 Hotel → Department → Defect Dist → Defect',
+      'Drills from hotel into created department, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY created_by_department per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo15', (e) => e.summary.mo_dim_defect_stats_map?.department ?? {}, 'Department', 'count-desc') as unknown as Record<string, unknown>),
+    // cmo-16: Hotel → Guest/Non-Guest → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-16', '🟢 Hotel → Guest/Non-Guest → Defect Dist → Defect',
+      'Drills from hotel into guest-related vs non-guest-related, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY guest_related per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo16', (e) => e.summary.mo_dim_defect_stats_map?.guest ?? {}, 'Guest/Non-Guest', ['Guest Related', 'Non Guest Related']) as unknown as Record<string, unknown>),
+    // cmo-17: Hotel → On Time/Delayed → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-17', '🟢 Hotel → On Time/Delayed → Defect Dist → Defect',
+      'Drills from hotel into on-time vs delayed (past deadline) jobs, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY (is_overdue ? Delayed : On Time) per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo17', (e) => e.summary.mo_dim_defect_stats_map?.ontime ?? {}, 'On Time/Delayed', ['On Time', 'Delayed']) as unknown as Record<string, unknown>),
+    // cmo-18: Hotel → MO Type → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-18', '🟢 Hotel → MO Type → Defect Dist → Defect',
+      'Drills from hotel into job type (MO/PM), then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY type per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO OR type = PM',
+      buildMoDimDefectDrilldown(entries, 'cmo18', (e) => e.summary.mo_dim_defect_stats_map?.type ?? {}, 'MO Type', ['MO', 'PM']) as unknown as Record<string, unknown>),
+    // cmo-19: Hotel → Duration Dist → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-19', '🟢 Hotel → Duration Dist → Defect Dist → Defect',
+      'Drills from hotel into completed-duration bucket, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together. Uncompleted jobs count as 0h (the "< 1h" bucket).',
+      'Level 2 = COUNT(jobs) GROUP BY completed_duration_bucket per hotel (duration = completed_datetime - created_datetime in hours, 0 when not yet Completed); Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours), Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo19', (e) => e.summary.mo_dim_defect_stats_map?.durbkt ?? {}, 'Duration Dist', ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+']) as unknown as Record<string, unknown>),
+    // cmo-20: Hotel → 24 Hour Dist → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-20', '⏰ Hotel → 24 Hour Dist → Defect Dist → Defect',
+      'Drills from hotel into hour of creation, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY HOUR(created_datetime) per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      (() => {
+        const HOUR_ORDER = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+        return buildMoDimDefectDrilldown(entries, 'cmo20', (e) => e.summary.mo_dim_defect_stats_map?.hour ?? {}, '24 Hour Dist', HOUR_ORDER) as unknown as Record<string, unknown>;
+      })()),
+    // cmo-21: Hotel → Escalation Level → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-21', '🟢 Hotel → Escalation Level → Defect Dist → Defect',
+      'Drills from hotel into escalation level, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY escalation_level per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo21', (e) => e.summary.mo_dim_defect_stats_map?.esclevel ?? {}, 'Escalation Level', 'count-desc') as unknown as Record<string, unknown>),
+    // cmo-22: Hotel → Job Status → Defect Dist → Defect (4-level drilldown, shared builder)
+    make('cmo-22', '🟢 Hotel → Job Status → Defect Dist → Defect',
+      'Drills from hotel into job status, then a rank-grouped defect range, down to individual defects, showing Total Order, Completed Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY job_status per hotel; Defect Dist = rank-ranges of COUNT(jobs) BY defect; leaf = COUNT(jobs), AVG(completed_hours) [0 when not yet Completed], Delay Rate = overdue jobs / COUNT * 100 WHERE type = MO',
+      buildMoDimDefectDrilldown(entries, 'cmo22', (e) => e.summary.mo_dim_defect_stats_map?.status ?? {}, 'Job Status', 'count-desc') as unknown as Record<string, unknown>),
   ];
 }
 

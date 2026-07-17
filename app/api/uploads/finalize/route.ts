@@ -1543,8 +1543,11 @@ function accumulateJoKpis(acc: JoKpiAcc, rr: Record<string, unknown>, timezone =
   const status = toStr(rr.job_status) ?? 'Unknown';
   const category = toStr(rr.service_item_category) ?? 'Unknown';
   const item = toStr(rr.service_item) ?? 'Unknown';
-  const dept = toStr(rr.department_name) ?? 'Unknown';
   const assignedDept = toStr(rr.assigned_to_department) ?? 'Unknown';
+  // "Unacknowledged Orders" is the source system's placeholder Department Name for
+  // jobs not yet routed/acknowledged — fall back to the assigned department instead.
+  const deptRaw = toStr(rr.department_name) ?? 'Unknown';
+  const dept = deptRaw === 'Unacknowledged Orders' ? assignedDept : deptRaw;
   const assignedTo = toStr(rr.assigned_to_user) ?? 'Unknown';
   const createdByDept = toStr(rr.created_by_department) ?? 'Unknown';
   const completedDept = toStr(rr.completed_by_department) ?? 'Unknown';

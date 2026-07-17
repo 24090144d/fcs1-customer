@@ -31,7 +31,7 @@ const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-03', 'cmo-04', 'cm
 // Multi-level drilldown charts rendered full-width (1 per row) in the "Long Charts" section.
 // Membership is opt-in per chart id, moved in only when explicitly requested.
 const MO_LONG_CHART_IDS = new Set<string>(['mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18']);
-const JO_LONG_CHART_IDS = new Set<string>(['jo-23', 'jo-24', 'jo-25', 'jo-26', 'cjo-22', 'cjo-23', 'cjo-24', 'cjo-25', 'cjo-26', 'cjo-28']);
+const JO_LONG_CHART_IDS = new Set<string>(['jo-23', 'jo-24', 'jo-25', 'jo-26', 'cjo-21', 'cjo-22', 'cjo-23', 'cjo-24', 'cjo-25', 'cjo-26', 'cjo-27', 'cjo-28', 'cjo-29', 'cjo-30']);
 const IM_LONG_CHART_IDS = new Set<string>(['im-41', 'im-42', 'im-43', 'im-44', 'im-45']);
 // ⏰ 24-hour-of-day distribution charts — always full period (date filter ignored),
 // matching JO/MO's established behavior. Used only to control the FULL PERIOD badge.
@@ -543,6 +543,218 @@ function buildImDimIncidentDrilldown(
     drilldown: { series: [...level2, ...level3] },
     tooltip: { shared: true },
   });
+}
+
+type JoItemStats = { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number };
+
+// cjo-22..29: shared 4-level drilldown — Hotel → [dimension value] → Item Dist
+// (rank-range bucket of items, via imRankDistBuckets) → Item (leaf, 4-series
+// dual-axis combo: Total Order + Delay Rate (%) columns on the primary axis,
+// Response Time + Average Completion Duration splines (minutes) on the secondary
+// axis). One generic builder feeds every JO dimension chart, mirroring
+// buildImDimIncidentDrilldown; differs only in which per-hotel dept/dim item-stats
+// map it reads (via getDimMap, since JO keeps cjo-01's/cjo-21's dept/category maps
+// as their own dedicated fields rather than nested under one generic key) and how
+// Level 2 is ordered.
+function buildJoDimItemDrilldown(
+  entries: ChainEntry[],
+  chartPrefix: string,
+  getDimMap: (e: ChainEntry) => Record<string, Record<string, JoItemStats>>,
+  dimAxisTitle: string,
+  order: 'count-desc' | 'natural-sort' | string[],
+): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', ROSE = '#BE123C', BLUE = '#0E7490', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; responseMins: number; completionMins: number; delayRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const dimMap = getDimMap(e) ?? {};
+    const dimCounts: Array<[string, number]> = Object.entries(dimMap)
+      .map(([dv, items]): [string, number] => [dv, Object.values(items).reduce((s, v) => s + v.count, 0)])
+      .filter(([, v]) => v > 0);
+    hotelTotals[e.hotel_code] = dimCounts.reduce((s, [, v]) => s + v, 0);
+    const dimCountMap = Object.fromEntries(dimCounts);
+
+    let orderedDimValues: string[];
+    if (Array.isArray(order)) {
+      orderedDimValues = order.filter((dv) => (dimCountMap[dv] ?? 0) > 0);
+    } else if (order === 'natural-sort') {
+      orderedDimValues = dimCounts.map(([dv]) => dv).sort();
+    } else {
+      orderedDimValues = [...dimCounts].sort((a, b) => b[1] - a[1]).map(([dv]) => dv);
+    }
+
+    level2.push({
+      id: `${chartPrefix}-dim:${hKey}`, type: 'column', name: `${e.hotel_code} ${dimAxisTitle}`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: orderedDimValues.map((dv) => ({ name: dv, y: dimCountMap[dv] ?? 0, drilldown: `${chartPrefix}-item:${hKey}:${idPart(dv)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const dv of orderedDimValues) {
+      const dvKey = idPart(dv);
+      const itemStats = dimMap[dv] ?? {};
+      const itemCounts: Array<[string, number]> = Object.entries(itemStats).map(([item, s]) => [item, s.count]);
+      const itemBuckets = imRankDistBuckets(itemCounts);
+      level3.push({
+        id: `${chartPrefix}-item:${hKey}:${dvKey}`, type: 'column', name: `${e.hotel_code} — ${dv} — Item Dist`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(ib.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const itemBucket of itemBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(itemBucket.name)}`;
+        leafData[leafId] = itemBucket.keys
+          .map((item) => {
+            const s = itemStats[item];
+            return { name: item, count: s.count, responseMins: s.avgResponseMins, completionMins: s.avgCompletionMins, delayRate: s.delayRate };
+          })
+          .sort((a, b) => b.count - a.count);
+      }
+    }
+  }
+
+  return buildJoLeafChart(chartPrefix, entries, hotelTotals, level2, level3, leafData, { ORANGE, PURPLE, GREEN, ROSE, BLUE, AMBER });
+}
+
+// Shared Level-1 root + leaf-handler scaffold for cjo-01/21/22..30 — factored out
+// so the two builders (dimension-based and delay-rate-based) don't duplicate the
+// addSingleSeriesAsDrilldown x4 + applyDrilldown() leaf wiring.
+function buildJoLeafChart(
+  chartPrefix: string,
+  entries: ChainEntry[],
+  hotelTotals: Record<string, number>,
+  level2: Highcharts.SeriesOptionsType[],
+  level3: Highcharts.SeriesOptionsType[],
+  leafData: Record<string, Array<{ name: string; count: number; responseMins: number; completionMins: number; delayRate: number }>>,
+  colors: { ORANGE: string; PURPLE: string; GREEN: string; ROSE: string; BLUE: string; AMBER: string },
+): Highcharts.Options {
+  const { GREEN, ROSE, BLUE, AMBER } = colors;
+  const idPart = (v: string) => encodeURIComponent(v);
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-delay`, type: 'column', name: 'Delay Rate (%)', color: ROSE,
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.delayRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-resp`, type: 'spline', name: 'Response Time (min)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.responseMins })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-comp`, type: 'spline', name: 'Average Completion Duration (min)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.completionMins })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category', title: { text: 'Hotel' } },
+    yAxis: [
+      { min: 0, title: { text: 'Total Order / Delay Rate (%)' } },
+      { title: { text: 'Minutes' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Order', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: entries.map((e) => ({ name: e.hotel_code, y: hotelTotals[e.hotel_code] ?? 0, drilldown: `${chartPrefix}-dim:${idPart(e.hotel_code)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  };
+}
+
+// cjo-30: Hotel → Delay Rate % Dist → Item Dist → Item (4-level drilldown).
+// Unlike the other JO dimension charts, "Delay Rate % Dist" buckets by a VALUE
+// range of each ITEM's own delay rate (not a per-job dimension), so Level 2 groups
+// items directly using fixed percentage buckets, and Level 3 rank-buckets
+// (imRankDistBuckets) the items within that percentage range before the leaf.
+function buildJoDelayRateDistDrilldown(entries: ChainEntry[], chartPrefix: string): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', ROSE = '#BE123C', BLUE = '#0E7490', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const DELAY_RATE_BUCKETS = ['0%', '1-10%', '11-25%', '26-50%', '51-75%', '76-100%'];
+  const bucketLabel = (rate: number): string => {
+    if (rate <= 0) return '0%';
+    if (rate <= 10) return '1-10%';
+    if (rate <= 25) return '11-25%';
+    if (rate <= 50) return '26-50%';
+    if (rate <= 75) return '51-75%';
+    return '76-100%';
+  };
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; responseMins: number; completionMins: number; delayRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const itemMap = (e.summary.jo_item_stats_map ?? {}) as Record<string, JoItemStats>;
+    const bucketed: Record<string, Array<[string, number]>> = {};
+    for (const [item, s] of Object.entries(itemMap)) {
+      if (s.count <= 0) continue;
+      const b = bucketLabel(s.delayRate);
+      if (!bucketed[b]) bucketed[b] = [];
+      bucketed[b].push([item, s.count]);
+    }
+    hotelTotals[e.hotel_code] = Object.values(itemMap).reduce((s, v) => s + v.count, 0);
+
+    level2.push({
+      id: `${chartPrefix}-dim:${hKey}`, type: 'column', name: `${e.hotel_code} Delay Rate % Dist`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: DELAY_RATE_BUCKETS.filter((b) => (bucketed[b] ?? []).length > 0).map((b) => ({
+        name: b, y: (bucketed[b] ?? []).reduce((s, [, c]) => s + c, 0), drilldown: `${chartPrefix}-item:${hKey}:${idPart(b)}`,
+      })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const b of DELAY_RATE_BUCKETS) {
+      const itemCounts = bucketed[b];
+      if (!itemCounts || itemCounts.length === 0) continue;
+      const bKey = idPart(b);
+      const itemBuckets = imRankDistBuckets(itemCounts);
+      level3.push({
+        id: `${chartPrefix}-item:${hKey}:${bKey}`, type: 'column', name: `${e.hotel_code} — Delay Rate ${b} — Item Dist`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${hKey}:${bKey}:${idPart(ib.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const itemBucket of itemBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hKey}:${bKey}:${idPart(itemBucket.name)}`;
+        leafData[leafId] = itemBucket.keys
+          .map((item) => {
+            const s = itemMap[item];
+            return { name: item, count: s.count, responseMins: s.avgResponseMins, completionMins: s.avgCompletionMins, delayRate: s.delayRate };
+          })
+          .sort((a, b2) => b2.count - a.count);
+      }
+    }
+  }
+
+  return buildJoLeafChart(chartPrefix, entries, hotelTotals, level2, level3, leafData, { ORANGE, PURPLE, GREEN, ROSE, BLUE, AMBER });
 }
 
 function buildBuilderOverride(def: ChartDef, fd: FilteredData | null, deptSummary: DeptScopedSummary | null): Highcharts.Options | undefined {
@@ -1714,37 +1926,125 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
   });
 
   const charts: ChartDef[] = [
-    make('cjo-01', 'Hotel → Top Category → Top Service Items', 'Outer donut shows total JO volume by hotel. Click a hotel to see its top service categories, then a category to see its top service items.', 'COUNT(*) BY hotel_code DRILLDOWN TOP service_item_category DRILLDOWN TOP service_item', (() => {
-      const ddSeries: Highcharts.SeriesOptionsType[] = [];
+    // cjo-01: Hotel → Department → Item Dist → Item (4-level donut drilldown).
+    // "Item Dist" is a rank-range bucket (imRankDistBuckets) over distinct service
+    // items within a department, not a value range. Leaf = 4-series dual-axis
+    // combo per service item: Total Order + Delay Rate (%) columns on the primary
+    // axis, Response Time + Average Completion Duration splines (minutes) on the
+    // secondary axis — registered via addSingleSeriesAsDrilldown x4 + one
+    // applyDrilldown() in a custom chart.events.drilldown handler (the all-in-one
+    // addSeriesAsDrilldown() corrupts drilldown state on the 2nd+ call per click),
+    // same pattern as cco-01's donut→combo leaf.
+    make('cjo-01', '🟢 Hotel → Department → Item Dist → Item',
+      'Outer donut shows total JO volume by hotel. Click a hotel to see its departments, then a department to see a rank-grouped range of its service items, then a range to see individual items with Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Item Dist = rank-ranges of COUNT(jobs) by service item per department (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100', (() => {
+      const GREEN = '#0F766E', ROSE = '#BE123C', BLUE = '#0E7490', AMBER = '#B45309';
+      const idPart = (v: string) => encodeURIComponent(v);
+      const level2: Highcharts.SeriesOptionsType[] = [];
+      const level3: Highcharts.SeriesOptionsType[] = [];
+      const leafData: Record<string, Array<{ name: string; count: number; responseMins: number; completionMins: number; delayRate: number }>> = {};
+
       for (const e of entries) {
-        const hKey = encodeURIComponent(e.hotel_code);
-        const topCats = topN(e.summary.category_map ?? {}, 24);
-        ddSeries.push({
-          id: `cjo01h:${hKey}`,
-          type: 'pie',
-          name: `${e.hotel_code} Top Service Categories`,
-          innerSize: '45%',
-          data: topCats.map(([cat, y]) => ({ name: cat, y, drilldown: `cjo01c:${hKey}:${encodeURIComponent(cat)}` })),
+        const hKey = idPart(e.hotel_code);
+        const deptMap = (e.summary.jo_dept_item_stats_map ?? {}) as Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>>;
+        const deptTotals = Object.entries(deptMap)
+          .map(([dept, items]): [string, number] => [dept, Object.values(items).reduce((s, v) => s + v.count, 0)])
+          .filter(([, v]) => v > 0)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 24);
+        level2.push({
+          id: `cjo01d:${hKey}`, type: 'pie', name: `${e.hotel_code} Departments`, innerSize: '45%',
+          data: deptTotals.map(([dept, total]) => ({ name: dept, y: total, drilldown: `cjo01i:${hKey}:${idPart(dept)}` })),
         } as Highcharts.SeriesOptionsType);
-        for (const [cat] of topCats) {
-          ddSeries.push({
-            id: `cjo01c:${hKey}:${encodeURIComponent(cat)}`,
-            type: 'pie',
-            name: `${e.hotel_code} ${cat} — Top Service Items`,
-            innerSize: '45%',
-            data: topN(e.summary.category_item_map?.[cat] ?? {}, 24).map(([item, y]) => ({ name: item, y })),
+
+        for (const [dept] of deptTotals) {
+          const dKey = idPart(dept);
+          const itemStats = deptMap[dept] ?? {};
+          const itemCounts: Array<[string, number]> = Object.entries(itemStats).map(([item, s]) => [item, s.count]);
+          const itemBuckets = imRankDistBuckets(itemCounts);
+          level3.push({
+            id: `cjo01i:${hKey}:${dKey}`, type: 'pie', name: `${e.hotel_code} — ${dept} — Item Dist`, innerSize: '45%',
+            data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `cjo01leaf:${hKey}:${dKey}:${idPart(ib.name)}` })),
           } as Highcharts.SeriesOptionsType);
+
+          for (const itemBucket of itemBuckets) {
+            const leafId = `cjo01leaf:${hKey}:${dKey}:${idPart(itemBucket.name)}`;
+            leafData[leafId] = itemBucket.keys
+              .map((item) => {
+                const s = itemStats[item];
+                return { name: item, count: s.count, responseMins: s.avgResponseMins, completionMins: s.avgCompletionMins, delayRate: s.delayRate };
+              })
+              .sort((a, b) => b.count - a.count);
+          }
         }
       }
+
       return {
-        chart: { type: 'pie' },
+        chart: {
+          type: 'pie',
+          events: {
+            drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+              if (ev.seriesOptions) return;
+              const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+              const items = leafId ? leafData[leafId] : undefined;
+              if (!items) return;
+              const chart = this as unknown as Highcharts.Chart & {
+                addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+                applyDrilldown: () => void;
+              };
+              // The chart starts as pure pie (no cartesian series exist at
+              // init), so Highcharts' default xAxis is type 'linear' — the
+              // top-level xAxis:{type:'category'} option gets ignored once a
+              // drilldown series arrives, and switching the type AFTER adding
+              // series doesn't retroactively convert already-plotted numeric
+              // x-values back into named categories. Force type + explicit
+              // categories here, before any series are added, so item names
+              // render as axis labels instead of numeric tick positions.
+              if (chart.xAxis[0]) {
+                chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+              }
+              chart.addSingleSeriesAsDrilldown(ev.point, {
+                id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
+                dataLabels: { enabled: true, format: '{point.y}' },
+                data: items.map((i) => ({ name: i.name, y: i.count })),
+              } as Highcharts.SeriesOptionsType);
+              chart.addSingleSeriesAsDrilldown(ev.point, {
+                id: `${leafId}-delay`, type: 'column', name: 'Delay Rate (%)', color: ROSE,
+                dataLabels: { enabled: true, format: '{point.y}%' },
+                data: items.map((i) => ({ name: i.name, y: i.delayRate })),
+              } as Highcharts.SeriesOptionsType);
+              chart.addSingleSeriesAsDrilldown(ev.point, {
+                id: `${leafId}-resp`, type: 'spline', name: 'Response Time (min)', color: BLUE, yAxis: 1,
+                lineWidth: 3, marker: { enabled: true, radius: 4 },
+                dataLabels: { enabled: true, format: '{point.y}' },
+                data: items.map((i) => ({ name: i.name, y: i.responseMins })),
+              } as Highcharts.SeriesOptionsType);
+              chart.addSingleSeriesAsDrilldown(ev.point, {
+                id: `${leafId}-comp`, type: 'spline', name: 'Average Completion Duration (min)', color: AMBER, yAxis: 1,
+                lineWidth: 3, marker: { enabled: true, radius: 4 },
+                dataLabels: { enabled: true, format: '{point.y}' },
+                data: items.map((i) => ({ name: i.name, y: i.completionMins })),
+              } as Highcharts.SeriesOptionsType);
+              chart.applyDrilldown();
+            },
+          },
+        },
+        // xAxis is ignored by the pie levels (root/dept/item-dist) but required by
+        // the leaf's column/spline combo so item names render as axis labels
+        // instead of a default numeric axis.
+        xAxis: { type: 'category' },
+        yAxis: [
+          { title: { text: 'Total Order / Delay Rate (%)' } },
+          { title: { text: 'Minutes' }, opposite: true },
+        ],
         series: [{
           type: 'pie',
           name: 'Jobs',
           innerSize: '45%',
-          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo01h:${encodeURIComponent(e.hotel_code)}` })),
+          data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `cjo01d:${idPart(e.hotel_code)}` })),
         }],
-        drilldown: { series: ddSeries },
+        drilldown: { series: [...level2, ...level3] },
+        tooltip: { shared: true },
       };
     })()),
     // cjo-02: Hotel → Escalation Rate by Service Category → Escalation Rate by Service Item (3-level vertical-bar drilldown)
@@ -1804,9 +2104,14 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         drilldown: { series: ddSeries },
       };
     })()),
-    make('cjo-27', 'SLA Compliance by Hotel', 'Hotel-level SLA compliance comparison.', 'sla_compliant_completed / completed_jobs * 100 BY hotel_code', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, yAxis: { max: 100, title: { text: 'SLA %' } }, series: [{ type: 'column', name: 'SLA %', data: slaRate }],
-    }),
+    // cjo-27: Hotel → 24 Hour Dist → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-27', '⏰ Hotel → 24 Hour Dist → Item Dist → Item',
+      'Drills from hotel into hour of day, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY hour-of-day (org timezone) per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      (() => {
+        const HOUR_ORDER = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+        return buildJoDimItemDrilldown(entries, 'cjo27', (e) => e.summary.jo_dim_item_stats_map?.hour ?? {}, '24 Hour Dist', HOUR_ORDER) as unknown as Record<string, unknown>;
+      })()),
     // cjo-07: Top Service Items → Daily Trend (chain aggregate, mirrors jo-11)
     make('cjo-07', '🟢 Top Service Items → Daily Trend (Chain)',
       'Ranks the most requested service items across all chain hotels. Click an item bar to see its daily job count trend.',
@@ -2183,206 +2488,63 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
     make('cjo-20', 'Created By Department Demand by Hotel', 'Source department demand comparison across hotels.', 'COUNT(*) BY hotel_code, created_by_department', {
       chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCreatedBy.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.created_by_dept_map?.[dept] ?? 0) })),
     }),
-    make('cjo-21', 'Completed By Department Throughput by Hotel', 'Completion ownership comparison across hotels.', 'COUNT(*) BY hotel_code, completed_by_department', {
-      chart: { type: 'column' }, xAxis: { categories: hotelCodes }, plotOptions: { column: { stacking: 'normal' } }, series: topCompletedBy.slice(0, 24).map((dept) => ({ type: 'column', name: dept, data: entries.map((e) => e.summary.completed_by_dept_map?.[dept] ?? 0) })),
-    }),
+    // cjo-21: Hotel → Service Category → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-21', '🟢 Hotel → Service Category → Item Dist → Item',
+      'Drills from hotel into service category, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY service_item_category per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo21', (e) => e.summary.jo_cat_item_stats_map ?? {}, 'Service Category', 'count-desc') as unknown as Record<string, unknown>),
     // cjo-22: 24-Hour VIP Jobs distribution → Top Service Items
-    make('cjo-22', '24-Hour VIP Jobs Distribution → Top Service Items', 'VIP job volume by hour of day across the chain. Click a bar to drill into the top service items requested by VIP guests at that hour.', 'COUNT(*) WHERE is_vip BY created_hour; drilldown: COUNT(*) BY service_item', (() => {
-      const GREEN  = '#0F766E'; // deep teal — primary bars
-      const ORANGE = '#C2410C'; // burnt orange — drilldown bars
+    // cjo-22: Hotel → Department → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-22', '🟢 Hotel → Department → Item Dist → Item',
+      'Drills from hotel into department, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY department per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo22', (e) => e.summary.jo_dept_item_stats_map ?? {}, 'Department', 'count-desc') as unknown as Record<string, unknown>),
+    // cjo-23: Hotel → Job Status → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-23', '🟢 Hotel → Job Status → Item Dist → Item',
+      'Drills from hotel into job status, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY job_status per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo23', (e) => e.summary.jo_dim_item_stats_map?.status ?? {}, 'Job Status', 'count-desc') as unknown as Record<string, unknown>),
+    // cjo-24: Hotel → VIP/Non-VIP → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-24', '🟢 Hotel → VIP/Non-VIP → Item Dist → Item',
+      'Drills from hotel into VIP vs Non-VIP guests, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY (vip_code valid ? VIP : Non-VIP) per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo24', (e) => e.summary.jo_dim_item_stats_map?.vip ?? {}, 'VIP/Non-VIP', ['VIP', 'Non-VIP']) as unknown as Record<string, unknown>),
+    // cjo-25: Hotel → On Time/Delayed → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-25', '🟢 Hotel → On Time/Delayed → Item Dist → Item',
+      'Drills from hotel into on-time vs delayed jobs, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY (delay_duration > 0 ? Delayed : On Time) per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo25', (e) => e.summary.jo_dim_item_stats_map?.ontime ?? {}, 'On Time/Delayed', ['On Time', 'Delayed']) as unknown as Record<string, unknown>),
+    // cjo-26: Hotel → Escalation Group → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-26', '🟢 Hotel → Escalation Group → Item Dist → Item',
+      'Drills from hotel into escalation group, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY escalation_group per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo26', (e) => e.summary.jo_dim_item_stats_map?.escgroup ?? {}, 'Escalation Group', 'count-desc') as unknown as Record<string, unknown>),
+    // cjo-28: Hotel → Completion Duration Dist → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-28', '🟢 Hotel → Completion Duration Dist → Item Dist → Item',
+      'Drills from hotel into completion duration buckets, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY completion_duration_bucket (<15min/15-30min/30-60min/1-2h/2-4h/4-8h/8h+) per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      (() => {
+        const COMP_ORDER = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'];
+        return buildJoDimItemDrilldown(entries, 'cjo28', (e) => e.summary.jo_dim_item_stats_map?.compbkt ?? {}, 'Completion Duration Dist', COMP_ORDER) as unknown as Record<string, unknown>;
+      })()),
+    // cjo-29: Hotel → Delayed by Department → Item Dist → Item (4-level vertical-bar drilldown, shared builder)
+    make('cjo-29', '🟢 Hotel → Delayed by Department → Item Dist → Item',
+      'Drills from hotel into the department of delayed jobs only, then a rank-grouped service-item range, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) WHERE delay_duration > 0 GROUP BY department per hotel; Item Dist = rank-ranges of COUNT(jobs) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDimItemDrilldown(entries, 'cjo29', (e) => e.summary.jo_dim_item_stats_map?.delayeddept ?? {}, 'Delayed by Department', 'count-desc') as unknown as Record<string, unknown>),
+    // cjo-30: Hotel → Delay Rate % Dist → Item Dist → Item (4-level vertical-bar drilldown)
+    make('cjo-30', '🟢 Hotel → Delay Rate % Dist → Item Dist → Item',
+      'Drills from hotel into buckets of each service item\'s own delay rate, then a rank-grouped service-item range within that bucket, down to individual items, showing Total Order, Response Time, Average Completion Duration, and Delay Rate together.',
+      'Level 2 = COUNT(jobs) GROUP BY delay-rate bucket (0%/1-10%/11-25%/26-50%/51-75%/76-100%) of each item\'s own delay rate per hotel; Item Dist = rank-ranges of COUNT(jobs) by item within the bucket (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(jobs), AVG(response_min), AVG(completion_min), Delay Rate = delayed jobs / COUNT * 100',
+      buildJoDelayRateDistDrilldown(entries, 'cjo30') as unknown as Record<string, unknown>),
+    // cjo-03: Hotel Jobs → 24-Hour Distribution → Top 10 Service Items (3-level, unchanged — preserved from the former shared cjo-22..28 block)
+    (() => {
+      const ORANGE = '#C2410C';
       const hours24 = Array.from({ length: 24 }, (_, i) => i);
-      const hourLabels = hours24.map((h) => `${String(h).padStart(2, '0')}:00`);
-
-      // Aggregate VIP-only hour→item maps across all chain hotels
-      const chainHourItem: Record<number, Record<string, number>> = {};
-      for (const e of entries) {
-        const hourItemMap = e.summary.jo_vip_hour_item_map ?? {};
-        for (const [hStr, itemMap] of Object.entries(hourItemMap)) {
-          const h = Number(hStr);
-          if (!chainHourItem[h]) chainHourItem[h] = {};
-          for (const [itm, cnt] of Object.entries(itemMap)) {
-            chainHourItem[h][itm] = (chainHourItem[h][itm] ?? 0) + cnt;
-          }
-        }
-      }
-
-      return {
-        chart: { type: 'column' },
-        // type:'category' lets both levels use point.name as the x-axis label —
-        // avoids the parent hourLabels array bleeding into the drilldown view.
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'VIP Jobs' } },
-        series: [{ type: 'column', name: 'VIP Jobs', color: GREEN,
-          data: hours24.map((h) => ({
-            name: hourLabels[h],   // "00:00" … "23:00"
-            y: Object.values(chainHourItem[h] ?? {}).reduce((s, v) => s + v, 0),
-            drilldown: `cjo22h:${h}`,
-          })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: hours24.map((h) => {
-            const topItems = Object.entries(chainHourItem[h] ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 50);
-            return {
-              id: `cjo22h:${h}`,
-              name: `${String(h).padStart(2, '0')}:00 — Top Service Items (VIP)`,
-              type: 'column', color: ORANGE,
-              dataLabels: { enabled: true },
-              // {name, y} format → Highcharts uses name as x-axis category label
-              data: topItems.map(([itm, cnt]) => ({ name: itm, y: cnt })),
-            };
-          }),
-        },
-      };
-    })()),
-    // ── cjo-23..26: 24-hour primary bar → drilldown per hour ──────────────────
-    ...(() => {
-      const GREEN  = '#0F766E'; // deep teal — primary bars
-      const ORANGE = '#C2410C'; // burnt orange — drilldown bars
-      const DUR = ['< 15 min', '15–30 min', '30–60 min', '1–2 h', '2–4 h', '4–8 h', '8+ h'] as const;
-      const hours24 = Array.from({ length: 24 }, (_, i) => i);
-
-      // ── Aggregate each hour-level map chain-wide ───────────────────────────
-      function sumHour(key: keyof typeof entries[0]['summary']): Record<number, number> {
-        const out: Record<number, number> = {};
-        for (const e of entries) {
-          const m = e.summary[key] as Record<string, number> | undefined ?? {};
-          for (const [h, v] of Object.entries(m)) out[+h] = (out[+h] ?? 0) + (v as number);
-        }
-        return out;
-      }
-      function sumHourBkt(key: keyof typeof entries[0]['summary']): Record<number, Record<string, number>> {
-        const out: Record<number, Record<string, number>> = {};
-        for (const e of entries) {
-          const m = e.summary[key] as Record<string, Record<string, number>> | undefined ?? {};
-          for (const [h, inner] of Object.entries(m)) {
-            if (!out[+h]) out[+h] = {};
-            for (const [bkt, cnt] of Object.entries(inner)) out[+h][bkt] = (out[+h][bkt] ?? 0) + cnt;
-          }
-        }
-        return out;
-      }
-
-      const chainCompH    = sumHour('jo_hour_comp_map');
-      const chainCompBkt  = sumHourBkt('jo_hour_comp_bkt_map');
-      const chainRespBkt  = sumHourBkt('jo_hour_resp_bkt_map');
-      const chainEscH     = sumHour('jo_hour_esc_map');
-      const chainEscBkt   = sumHourBkt('jo_hour_esc_bkt_map');
-      const chainSlaTot   = sumHour('jo_hour_sla_total_map');
-      const chainSlaComp  = sumHour('jo_hour_sla_comp_map');
-      const chainCatTot   = sumHourBkt('jo_hour_sla_cat_total_map');
-      const chainCatComp  = sumHourBkt('jo_hour_sla_cat_comp_map');
-
-      const mkHourData = (vals: Record<number, number>, id: string) =>
-        hours24.map((h) => ({
-          name: `${String(h).padStart(2, '0')}:00`,
-          y: vals[h] ?? 0,
-          drilldown: `${id}:${h}`,
-        }));
-
-      // cjo-23: 24-Hour Completed Jobs → Completion Duration Range distribution
-      const cjo23 = make('cjo-23', '24-Hour Completed Jobs → Completion Duration Range', 'Completed job volume by hour across the chain. Click a bar to see the completion duration (mins) range distribution for that hour.', 'COUNT(completed) BY created_hour; drilldown: COUNT(*) BY duration_bucket', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Completed Jobs' } },
-        series: [{ type: 'column', name: 'Completed Jobs', color: GREEN,
-          data: mkHourData(chainCompH, 'cjo23h'),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: hours24.map((h) => ({
-            id: `cjo23h:${h}`,
-            name: `${String(h).padStart(2, '0')}:00 — Completion Duration`,
-            type: 'column', color: ORANGE,
-            dataLabels: { enabled: true },
-            data: DUR.map((b) => ({ name: b, y: chainCompBkt[h]?.[b] ?? 0 })),
-          })),
-        },
-      });
-
-      // cjo-24: 24-Hour Acknowledged Jobs → Response Time distribution
-      const cjo24 = make('cjo-24', '24-Hour Acknowledged Jobs → Response Time Distribution', 'Acknowledged job volume by hour across the chain. Click a bar to see the response time (mins) range distribution for that hour.', 'COUNT(acknowledged) BY created_hour; drilldown: COUNT(*) BY response_bucket', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Acknowledged Jobs' } },
-        series: [{ type: 'column', name: 'Acknowledged Jobs', color: GREEN,
-          data: hours24.map((h) => ({
-            name: `${String(h).padStart(2, '0')}:00`,
-            y: Object.values(chainRespBkt[h] ?? {}).reduce((s, v) => s + v, 0),
-            drilldown: `cjo24h:${h}`,
-          })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: hours24.map((h) => ({
-            id: `cjo24h:${h}`,
-            name: `${String(h).padStart(2, '0')}:00 — Response Time`,
-            type: 'column', color: ORANGE,
-            dataLabels: { enabled: true },
-            data: DUR.map((b) => ({ name: b, y: chainRespBkt[h]?.[b] ?? 0 })),
-          })),
-        },
-      });
-
-      // cjo-25: 24-Hour Escalated Jobs → Overdue Duration distribution
-      const cjo25 = make('cjo-25', '24-Hour Escalated Jobs → Overdue Duration Distribution', 'Escalated job volume by hour across the chain. Click a bar to see the overdue duration (mins) range distribution for that hour.', 'COUNT(escalated) BY created_hour; drilldown: COUNT(*) BY overdue_bucket', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Escalated Jobs' } },
-        series: [{ type: 'column', name: 'Escalated Jobs', color: GREEN,
-          data: mkHourData(chainEscH, 'cjo25h'),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: hours24.map((h) => ({
-            id: `cjo25h:${h}`,
-            name: `${String(h).padStart(2, '0')}:00 — Overdue Duration`,
-            type: 'column', color: ORANGE,
-            dataLabels: { enabled: true },
-            data: DUR.map((b) => ({ name: b, y: chainEscBkt[h]?.[b] ?? 0 })),
-          })),
-        },
-      });
-
-      // cjo-26: 24-Hour Jobs Distribution → Top Item Category
-      const cjo26 = make('cjo-26', '24-Hour Jobs Distribution → Top Item Category', 'Total job volume by hour across the chain. Click a bar to see the top service item categories for that hour.', 'COUNT(*) BY created_hour; drilldown: COUNT(*) BY service_item_category', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Jobs' } },
-        series: [{ type: 'column', name: 'Jobs', color: GREEN,
-          data: hours24.map((h) => ({
-            name: `${String(h).padStart(2, '0')}:00`,
-            y: chainSlaTot[h] ?? 0,
-            drilldown: `cjo26h:${h}`,
-          })),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: hours24.map((h) => {
-            const catTot = chainCatTot[h] ?? {};
-            const cats = Object.keys(catTot).sort((a, b) => (catTot[b] ?? 0) - (catTot[a] ?? 0));
-            return {
-              id: `cjo26h:${h}`,
-              name: `${String(h).padStart(2, '0')}:00 — Top Item Category`,
-              type: 'column', color: ORANGE,
-              dataLabels: { enabled: true },
-              data: cats.map((cat) => ({ name: cat, y: catTot[cat] ?? 0 })),
-            };
-          }),
-        },
-      });
-
-      // cjo-27: Hotel Jobs → 24-Hour Distribution → Top 10 Service Items (3-level)
       const sortedForCjo27 = [...entries].sort((a, b) => (b.summary.total ?? 0) - (a.summary.total ?? 0));
       const cjo27DdSeries: Highcharts.SeriesOptionsType[] = [];
       for (const e of sortedForCjo27) {
         const him = (e.summary.jo_hour_item_map ?? {}) as Record<string, Record<string, number>>;
-        // Level 1: 24-hour distribution for this hotel
         cjo27DdSeries.push({
           id: `cjo27e:${e.hotel_code}`,
           type: 'column',
@@ -2395,7 +2557,6 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
             drilldown: `cjo27i:${e.hotel_code}:${h}`,
           })),
         } as Highcharts.SeriesOptionsType);
-        // Level 2: Top 10 service items for each hour of this hotel
         for (const h of hours24) {
           const im = him[String(h)] ?? {};
           const top10 = Object.entries(im).sort(([, a], [, b]) => b - a).slice(0, 24);
@@ -2410,7 +2571,7 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
           } as Highcharts.SeriesOptionsType);
         }
       }
-      const cjo27 = make('cjo-03', '🟢 Hotel Jobs → 24-Hour Distribution → Top 10 Service Items', 'Columns show total jobs per hotel. Click a hotel to drill into its 24-hour job distribution, then click an hour to see the top 10 service items for that hour.', 'COUNT(*) BY hotel_code; drilldown: COUNT(*) BY created_hour; drilldown: TOP 10 COUNT(*) BY service_item', {
+      return make('cjo-03', '🟢 Hotel Jobs → 24-Hour Distribution → Top 10 Service Items', 'Columns show total jobs per hotel. Click a hotel to drill into its 24-hour job distribution, then click an hour to see the top 10 service items for that hour.', 'COUNT(*) BY hotel_code; drilldown: COUNT(*) BY created_hour; drilldown: TOP 10 COUNT(*) BY service_item', {
         chart: { type: 'column' },
         xAxis: { type: 'category' },
         yAxis: { min: 0, title: { text: 'Jobs' } },
@@ -2421,40 +2582,6 @@ function buildCorpJoCharts(entries: ChainEntry[], worldMapData?: Record<string, 
         plotOptions: { column: { dataLabels: { enabled: true } } },
         drilldown: { series: cjo27DdSeries },
       });
-
-      // cjo-28: Overdue Jobs by Item Category → 24-Hour distribution
-      // (escalation_group is empty in this data; group overdue jobs by item category instead)
-      const chainOverdueCatHour: Record<string, Record<number, number>> = {};
-      for (const e of entries) {
-        const m = e.summary.jo_overdue_cat_hour_map ?? {};
-        for (const [c, hm] of Object.entries(m)) {
-          if (!chainOverdueCatHour[c]) chainOverdueCatHour[c] = {};
-          for (const [h, v] of Object.entries(hm)) chainOverdueCatHour[c][+h] = (chainOverdueCatHour[c][+h] ?? 0) + v;
-        }
-      }
-      const cjo28 = make('cjo-28', 'Overdue Jobs by Item Category → 24-Hour Jobs Distribution', 'Overdue job count (delay > 0) by service item category across the chain. Click a category bar to see its 24-hour distribution.', 'COUNT(delay > 0) BY service_item_category; drilldown: COUNT(*) BY created_hour', {
-        chart: { type: 'column' },
-        xAxis: { type: 'category' },
-        yAxis: { min: 0, title: { text: 'Overdue Jobs' } },
-        series: [{ type: 'column', name: 'Overdue Jobs', color: GREEN,
-          data: Object.entries(chainOverdueCatHour)
-            .map(([c, hm]) => ({ name: c, y: Object.values(hm).reduce((a, b) => a + b, 0), drilldown: `cjo28:${c}` }))
-            .sort((a, b) => b.y - a.y),
-          dataLabels: { enabled: true },
-        }],
-        plotOptions: { column: { dataLabels: { enabled: true } } },
-        drilldown: {
-          series: Object.entries(chainOverdueCatHour).map(([c, hm]) => ({
-            id: `cjo28:${c}`,
-            name: `${c} — 24-Hour Distribution`,
-            type: 'column', color: ORANGE,
-            dataLabels: { enabled: true },
-            data: hours24.map((h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: hm[h] ?? 0 })),
-          })),
-        },
-      });
-
-      return [cjo23, cjo24, cjo25, cjo26, cjo27, cjo28];
     })(),
   ];
   // Swap display positions of cjo-03 and cjo-27 (chart contents live in opposite slots)

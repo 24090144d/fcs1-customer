@@ -115,6 +115,21 @@ export interface HotelSummary {
   jo_cat_res_p90?: Record<string, number>;   // category → P90 resolution minutes
   jo_cat_res_avg?: Record<string, number>;   // category → average resolution minutes (jo-04)
   jo_cat_item_escalations?: Record<string, Record<string, number>>; // category → item → escalated count (cjo-02)
+  // cjo-01: department (Unacknowledged Orders falls back to assigned department) →
+  // service item → { count, avgResponseMins (created→acknowledged), avgCompletionMins
+  // (created→completed), delayRate (delay_duration > 0 share, %) }. Computed live
+  // from raw jo_records, not baked at upload time.
+  jo_dept_item_stats_map?: Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>>;
+  // cjo-21: same shape as jo_dept_item_stats_map, keyed by service_item_category
+  // instead of department. Computed live from raw jo_records, not baked at upload time.
+  jo_cat_item_stats_map?: Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>>;
+  // cjo-22..29: generic dimension → dimension-value → item accumulator, one slice
+  // per dimension key (status/vip/ontime/escgroup/hour/compbkt/delayeddept). Same
+  // { count, avgResponseMins, avgCompletionMins, delayRate } shape as above.
+  jo_dim_item_stats_map?: Record<string, Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>>>;
+  // cjo-30: item's own aggregate stats (no dimension), used to bucket items by
+  // their own delay rate.
+  jo_item_stats_map?: Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>;
   jo_vip_hour_map?: Record<string, number>;  // hour → VIP job count
   jo_vip_hour_item_map?: Record<string, Record<string, number>>; // hour → item → VIP count
   jo_hour_item_map?: Record<string, Record<string, number>>;     // hour → item → all-job count

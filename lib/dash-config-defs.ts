@@ -64,7 +64,7 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       // Hotel operational charts — actual dashboard IDs jo-05..jo-28
       ...items(seq('jo-', 5, 28), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
       // Corp-level charts — actual dashboard IDs cjo-01..cjo-28
-      ...items(seq('cjo-', 1, 28), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
+      ...items(seq('cjo-', 1, 30), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
     ],
   },
 

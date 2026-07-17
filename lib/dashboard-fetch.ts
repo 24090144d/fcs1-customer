@@ -1301,6 +1301,150 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           }
         }
       }
+      // cjo-01/cjo-21: department (falling back to assigned department when the
+      // source system's "Unacknowledged Orders" placeholder shows up, same rule as
+      // the jo-09/jo-20 department fix) → service item, and separately service
+      // category → service item, both → { count, avgResponseMins, avgCompletionMins,
+      // delayRate }. Both maps come from the same row scan. Live from jo_records,
+      // per hotel.
+      if (hotelCodes.length > 0) {
+        type JoDeptItemRow = {
+          hotel_code: string | null;
+          department_name: string | null;
+          assigned_to_department: string | null;
+          service_item_category: string | null;
+          service_item: string | null;
+          job_status: string | null;
+          vip_code: string | null;
+          escalation_group: string | null;
+          created_datetime: string | null;
+          acknowledged_datetime: string | null;
+          completed_datetime: string | null;
+          delay_duration: string | number | null;
+        };
+        const diBatch = await supabase
+          .from('jo_records')
+          .select('hotel_code, department_name, assigned_to_department, service_item_category, service_item, job_status, vip_code, escalation_group, created_datetime, acknowledged_datetime, completed_datetime, delay_duration')
+          .in('hotel_code', hotelCodes) as unknown as SbResult<JoDeptItemRow[]>;
+        type DeptItemAcc = { count: number; responseSum: number; responseCount: number; completionSum: number; completionCount: number; delayedCount: number };
+        const deptItemByHotel: Record<string, Record<string, Record<string, DeptItemAcc>>> = {};
+        const catItemByHotel: Record<string, Record<string, Record<string, DeptItemAcc>>> = {};
+        // cjo-22..29: generic dimension → dimension-value → item accumulator, one
+        // slice per dimension (status/vip/ontime/escgroup/hour/compbkt/delayeddept),
+        // sharing the same row scan as dept/category above.
+        const JO_DIM_KEYS = ['status', 'vip', 'ontime', 'escgroup', 'hour', 'compbkt', 'delayeddept'] as const;
+        type JoDimKey = typeof JO_DIM_KEYS[number];
+        const dimItemByHotel: Record<JoDimKey, Record<string, Record<string, Record<string, DeptItemAcc>>>> = Object.fromEntries(JO_DIM_KEYS.map((k) => [k, {}])) as Record<JoDimKey, Record<string, Record<string, Record<string, DeptItemAcc>>>>;
+        // cjo-30: item's own aggregate (no dimension), keyed hotel → item.
+        const itemGlobalByHotel: Record<string, Record<string, DeptItemAcc>> = {};
+        const bumpAcc = (map: Record<string, Record<string, Record<string, DeptItemAcc>>>, hotel: string, key: string, item: string, createdAt: Date | null, ackAt: Date | null, completedAt: Date | null, delayMin: number | null) => {
+          if (!map[hotel]) map[hotel] = {};
+          if (!map[hotel][key]) map[hotel][key] = {};
+          if (!map[hotel][key][item]) map[hotel][key][item] = { count: 0, responseSum: 0, responseCount: 0, completionSum: 0, completionCount: 0, delayedCount: 0 };
+          const acc = map[hotel][key][item];
+          acc.count += 1;
+          if (createdAt && !Number.isNaN(createdAt.getTime())) {
+            if (ackAt && !Number.isNaN(ackAt.getTime()) && ackAt.getTime() >= createdAt.getTime()) {
+              acc.responseSum += (ackAt.getTime() - createdAt.getTime()) / 60_000;
+              acc.responseCount += 1;
+            }
+            if (completedAt && !Number.isNaN(completedAt.getTime()) && completedAt.getTime() >= createdAt.getTime()) {
+              acc.completionSum += (completedAt.getTime() - createdAt.getTime()) / 60_000;
+              acc.completionCount += 1;
+            }
+          }
+          if (delayMin !== null && delayMin > 0) acc.delayedCount += 1;
+        };
+        const bumpFlat = (map: Record<string, Record<string, DeptItemAcc>>, hotel: string, item: string, createdAt: Date | null, ackAt: Date | null, completedAt: Date | null, delayMin: number | null) => {
+          if (!map[hotel]) map[hotel] = {};
+          if (!map[hotel][item]) map[hotel][item] = { count: 0, responseSum: 0, responseCount: 0, completionSum: 0, completionCount: 0, delayedCount: 0 };
+          const acc = map[hotel][item];
+          acc.count += 1;
+          if (createdAt && !Number.isNaN(createdAt.getTime())) {
+            if (ackAt && !Number.isNaN(ackAt.getTime()) && ackAt.getTime() >= createdAt.getTime()) {
+              acc.responseSum += (ackAt.getTime() - createdAt.getTime()) / 60_000;
+              acc.responseCount += 1;
+            }
+            if (completedAt && !Number.isNaN(completedAt.getTime()) && completedAt.getTime() >= createdAt.getTime()) {
+              acc.completionSum += (completedAt.getTime() - createdAt.getTime()) / 60_000;
+              acc.completionCount += 1;
+            }
+          }
+          if (delayMin !== null && delayMin > 0) acc.delayedCount += 1;
+        };
+        for (const r of diBatch.data ?? []) {
+          const hotel = (r.hotel_code ?? '').toUpperCase();
+          if (!hotel) continue;
+          const assignedDept = r.assigned_to_department === null || String(r.assigned_to_department).trim() === '' ? 'Unknown' : String(r.assigned_to_department);
+          const deptRaw = r.department_name === null || String(r.department_name).trim() === '' ? 'Unknown' : String(r.department_name);
+          const dept = deptRaw === 'Unacknowledged Orders' ? assignedDept : deptRaw;
+          const category = r.service_item_category === null || String(r.service_item_category).trim() === '' ? 'Uncategorized' : String(r.service_item_category);
+          const item = r.service_item === null || String(r.service_item).trim() === '' ? 'Unknown Item' : String(r.service_item);
+          const createdAt = r.created_datetime ? new Date(r.created_datetime) : null;
+          const ackAt = r.acknowledged_datetime ? new Date(r.acknowledged_datetime) : null;
+          const completedAt = r.completed_datetime ? new Date(r.completed_datetime) : null;
+          const delayMin = parseDurationMinutes(r.delay_duration);
+          bumpAcc(deptItemByHotel, hotel, dept, item, createdAt, ackAt, completedAt, delayMin);
+          bumpAcc(catItemByHotel, hotel, category, item, createdAt, ackAt, completedAt, delayMin);
+          bumpFlat(itemGlobalByHotel, hotel, item, createdAt, ackAt, completedAt, delayMin);
+
+          const statusLabel = r.job_status === null || String(r.job_status).trim() === '' ? 'Unknown' : String(r.job_status);
+          bumpAcc(dimItemByHotel.status, hotel, statusLabel, item, createdAt, ackAt, completedAt, delayMin);
+          const vipLabel = isVipLike(r.vip_code) ? 'VIP' : 'Non-VIP';
+          bumpAcc(dimItemByHotel.vip, hotel, vipLabel, item, createdAt, ackAt, completedAt, delayMin);
+          const ontimeLabel = delayMin !== null && delayMin > 0 ? 'Delayed' : 'On Time';
+          bumpAcc(dimItemByHotel.ontime, hotel, ontimeLabel, item, createdAt, ackAt, completedAt, delayMin);
+          const escGroupLabel = r.escalation_group === null || String(r.escalation_group).trim() === '' ? 'None' : String(r.escalation_group);
+          bumpAcc(dimItemByHotel.escgroup, hotel, escGroupLabel, item, createdAt, ackAt, completedAt, delayMin);
+          if (createdAt && !Number.isNaN(createdAt.getTime())) {
+            bumpAcc(dimItemByHotel.hour, hotel, String(localHour(createdAt, orgTimezone)).padStart(2, '0'), item, createdAt, ackAt, completedAt, delayMin);
+          }
+          if (createdAt && !Number.isNaN(createdAt.getTime()) && completedAt && !Number.isNaN(completedAt.getTime()) && completedAt.getTime() >= createdAt.getTime()) {
+            const completionMin = (completedAt.getTime() - createdAt.getTime()) / 60_000;
+            bumpAcc(dimItemByHotel.compbkt, hotel, joDurBucket(completionMin), item, createdAt, ackAt, completedAt, delayMin);
+          }
+          if (delayMin !== null && delayMin > 0) {
+            bumpAcc(dimItemByHotel.delayeddept, hotel, dept, item, createdAt, ackAt, completedAt, delayMin);
+          }
+        }
+        const toStatsMap = (map: Record<string, Record<string, DeptItemAcc>>) => {
+          const statsMap: Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>> = {};
+          for (const [key, items] of Object.entries(map)) {
+            statsMap[key] = {};
+            for (const [item, acc] of Object.entries(items)) {
+              statsMap[key][item] = {
+                count: acc.count,
+                avgResponseMins: acc.responseCount > 0 ? Number((acc.responseSum / acc.responseCount).toFixed(1)) : 0,
+                avgCompletionMins: acc.completionCount > 0 ? Number((acc.completionSum / acc.completionCount).toFixed(1)) : 0,
+                delayRate: acc.count > 0 ? Number(((acc.delayedCount / acc.count) * 100).toFixed(1)) : 0,
+              };
+            }
+          }
+          return statsMap;
+        };
+        const toFlatStatsMap = (map: Record<string, DeptItemAcc>) => {
+          const statsMap: Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }> = {};
+          for (const [item, acc] of Object.entries(map)) {
+            statsMap[item] = {
+              count: acc.count,
+              avgResponseMins: acc.responseCount > 0 ? Number((acc.responseSum / acc.responseCount).toFixed(1)) : 0,
+              avgCompletionMins: acc.completionCount > 0 ? Number((acc.completionSum / acc.completionCount).toFixed(1)) : 0,
+              delayRate: acc.count > 0 ? Number(((acc.delayedCount / acc.count) * 100).toFixed(1)) : 0,
+            };
+          }
+          return statsMap;
+        };
+        for (const entry of chainEntries) {
+          entry.summary.jo_dept_item_stats_map = toStatsMap(deptItemByHotel[entry.hotel_code] ?? {});
+          entry.summary.jo_cat_item_stats_map = toStatsMap(catItemByHotel[entry.hotel_code] ?? {});
+          entry.summary.jo_item_stats_map = toFlatStatsMap(itemGlobalByHotel[entry.hotel_code] ?? {});
+          const dimStatsMap: Record<string, Record<string, Record<string, { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number }>>> = {};
+          for (const dim of JO_DIM_KEYS) {
+            dimStatsMap[dim] = toStatsMap(dimItemByHotel[dim][entry.hotel_code] ?? {});
+          }
+          entry.summary.jo_dim_item_stats_map = dimStatsMap;
+        }
+      }
     } else if (String(moduleCode ?? '').toLowerCase() === 'im') {
       type JoLiveRow = {
         hotel_code: string | null;

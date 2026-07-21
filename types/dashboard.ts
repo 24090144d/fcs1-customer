@@ -188,12 +188,18 @@ export interface HotelSummary {
   // avgDurationHours }. Computed live from raw im_records, not baked at upload time.
   im_cat_item_stats_map?:   Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>;
   // cim-16..28: generic dimension → dimension-value → incident item → { count, repeat,
-  // avgDurationHours }, one slice per dimension key (dept, vip, source, booking,
+  // avgDurationHours, closed }, one slice per dimension key (dept, vip, source, booking,
   // severity, hour, durbkt, profile, status, repeatbkt, month, day). Same repeat/
   // duration definitions as im_cat_item_stats_map, just grouped by a different
-  // first-level dimension instead of incident category. Computed live from raw
+  // first-level dimension instead of incident category; `closed` (status ===
+  // 'Completed' count, used by cim-01/02's Closing Rate series) added alongside.
+  // Computed live from raw im_records, not baked at upload time.
+  im_dim_item_stats_map?:   Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>>;
+  // im-13 (hotel scope): month → department → { count, repeat, avgDurationHours,
+  // closed }, one level shallower than im_dim_item_stats_map (no per-item
+  // breakdown — im-13's leaf is per-department). Computed live from raw
   // im_records, not baked at upload time.
-  im_dim_item_stats_map?:   Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>>;
+  im_month_dept_stats_map?: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>;
 }
 
 // One hotel entry used by DashboardClient for chain comparison charts

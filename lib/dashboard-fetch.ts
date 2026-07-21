@@ -325,6 +325,193 @@ function computeImHourMaps(rows: ImHourSourceRow[], tz: string): Partial<HotelSu
   };
 }
 
+type ImHotelDimSourceRow = {
+  department: string | null;
+  incident_item_name: string | null;
+  vip_code: string | null;
+  created_date: string | null;
+  incident_datetime: string | null;
+  room_no: string | null;
+  incident_status: string | null;
+  investigation_updated_on_1: string | null;
+  investigation_updated_on_2: string | null;
+  incident_category: string | null;
+  severity: string | null;
+  source_of_complaint: string | null;
+  booking_source: string | null;
+  profile_type: string | null;
+  guest_name: string | null;
+  created_by: string | null;
+};
+
+const IM_HOTEL_DIM_KEYS = ['dept', 'vip', 'category', 'severity', 'source', 'booking', 'durbkt', 'hour', 'month', 'profile', 'status', 'guestname', 'createdby', 'all'] as const;
+type ImHotelDimKey = typeof IM_HOTEL_DIM_KEYS[number];
+const IM_HOTEL_DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+function imHotelDurBucketLabel(hours: number): string {
+  if (hours < 1) return IM_HOTEL_DUR_BUCKETS[0];
+  if (hours < 2) return IM_HOTEL_DUR_BUCKETS[1];
+  if (hours < 4) return IM_HOTEL_DUR_BUCKETS[2];
+  if (hours < 8) return IM_HOTEL_DUR_BUCKETS[3];
+  if (hours < 24) return IM_HOTEL_DUR_BUCKETS[4];
+  return IM_HOTEL_DUR_BUCKETS[5];
+}
+
+// im-01/02/03/05/06/07/08/09/10/11/12/14 (hotel scope): dept/vip/category/
+// severity/source/booking/durbkt/hour/month slices of im_dim_item_stats_map,
+// same { count, repeat, avgDurationHours, closed } shape as the corp version in
+// the im-scoped block above, computed live from raw im_records for a single hotel.
+function computeImHotelDimStats(rows: ImHotelDimSourceRow[], tz: string): Record<ImHotelDimKey, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>> {
+  const counts: Record<ImHotelDimKey, Record<string, Record<string, number>>> = Object.fromEntries(IM_HOTEL_DIM_KEYS.map((k) => [k, {}])) as Record<ImHotelDimKey, Record<string, Record<string, number>>>;
+  const roomCounts: Record<ImHotelDimKey, Record<string, Record<string, Record<string, number>>>> = Object.fromEntries(IM_HOTEL_DIM_KEYS.map((k) => [k, {}])) as Record<ImHotelDimKey, Record<string, Record<string, Record<string, number>>>>;
+  const durations: Record<ImHotelDimKey, Record<string, Record<string, { sum: number; count: number }>>> = Object.fromEntries(IM_HOTEL_DIM_KEYS.map((k) => [k, {}])) as Record<ImHotelDimKey, Record<string, Record<string, { sum: number; count: number }>>>;
+  const closedCounts: Record<ImHotelDimKey, Record<string, Record<string, number>>> = Object.fromEntries(IM_HOTEL_DIM_KEYS.map((k) => [k, {}])) as Record<ImHotelDimKey, Record<string, Record<string, number>>>;
+
+  const add = (dim: ImHotelDimKey, dimValue: string, item: string, room: string, hours: number | null, isClosed: boolean) => {
+    if (!counts[dim][dimValue]) counts[dim][dimValue] = {};
+    counts[dim][dimValue][item] = (counts[dim][dimValue][item] ?? 0) + 1;
+    if (!roomCounts[dim][dimValue]) roomCounts[dim][dimValue] = {};
+    if (!roomCounts[dim][dimValue][item]) roomCounts[dim][dimValue][item] = {};
+    roomCounts[dim][dimValue][item][room] = (roomCounts[dim][dimValue][item][room] ?? 0) + 1;
+    if (hours !== null) {
+      if (!durations[dim][dimValue]) durations[dim][dimValue] = {};
+      if (!durations[dim][dimValue][item]) durations[dim][dimValue][item] = { sum: 0, count: 0 };
+      durations[dim][dimValue][item].sum += hours;
+      durations[dim][dimValue][item].count += 1;
+    }
+    if (isClosed) {
+      if (!closedCounts[dim][dimValue]) closedCounts[dim][dimValue] = {};
+      closedCounts[dim][dimValue][item] = (closedCounts[dim][dimValue][item] ?? 0) + 1;
+    }
+  };
+
+  for (const r of rows) {
+    const dept = r.department === null || r.department === undefined || String(r.department).trim() === '' ? 'Unknown Department' : String(r.department);
+    const item = r.incident_item_name === null || r.incident_item_name === undefined || String(r.incident_item_name).trim() === '' ? 'Unknown Item' : String(r.incident_item_name);
+    const room = r.room_no === null || r.room_no === undefined || String(r.room_no).trim() === '' ? 'Unknown Room' : String(r.room_no);
+    const vipLabel = isVipLike(r.vip_code) ? 'VIP' : 'Non-VIP';
+    const cat = r.incident_category === null || r.incident_category === undefined || String(r.incident_category).trim() === '' ? 'Uncategorized' : String(r.incident_category);
+    const sevLabel = r.severity === null || r.severity === undefined || String(r.severity).trim() === '' ? 'Unknown' : String(r.severity);
+    const srcLabel = r.source_of_complaint === null || r.source_of_complaint === undefined ? 'Unknown' : String(r.source_of_complaint);
+    const bookingLabel = r.booking_source === null || r.booking_source === undefined ? 'Unknown' : String(r.booking_source);
+    const statusLabel = r.incident_status === null || r.incident_status === undefined || String(r.incident_status).trim() === '' ? 'Unknown' : String(r.incident_status);
+    const isClosed = statusLabel === 'Completed';
+    const profileLabel = r.profile_type === null || r.profile_type === undefined || String(r.profile_type).trim() === '' ? 'Unknown' : String(r.profile_type);
+    const guestLabel = r.guest_name === null || r.guest_name === undefined || String(r.guest_name).trim() === '' ? 'Unknown Guest' : String(r.guest_name);
+    const createdByLabel = r.created_by === null || r.created_by === undefined || String(r.created_by).trim() === '' ? 'Unknown' : String(r.created_by);
+    const rawDate = r.incident_datetime ?? r.created_date;
+    const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+    let hours: number | null = null;
+    if (rawDate) {
+      const start = new Date(rawDate).getTime();
+      const h = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
+      if (Number.isFinite(h) && h >= 0 && h < 3650 * 24) hours = h;
+    }
+    add('dept', dept, item, room, hours, isClosed);
+    add('vip', vipLabel, item, room, hours, isClosed);
+    add('category', cat, item, room, hours, isClosed);
+    add('severity', sevLabel, item, room, hours, isClosed);
+    add('source', srcLabel, item, room, hours, isClosed);
+    add('booking', bookingLabel, item, room, hours, isClosed);
+    add('profile', profileLabel, item, room, hours, isClosed);
+    add('status', statusLabel, item, room, hours, isClosed);
+    add('guestname', guestLabel, item, room, hours, isClosed);
+    add('createdby', createdByLabel, item, room, hours, isClosed);
+    add('all', 'ALL', item, room, hours, isClosed);
+    if (hours !== null) add('durbkt', imHotelDurBucketLabel(hours), item, room, hours, isClosed);
+    const hourRawDate = r.created_date ?? r.incident_datetime;
+    if (hourRawDate) {
+      const hd = new Date(hourRawDate);
+      if (!Number.isNaN(hd.getTime())) add('hour', String(localHour(hd, tz)).padStart(2, '0'), item, room, hours, isClosed);
+    }
+    if (rawDate) {
+      const dateStr = new Date(rawDate).toISOString();
+      add('month', dateStr.slice(0, 7), item, room, hours, isClosed);
+    }
+  }
+
+  const buildDim = (dim: ImHotelDimKey) => {
+    const out: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>> = {};
+    for (const [dimValue, items] of Object.entries(counts[dim])) {
+      out[dimValue] = {};
+      for (const [item, count] of Object.entries(items)) {
+        const roomCountsForItem = Object.values(roomCounts[dim][dimValue]?.[item] ?? {});
+        const repeat = roomCountsForItem.reduce((s, c) => s + (c >= 2 ? c : 0), 0);
+        const dur = durations[dim][dimValue]?.[item];
+        out[dimValue][item] = {
+          count,
+          repeat,
+          avgDurationHours: dur && dur.count > 0 ? dur.sum / dur.count : 0,
+          closed: closedCounts[dim][dimValue]?.[item] ?? 0,
+        };
+      }
+    }
+    return out;
+  };
+
+  return Object.fromEntries(IM_HOTEL_DIM_KEYS.map((d) => [d, buildDim(d)])) as Record<ImHotelDimKey, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>>;
+}
+
+// im-13 (hotel scope): month → department → { count, repeat, avgDurationHours,
+// closed }, one level shallower than im_dim_item_stats_map (no per-item
+// breakdown — im-13's leaf is per-department, not per-item). "repeat" here is
+// same-room recurrence within that month+department combo, the closest
+// analogue of the room+item repeat definition used elsewhere at this
+// department-only granularity.
+function computeImMonthDeptStats(rows: ImHotelDimSourceRow[]): Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>> {
+  const counts: Record<string, Record<string, number>> = {};
+  const roomCounts: Record<string, Record<string, Record<string, number>>> = {};
+  const durations: Record<string, Record<string, { sum: number; count: number }>> = {};
+  const closedCounts: Record<string, Record<string, number>> = {};
+
+  for (const r of rows) {
+    const rawDate = r.incident_datetime ?? r.created_date;
+    if (!rawDate) continue;
+    const d = new Date(rawDate);
+    if (Number.isNaN(d.getTime())) continue;
+    const month = d.toISOString().slice(0, 7);
+    const dept = r.department === null || r.department === undefined || String(r.department).trim() === '' ? 'Unknown Department' : String(r.department);
+    const room = r.room_no === null || r.room_no === undefined || String(r.room_no).trim() === '' ? 'Unknown Room' : String(r.room_no);
+    const statusLabel = r.incident_status === null || r.incident_status === undefined || String(r.incident_status).trim() === '' ? 'Unknown' : String(r.incident_status);
+    const isClosed = statusLabel === 'Completed';
+    const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+    const h = endRaw ? (new Date(endRaw).getTime() - d.getTime()) / 3_600_000 : 48;
+    const hours = Number.isFinite(h) && h >= 0 && h < 3650 * 24 ? h : null;
+
+    if (!counts[month]) counts[month] = {};
+    counts[month][dept] = (counts[month][dept] ?? 0) + 1;
+    if (!roomCounts[month]) roomCounts[month] = {};
+    if (!roomCounts[month][dept]) roomCounts[month][dept] = {};
+    roomCounts[month][dept][room] = (roomCounts[month][dept][room] ?? 0) + 1;
+    if (hours !== null) {
+      if (!durations[month]) durations[month] = {};
+      if (!durations[month][dept]) durations[month][dept] = { sum: 0, count: 0 };
+      durations[month][dept].sum += hours;
+      durations[month][dept].count += 1;
+    }
+    if (isClosed) {
+      if (!closedCounts[month]) closedCounts[month] = {};
+      closedCounts[month][dept] = (closedCounts[month][dept] ?? 0) + 1;
+    }
+  }
+
+  const out: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>> = {};
+  for (const [month, depts] of Object.entries(counts)) {
+    out[month] = {};
+    for (const [dept, count] of Object.entries(depts)) {
+      const roomCountsForDept = Object.values(roomCounts[month]?.[dept] ?? {});
+      const repeat = roomCountsForDept.reduce((s, c) => s + (c >= 2 ? c : 0), 0);
+      const dur = durations[month]?.[dept];
+      out[month][dept] = {
+        count,
+        repeat,
+        avgDurationHours: dur && dur.count > 0 ? dur.sum / dur.count : 0,
+        closed: closedCounts[month]?.[dept] ?? 0,
+      };
+    }
+  }
+  return out;
+}
+
 function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_dashboard_json' | 'mo_dashboard_json' | 'co_dashboard_json' {
   const mod = String(moduleCode ?? '').toLowerCase();
   if (mod === 'jo') return 'jo_dashboard_json';
@@ -467,17 +654,19 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
     if (hotelCode) {
       const imResult = await supabase
         .from('im_records')
-        .select('department, incident_category, incident_item_name, vip_code, created_date, incident_datetime')
-        .eq('hotel_code', hotelUpper) as unknown as SbResult<ImHourSourceRow[]>;
+        .select('department, incident_category, incident_item_name, vip_code, created_date, incident_datetime, room_no, incident_status, investigation_updated_on_1, investigation_updated_on_2, severity, source_of_complaint, booking_source, profile_type, guest_name, created_by')
+        .eq('hotel_code', hotelUpper) as unknown as SbResult<(ImHourSourceRow & ImHotelDimSourceRow)[]>;
       const imRows = imResult.data ?? [];
       const hourMaps = imRows.length > 0 ? computeImHourMaps(imRows, timezone) : {};
+      const im_dim_item_stats_map = imRows.length > 0 ? computeImHotelDimStats(imRows, timezone) : undefined;
+      const im_month_dept_stats_map = imRows.length > 0 ? computeImMonthDeptStats(imRows) : undefined;
       return {
         ...data,
         meta: {
           ...data.meta,
           timezone,
         },
-        summary: { ...data.summary, ...hourMaps },
+        summary: { ...data.summary, ...hourMaps, ...(im_dim_item_stats_map ? { im_dim_item_stats_map } : {}), ...(im_month_dept_stats_map ? { im_month_dept_stats_map } : {}) },
       } as DashboardJson;
     }
     return {
@@ -940,11 +1129,13 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         // profile/status/repeatbkt/month/day). counts/rooms/durations mirror the
         // cat-item-* structures above, just keyed by an extra "dim" level so one loop
         // can feed every chart instead of duplicating the row scan per dimension.
-        const DIM_KEYS = ['dept', 'vip', 'source', 'booking', 'severity', 'hour', 'durbkt', 'profile', 'status', 'repeatbkt', 'month', 'day'] as const;
+        const DIM_KEYS = ['dept', 'vip', 'source', 'booking', 'severity', 'hour', 'durbkt', 'profile', 'status', 'repeatbkt', 'month', 'day', 'category'] as const;
         type DimKey = typeof DIM_KEYS[number];
         const dimCounts: Record<DimKey, Record<string, Record<string, Record<string, number>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, number>>>>;
         const dimRooms: Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>>;
         const dimDurations: Record<DimKey, Record<string, Record<string, Record<string, { sum: number; count: number }>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, { sum: number; count: number }>>>>;
+        // cim-01/02: closed (status === 'Completed') count per dim/item, same shape as dimDurations.
+        const dimClosed: Record<DimKey, Record<string, Record<string, Record<string, number>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, number>>>>;
         const DUR_BUCKETS_IM = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
         const durBucketLabel = (hours: number): string => {
           if (hours < 1) return DUR_BUCKETS_IM[0];
@@ -961,7 +1152,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           if (n <= 10) return '7-10';
           return '11+';
         };
-        const addDim = (dim: DimKey, hotel: string, dimValue: string, item: string, room: string, hours: number | null) => {
+        const addDim = (dim: DimKey, hotel: string, dimValue: string, item: string, room: string, hours: number | null, isClosed: boolean = false) => {
           const counts = dimCounts[dim];
           if (!counts[hotel]) counts[hotel] = {};
           if (!counts[hotel][dimValue]) counts[hotel][dimValue] = {};
@@ -978,6 +1169,12 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
             if (!durations[hotel][dimValue][item]) durations[hotel][dimValue][item] = { sum: 0, count: 0 };
             durations[hotel][dimValue][item].sum += hours;
             durations[hotel][dimValue][item].count += 1;
+          }
+          if (isClosed) {
+            const closed = dimClosed[dim];
+            if (!closed[hotel]) closed[hotel] = {};
+            if (!closed[hotel][dimValue]) closed[hotel][dimValue] = {};
+            closed[hotel][dimValue][item] = (closed[hotel][dimValue][item] ?? 0) + 1;
           }
         };
 
@@ -1073,26 +1270,28 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           const severityLabel = r.severity === null || r.severity === undefined || String(r.severity).trim() === '' ? 'Unknown' : String(r.severity);
           const profileLabel = r.profile_type === null || r.profile_type === undefined || String(r.profile_type).trim() === '' ? 'Unknown' : String(r.profile_type);
           const statusLabel = r.incident_status === null || r.incident_status === undefined || String(r.incident_status).trim() === '' ? 'Unknown' : String(r.incident_status);
-          addDim('dept', hotel, dept, item, room, hours);
-          addDim('vip', hotel, vipLabel, item, room, hours);
-          addDim('source', hotel, src, item, room, hours);
-          addDim('booking', hotel, booking, item, room, hours);
+          const isClosed = statusLabel === 'Completed';
+          addDim('dept', hotel, dept, item, room, hours, isClosed);
+          addDim('vip', hotel, vipLabel, item, room, hours, isClosed);
+          addDim('source', hotel, src, item, room, hours, isClosed);
+          addDim('category', hotel, cat, item, room, hours, isClosed);
+          addDim('booking', hotel, booking, item, room, hours, isClosed);
           addDim('severity', hotel, severityLabel, item, room, hours);
           addDim('profile', hotel, profileLabel, item, room, hours);
           addDim('status', hotel, statusLabel, item, room, hours);
           if (hourRawDate) {
             const d = new Date(hourRawDate);
-            if (!Number.isNaN(d.getTime())) addDim('hour', hotel, String(localHour(d, orgTimezone)).padStart(2, '0'), item, room, hours);
+            if (!Number.isNaN(d.getTime())) addDim('hour', hotel, String(localHour(d, orgTimezone)).padStart(2, '0'), item, room, hours, isClosed);
           }
-          if (hours !== null) addDim('durbkt', hotel, durBucketLabel(hours), item, room, hours);
+          if (hours !== null) addDim('durbkt', hotel, durBucketLabel(hours), item, room, hours, isClosed);
           if (rawDate) {
             // rawDate may arrive as a genuine Date object (not a string) depending
             // on the driver, so String(rawDate) would yield Date.toString() (e.g.
             // "Fri Jan 02 2026...") instead of an ISO date — always route through
             // Date + toISOString() first to guarantee a 'YYYY-MM-DD...' string.
             const dateStr = new Date(rawDate).toISOString();
-            addDim('month', hotel, dateStr.slice(0, 7), item, room, hours);
-            addDim('day', hotel, dateStr.slice(0, 10), item, room, hours);
+            addDim('month', hotel, dateStr.slice(0, 7), item, room, hours, isClosed);
+            addDim('day', hotel, dateStr.slice(0, 10), item, room, hours, isClosed);
           }
         }
 
@@ -1117,7 +1316,8 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
             const h = endRaw ? (new Date(endRaw).getTime() - start) / 3_600_000 : 48;
             if (Number.isFinite(h) && h >= 0 && h < 3650 * 24) hours = h;
           }
-          addDim('repeatbkt', hotel, repeatCountBucketLabel(comboTotal), item, room, hours);
+          const repeatbktStatusLabel = r.incident_status === null || r.incident_status === undefined || String(r.incident_status).trim() === '' ? 'Unknown' : String(r.incident_status);
+          addDim('repeatbkt', hotel, repeatCountBucketLabel(comboTotal), item, room, hours, repeatbktStatusLabel === 'Completed');
         }
 
         for (const entry of chainEntries) {
@@ -1161,12 +1361,16 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
 
           // cim-16..28: same { count, repeat, avgDurationHours } shape as
           // im_cat_item_stats_map above, one slice per generic dimension key.
-          const dimStatsMap: Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>> = {};
+          // cim-01/02 additionally read `closed` (status === 'Completed' count) for
+          // their leaf's Closing Rate (%) series — populated for every dim, though
+          // only dept/vip currently surface it in a chart.
+          const dimStatsMap: Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>> = {};
           for (const dim of DIM_KEYS) {
             const counts = dimCounts[dim][entry.hotel_code] ?? {};
             const rooms = dimRooms[dim][entry.hotel_code] ?? {};
             const durations = dimDurations[dim][entry.hotel_code] ?? {};
-            const dimMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>> = {};
+            const closedCounts = dimClosed[dim][entry.hotel_code] ?? {};
+            const dimMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>> = {};
             for (const [dimValue, items] of Object.entries(counts)) {
               dimMap[dimValue] = {};
               for (const [item, count] of Object.entries(items)) {
@@ -1177,6 +1381,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
                   count,
                   repeat,
                   avgDurationHours: dur && dur.count > 0 ? dur.sum / dur.count : 0,
+                  closed: closedCounts[dimValue]?.[item] ?? 0,
                 };
               }
             }

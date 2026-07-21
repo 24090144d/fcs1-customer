@@ -20,7 +20,7 @@ const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m =>
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-65']);
-const GAUGE_CHARTS = new Set(['im-67', 'im-68', 'im-69', 'im-09', 'im-10', 'im-35']);
+const GAUGE_CHARTS = new Set(['im-67', 'im-68', 'im-69']);
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14']);
 const CORP_IM_LONG_IDS = new Set(['cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20', 'cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26', 'cim-27', 'cim-28']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
@@ -32,10 +32,10 @@ const CORP_MO_CHART_DISPLAY_ORDER = ['cmo-01', 'cmo-02', 'cmo-03', 'cmo-04', 'cm
 // Membership is opt-in per chart id, moved in only when explicitly requested.
 const MO_LONG_CHART_IDS = new Set<string>(['mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18', 'cmo-13', 'cmo-14', 'cmo-15', 'cmo-16', 'cmo-17', 'cmo-18', 'cmo-19', 'cmo-20', 'cmo-21', 'cmo-22']);
 const JO_LONG_CHART_IDS = new Set<string>(['jo-23', 'jo-24', 'jo-25', 'jo-26', 'cjo-21', 'cjo-22', 'cjo-23', 'cjo-24', 'cjo-25', 'cjo-26', 'cjo-27', 'cjo-28', 'cjo-29', 'cjo-30']);
-const IM_LONG_CHART_IDS = new Set<string>(['im-41', 'im-42', 'im-43', 'im-44', 'im-45']);
+const IM_LONG_CHART_IDS = new Set<string>(['im-15', 'im-16', 'im-17', 'im-18', 'im-19', 'im-20', 'im-21', 'im-22', 'im-23', 'im-24', 'im-25', 'im-26', 'im-27', 'im-28']);
 // ⏰ 24-hour-of-day distribution charts — always full period (date filter ignored),
 // matching JO/MO's established behavior. Used only to control the FULL PERIOD badge.
-const IM_24H_CHART_IDS = new Set<string>(['im-03', 'im-04', 'im-44', 'im-45', 'cim-25', 'cim-26']);
+const IM_24H_CHART_IDS = new Set<string>(['cim-25', 'cim-26']);
 
 function splitLongCharts<T extends { id: string }>(charts: T[], longIds: Set<string>): { simple: T[]; long: T[] } {
   const simple: T[] = [];
@@ -46,20 +46,20 @@ function splitLongCharts<T extends { id: string }>(charts: T[], longIds: Set<str
   return { simple, long };
 }
 const CORP_IM_TOP_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
-  { code: 'cim-01', id: 'cim-01', title: 'Hotel Incident -> Top 10 Incident Item', note: 'Shows each hotel total then top 10 incident items for drilldown prioritization. Benchmark: Good when top 3 items <= 45% of hotel incidents; Bad when top 3 items > 60% (concentration risk).', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = TOP 10 COUNT(incident_case) GROUP BY incident_item_name per hotel' },
-  { code: 'cim-02', id: 'cim-02', title: 'Total Incident vs Status by Hotel', note: 'Compares hotel volume and status mix to detect closure imbalance. Benchmark: Good when Completed >= 95% and Pending <= 5%; Bad when Pending > 10%.', formula: 'COUNT(incident_case) GROUP BY hotel_code, incident_status' },
-  { code: 'cim-03', id: 'cim-03', title: 'VIP Closure Rate vs VIP Incident by Hotel', note: 'Dual-axis chart for premium guest risk and recovery effectiveness. Benchmark: Good VIP Closure >= 95%; Bad < 90%.', formula: 'VIP Incidents = COUNT(vip_code valid) GROUP BY hotel; VIP Closure % = VIP Completed / VIP Incidents * 100' },
-  { code: 'cim-04', id: 'cim-04', title: '⏰ Hotel -> Department -> Incident Category -> Incident Items', note: 'Drilldown from hotel totals to department, then incident category, then incident items for root-cause governance. Benchmark: Good when top category <= 20%; Bad when top category > 35%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel; Level 3 = COUNT(incident_case) GROUP BY incident_category per hotel+department; Level 4 = COUNT(incident_case) GROUP BY incident_item_name per hotel+department+category' },
+  { code: 'cim-01', id: 'cim-01', title: '🟢 Hotel → Department → Incident Dist', note: 'Drills from hotel into department, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel; Level 3 = rank-range bucket of incident items; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-02', id: 'cim-02', title: '🟢 Hotel → VIP/Non-VIP → Incident Dist', note: 'Drills from hotel into VIP vs Non-VIP guests, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY VIP/Non-VIP per hotel; Level 3 = rank-range bucket of incident items; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-03', id: 'cim-03', title: '🟢 Incident Metrics by Hotel', note: 'Total Incident, Average Duration, Repeat Rate, and Closing Rate together per hotel across all incidents. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Total Incident = COUNT(incident_case) GROUP BY hotel_code; Average Duration (h), Repeat Rate (%), Closing Rate (%) computed per hotel across all incidents' },
+  { code: 'cim-04', id: 'cim-04', title: '🟢 VIP Incident Metrics by Hotel', note: 'Total Incident, Average Duration, Repeat Rate, and Closing Rate together per hotel for VIP guests only. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Total Incident = COUNT(incident_case WHERE vip_code valid) GROUP BY hotel_code; Average Duration (h), Repeat Rate (%), Closing Rate (%) computed per hotel across VIP incidents only' },
   { code: 'cim-05', id: 'cim-05', title: 'Hotel Repeat Incident Rate -> Top Incident Item', note: 'Shows recurrence pressure by hotel to flag unresolved systemic issues; click a hotel to see its top incident items. Benchmark: Good <= 15%; Watch 15–25%; Bad > 25%.', formula: 'Level 1 = Repeat Rate % = repeat_count / total_cases * 100 per hotel; Level 2 = COUNT(incident_case) GROUP BY incident_item_name per hotel' },
   { code: 'cim-06', id: 'cim-06', title: 'Worldmap Incident by Hotel', note: 'Country-level map with hotel-level labels for cross-region executive visibility. Benchmark: Good when no single country exceeds 50% of chain incidents; Bad when one country > 70%.', formula: 'Country Value = SUM(total_cases) GROUP BY country_code; Label = CONCAT(hotel_code, incident_count) list per country' },
-  { code: 'cim-07', id: 'cim-07', title: 'Hotel -> Department', note: 'Hotel-to-department drilldown for operational ownership alignment. Benchmark: Good when no department exceeds 25% of hotel incidents; Bad > 40%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY department per hotel' },
-  { code: 'cim-08', id: 'cim-08', title: 'Hotel -> Source of Complaint', note: 'Hotel-to-source drilldown for channel quality control. Benchmark: Good when Unknown Source <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY source_of_complaint per hotel' },
-  { code: 'cim-09', id: 'cim-09', title: 'VIP vs Non-VIP by Hotel', note: 'Stacked comparison of VIP and non-VIP load by hotel. Benchmark: Good VIP Share <= 6%; Watch 6–10%; Bad > 10%.', formula: 'VIP = COUNT(vip_code valid); Non-VIP = total_cases - VIP; GROUP BY hotel_code' },
-  { code: 'cim-10', id: 'cim-10', title: 'Hotel -> Booking Source', note: 'Drilldown from hotel totals to booking source composition for commercial insights. Benchmark: Good when Unknown booking <= 5%; Bad > 15%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = COUNT(incident_case) GROUP BY booking_source per hotel' },
-  { code: 'cim-11', id: 'cim-11', title: 'Multi-Hotel Benchmark Scorecard', note: 'Executive matrix comparing risk, critical, VIP, SLA, and trend in one panel. Benchmark: Good risk score <= 60; Watch 60–100; Bad > 100.', formula: 'Risk Score = (Critical*5) + (High*3) + (VIP*4) + (SLA Breach*3) + (Open*2) + volume_adjust' },
-  { code: 'cim-12', id: 'cim-12', title: 'Hotel Risk Ranking', note: 'Ranks hotels by weighted risk for intervention priority. Benchmark: Good when high-risk hotel count reduces period-over-period; Bad when top hotel risk grows >10% WoW.', formula: 'Hotel Risk = Severity Score + (VIP*4) + (Open*2) + (SLA*3)' },
-  { code: 'cim-13', id: 'cim-13', title: 'Severity vs Volume Quadrant', note: 'Bubble quadrant for strategic risk classification (high volume + high severity = immediate focus). Benchmark: Good when no hotel in top-right high-risk quadrant; Bad when multiple hotels cluster there.', formula: 'X=COUNT(cases), Y=AVG(severity score), Bubble=VIP cases, Color=country/region' },
-  { code: 'cim-14', id: 'cim-14', title: 'Regional Risk Heatmap', note: 'Region matrix compares critical, VIP, SLA breach and trend intensity. Benchmark: Good when all risk cells trend down or stay green; Bad when >=2 metrics red in same region.', formula: 'Regional KPI = AVG(metric by hotel in region); Regional Risk = aggregate of weighted KPI intensities' },
+  { code: 'cim-07', id: 'cim-07', title: '🟢 Hotel → Department', note: 'Drills from hotel into department, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per department. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-department Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-08', id: 'cim-08', title: '🟢 Hotel → Source of Complaint', note: 'Drills from hotel into source of complaint, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per source. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-source Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-09', id: 'cim-09', title: '🟢 Hotel → VIP/Non-VIP', note: 'Drills from hotel into VIP vs Non-VIP guests, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-VIP/Non-VIP Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-10', id: 'cim-10', title: '🟢 Hotel → Booking Source', note: 'Drills from hotel into booking source, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per source. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-booking-source Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-11', id: 'cim-11', title: '🟢 Hotel → 24 Hour Distribution', note: 'Drills from hotel into hour of day, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per hour. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-hour (00-23) Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-12', id: 'cim-12', title: '🟢 Hotel → Duration Distribution', note: 'Drills from hotel into resolution-duration bucket, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per bucket. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-duration-bucket (< 1h..24h+) Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-13', id: 'cim-13', title: '🟢 Hotel → Category Dist → Category', note: 'Drills from hotel into a rank-grouped category range, down to individual incident categories, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = rank-range bucket of incident categories; Level 3 = per-category Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
+  { code: 'cim-14', id: 'cim-14', title: '🟢 Hotel → Monthly Trend', note: 'Drills from hotel into month, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together per month. Benchmark: Good when closing rate >= 95% and repeat rate <= 15%; Bad when closing rate < 80% or repeat rate > 30%.', formula: 'Level 1 = COUNT(incident_case) GROUP BY hotel_code; Level 2 = per-month Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)' },
 ];
 
 const CORP_IM_LONG_MAP: Array<{ code: string; id: string; title: string; note: string; formula: string }> = [
@@ -224,6 +224,8 @@ interface DeptScopedSummary {
   hour_category_item_map?: Record<string, Record<string, Record<string, number>>>;
   hour_dept_item_map?: Record<string, Record<string, Record<string, number>>>;
   raw_daily?: DailyBucket[];
+  im_dim_item_stats_map?: Record<string, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>>;
+  im_month_dept_stats_map?: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>;
 }
 
 function dateToWeekKey(dateStr: string): string {
@@ -543,6 +545,1090 @@ function buildImDimIncidentDrilldown(
     drilldown: { series: [...level2, ...level3] },
     tooltip: { shared: true },
   });
+}
+
+type ImDimStats = { count: number; repeat: number; avgDurationHours: number; closed: number };
+
+// cim-01/02: Hotel → [dimension value] → Incident Dist (rank-range bucket via
+// imRankDistBuckets) → Incident — 4-level DONUT drilldown (levels 1-3 pie/donut).
+// The leaf is a 4-series dual-axis combo: Total Incident column on the primary
+// axis, Average Duration (h) + Repeat Rate (%) + Closing Rate (%) splines on a
+// secondary axis, via a custom chart.events.drilldown handler. Mirrors
+// buildMoDonutDimDefectDrilldown's pie-rooted pattern, including its xAxis fix —
+// a chart that starts pure pie ignores a declared xAxis.type/categories until the
+// first cartesian series arrives via drilldown (Highcharts creates a default
+// LINEAR axis instead), and switching axis type AFTER series/points are added
+// doesn't retroactively convert already-plotted numeric x-positions back into
+// named categories — so the axis type+categories must be set immediately BEFORE
+// addSingleSeriesAsDrilldown.
+function buildImDonutDimIncidentDrilldown(
+  entries: ChainEntry[],
+  chartPrefix: string,
+  getDimMap: (e: ChainEntry) => Record<string, Record<string, ImDimStats>>,
+  chartType: 'pie' | 'column' = 'pie',
+): Highcharts.Options {
+  const isColumn = chartType === 'column';
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309', ORANGE = '#C2410C', PURPLE = '#7C3AED';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const dimMap = getDimMap(e) ?? {};
+    const dimCounts: Array<[string, number]> = Object.entries(dimMap)
+      .map(([dv, items]): [string, number] => [dv, Object.values(items).reduce((s, v) => s + v.count, 0)])
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    level2.push(isColumn ? {
+      id: `${chartPrefix}-dim:${hKey}`, type: 'column', name: `${e.hotel_code} Distribution`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: dimCounts.map(([dv, v]) => ({ name: dv, y: v, drilldown: `${chartPrefix}-item:${hKey}:${idPart(dv)}` })),
+    } as Highcharts.SeriesOptionsType : {
+      id: `${chartPrefix}-dim:${hKey}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} Distribution`,
+      data: dimCounts.map(([dv, v]) => ({ name: dv, y: v, drilldown: `${chartPrefix}-item:${hKey}:${idPart(dv)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const [dv] of dimCounts) {
+      const dvKey = idPart(dv);
+      const itemStats = dimMap[dv] ?? {};
+      const itemCounts: Array<[string, number]> = Object.entries(itemStats).map(([item, s]) => [item, s.count]);
+      const itemBuckets = imRankDistBuckets(itemCounts);
+      level3.push(isColumn ? {
+        id: `${chartPrefix}-item:${hKey}:${dvKey}`, type: 'column', name: `${e.hotel_code} — ${dv} — Incident Dist`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(ib.name)}` })),
+      } as Highcharts.SeriesOptionsType : {
+        id: `${chartPrefix}-item:${hKey}:${dvKey}`, type: 'pie', innerSize: '45%', name: `${e.hotel_code} — ${dv} — Incident Dist`,
+        data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(ib.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const itemBucket of itemBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hKey}:${dvKey}:${idPart(itemBucket.name)}`;
+        leafData[leafId] = itemBucket.keys
+          .map((item) => {
+            const s = itemStats[item];
+            const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
+            const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+            const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
+            return { name: item, count: s.count, avgDur, repeatRate, closingRate };
+          })
+          .sort((a, b) => b.count - a.count);
+      }
+    }
+  }
+
+  return {
+    chart: {
+      type: chartType,
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [(isColumn ? {
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `${chartPrefix}-dim:${idPart(e.hotel_code)}` })),
+      dataLabels: { enabled: true },
+    } : {
+      type: 'pie', innerSize: '45%', name: 'Incidents',
+      data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `${chartPrefix}-dim:${idPart(e.hotel_code)}` })),
+    })] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: isColumn ? { column: { dataLabels: { enabled: true } } } : undefined,
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  };
+}
+
+// Sums a nested dimValue → item → stats map (e.g. one slice of im_dim_item_stats_map)
+// down to a single hotel-level total. avgDurationHours is count-weighted across items
+// since each item's own avgDurationHours is already an average.
+function sumImDimStats(nested: Record<string, Record<string, ImDimStats>>): { count: number; repeat: number; closed: number; avgDurationHours: number } {
+  let count = 0, repeat = 0, closed = 0, durWeighted = 0;
+  for (const items of Object.values(nested)) {
+    for (const s of Object.values(items)) {
+      count += s.count;
+      repeat += s.repeat;
+      closed += s.closed;
+      durWeighted += s.avgDurationHours * s.count;
+    }
+  }
+  return { count, repeat, closed, avgDurationHours: count > 0 ? durWeighted / count : 0 };
+}
+
+// cim-03/cim-04: flat (no drilldown) 4-series dual-axis combo by Hotel — Total
+// Incident column on the primary axis, Average Duration (h) + Repeat Rate (%) +
+// Closing Rate (%) splines on a secondary axis. cim-03 aggregates all incidents
+// per hotel (via the 'dept' slice of im_dim_item_stats_map, which covers every
+// incident); cim-04 aggregates VIP-only incidents (via the 'vip' slice's 'VIP' key).
+function buildImHotelMetricsCombo(
+  entries: ChainEntry[],
+  getNestedMap: (e: ChainEntry) => Record<string, Record<string, ImDimStats>>,
+): Highcharts.Options {
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const codes = entries.map((e) => e.hotel_code);
+  const stats = entries.map((e) => sumImDimStats(getNestedMap(e) ?? {}));
+  return hcOpts({
+    chart: { type: 'column' },
+    xAxis: { categories: codes },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [
+      {
+        type: 'column', name: 'Total Incident', color: GREEN,
+        data: stats.map((s) => s.count),
+        dataLabels: { enabled: true },
+      },
+      {
+        type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+        lineWidth: 3, marker: { enabled: true, radius: 4 },
+        data: stats.map((s) => Number(s.avgDurationHours.toFixed(1))),
+        dataLabels: { enabled: true },
+      },
+      {
+        type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+        lineWidth: 3, marker: { enabled: true, radius: 4 },
+        data: stats.map((s) => (s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0)),
+        dataLabels: { enabled: true, format: '{point.y}%' },
+      },
+      {
+        type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+        lineWidth: 3, marker: { enabled: true, radius: 4 },
+        data: stats.map((s) => (s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0)),
+        dataLabels: { enabled: true, format: '{point.y}%' },
+      },
+    ] as unknown as Highcharts.SeriesOptionsType[],
+    tooltip: { shared: true },
+  });
+}
+
+// cim-07/08: Hotel → [dimension value] (2-level PIE drilldown — the dimension
+// value IS the leaf, no intermediate Incident Dist bucket). Level 1 is a
+// per-hotel pie; drilling into a hotel adds a 4-series dual-axis combo directly
+// (Total Incident column + Average Duration (h)/Repeat Rate (%)/Closing Rate (%)
+// splines), one point per dimension value (department for cim-07, source of
+// complaint for cim-08), via the same custom chart.events.drilldown +
+// addSingleSeriesAsDrilldown x4 + applyDrilldown() pattern used elsewhere.
+// drilldown.series is deliberately empty — with no registered series, every
+// point click falls through to the custom handler (there's nothing for the
+// drilldown module itself to match), so the leaf is built directly off Level 1.
+function buildImHotelDimMetricsCombo(
+  entries: ChainEntry[],
+  chartPrefix: string,
+  getDimMap: (e: ChainEntry) => Record<string, Record<string, ImDimStats>>,
+  order: 'count-desc' | 'natural-sort' | string[] = 'count-desc',
+  formatLabel?: (dv: string) => string,
+): Highcharts.Options {
+  const label = formatLabel ?? ((dv: string) => dv);
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const dimMap = getDimMap(e) ?? {};
+    const dimStats = Object.entries(dimMap)
+      .map(([dv, items]) => ({ dv, ...sumImDimStats({ [dv]: items }) }))
+      .filter((d) => d.count > 0);
+    const dimStatsMap = Object.fromEntries(dimStats.map((d) => [d.dv, d]));
+
+    let orderedDimValues: string[];
+    if (Array.isArray(order)) {
+      orderedDimValues = order.filter((dv) => dimStatsMap[dv]);
+    } else if (order === 'natural-sort') {
+      orderedDimValues = dimStats.map((d) => d.dv).sort();
+    } else {
+      orderedDimValues = [...dimStats].sort((a, b) => b.count - a.count).map((d) => d.dv);
+    }
+    const dimEntries = orderedDimValues.map((dv) => dimStatsMap[dv]);
+
+    leafData[`${chartPrefix}-leaf:${hKey}`] = dimEntries.map((d) => ({
+      name: label(d.dv),
+      count: d.count,
+      avgDur: Number(d.avgDurationHours.toFixed(1)),
+      repeatRate: d.count > 0 ? Number(((d.repeat / d.count) * 100).toFixed(1)) : 0,
+      closingRate: d.count > 0 ? Number(((d.closed / d.count) * 100).toFixed(1)) : 0,
+    }));
+  }
+
+  return {
+    chart: {
+      type: 'pie',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'pie', innerSize: '45%', name: 'Incidents',
+      data: entries.map((e) => ({ name: e.hotel_code, y: e.summary.total ?? 0, drilldown: `${chartPrefix}-leaf:${idPart(e.hotel_code)}` })),
+    }] as Highcharts.SeriesOptionsType[],
+    drilldown: { series: [] },
+    tooltip: { shared: true },
+  };
+}
+
+// cim-13: Hotel → Category Dist (rank-range bucket of categories, via
+// imRankDistBuckets) → Category — 3-level vertical-bar drilldown. Unlike
+// buildImDonutDimIncidentDrilldown (which buckets INCIDENT ITEMS within a
+// dimension value), this buckets CATEGORIES themselves directly off the hotel
+// root, and the leaf shows the 4-series combo per actual category name in the
+// selected bucket (not per incident item) — using the 'category' slice of
+// im_dim_item_stats_map aggregated across each category's items via
+// sumImDimStats. Same addSingleSeriesAsDrilldown x4 + applyDrilldown() leaf
+// pattern as the other combo builders.
+function buildImHotelCategoryDistDrilldown(entries: ChainEntry[], chartPrefix: string): Highcharts.Options {
+  const ORANGE = '#C2410C', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const e of entries) {
+    const hKey = idPart(e.hotel_code);
+    const catMap = e.summary.im_dim_item_stats_map?.category ?? {};
+    const catStats = Object.entries(catMap)
+      .map(([cat, items]) => ({ name: cat, ...sumImDimStats({ [cat]: items }) }))
+      .filter((c) => c.count > 0);
+    hotelTotals[e.hotel_code] = catStats.reduce((s, c) => s + c.count, 0);
+    const catStatsMap = Object.fromEntries(catStats.map((c) => [c.name, c]));
+    const catCounts: Array<[string, number]> = catStats.map((c) => [c.name, c.count]);
+    const buckets = imRankDistBuckets(catCounts);
+
+    level2.push({
+      id: `${chartPrefix}-dist:${hKey}`, type: 'column', name: `${e.hotel_code} Category Dist`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: buckets.map((b) => ({ name: b.name, y: b.total, drilldown: `${chartPrefix}-leaf:${hKey}:${idPart(b.name)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const b of buckets) {
+      const leafId = `${chartPrefix}-leaf:${hKey}:${idPart(b.name)}`;
+      leafData[leafId] = b.keys
+        .map((cat) => {
+          const c = catStatsMap[cat];
+          return {
+            name: cat,
+            count: c.count,
+            avgDur: Number(c.avgDurationHours.toFixed(1)),
+            repeatRate: c.count > 0 ? Number(((c.repeat / c.count) * 100).toFixed(1)) : 0,
+            closingRate: c.count > 0 ? Number(((c.closed / c.count) * 100).toFixed(1)) : 0,
+          };
+        })
+        .sort((a, b2) => b2.count - a.count);
+    }
+  }
+
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category', title: { text: 'Hotel' } },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: entries.map((e) => ({ name: e.hotel_code, y: hotelTotals[e.hotel_code] ?? 0, drilldown: `${chartPrefix}-dist:${idPart(e.hotel_code)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: level2 },
+    tooltip: { shared: true },
+  };
+}
+
+// im-01/im-02 (hotel scope): [dimension value] → Incident Dist (rank-range bucket
+// via imRankDistBuckets) → Incident — 3-level drilldown (no outer "Hotel" level,
+// already hotel-scoped). Mirrors buildImDonutDimIncidentDrilldown one level
+// shallower and reads dimMap directly instead of per-hotel getDimMap, since
+// there's only one hotel. Same 4-series dual-axis combo leaf (Total Incident
+// column + Average Duration (h)/Repeat Rate (%)/Closing Rate (%) splines) and
+// pie/column xAxis fix as the corp version.
+function buildImHotelScopedDimIncidentDrilldown(
+  dimMap: Record<string, Record<string, ImDimStats>>,
+  chartPrefix: string,
+  chartType: 'pie' | 'column' = 'column',
+  order: 'count-desc' | 'natural-sort' | string[] = 'count-desc',
+  formatLabel?: (dv: string) => string,
+): Highcharts.Options {
+  const label = formatLabel ?? ((dv: string) => dv);
+  const isColumn = chartType === 'column';
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309', ORANGE = '#C2410C';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const dimCountMap: Record<string, number> = {};
+  for (const [dv, items] of Object.entries(dimMap)) {
+    const total = Object.values(items).reduce((s, v) => s + v.count, 0);
+    if (total > 0) dimCountMap[dv] = total;
+  }
+  let orderedDimValues: string[];
+  if (Array.isArray(order)) {
+    orderedDimValues = order.filter((dv) => (dimCountMap[dv] ?? 0) > 0);
+  } else if (order === 'natural-sort') {
+    orderedDimValues = Object.keys(dimCountMap).sort();
+  } else {
+    orderedDimValues = Object.entries(dimCountMap).sort((a, b) => b[1] - a[1]).map(([dv]) => dv);
+  }
+  const dimCounts: Array<[string, number]> = orderedDimValues.map((dv) => [dv, dimCountMap[dv]]);
+
+  for (const [dv] of dimCounts) {
+    const dvKey = idPart(dv);
+    const itemStats = dimMap[dv] ?? {};
+    const itemCounts: Array<[string, number]> = Object.entries(itemStats).map(([item, s]) => [item, s.count]);
+    const itemBuckets = imRankDistBuckets(itemCounts);
+    level2.push(isColumn ? {
+      id: `${chartPrefix}-item:${dvKey}`, type: 'column', name: `${label(dv)} — Incident Dist`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${dvKey}:${idPart(ib.name)}` })),
+    } as Highcharts.SeriesOptionsType : {
+      id: `${chartPrefix}-item:${dvKey}`, type: 'pie', innerSize: '45%', name: `${label(dv)} — Incident Dist`,
+      data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${dvKey}:${idPart(ib.name)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const itemBucket of itemBuckets) {
+      const leafId = `${chartPrefix}-leaf:${dvKey}:${idPart(itemBucket.name)}`;
+      leafData[leafId] = itemBucket.keys
+        .map((item) => {
+          const s = itemStats[item];
+          const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
+          const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+          const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
+          return { name: item, count: s.count, avgDur, repeatRate, closingRate };
+        })
+        .sort((a, b) => b.count - a.count);
+    }
+  }
+
+  return {
+    chart: {
+      type: chartType,
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [(isColumn ? {
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: dimCounts.map(([dv, v]) => ({ name: label(dv), y: v, drilldown: `${chartPrefix}-item:${idPart(dv)}` })),
+      dataLabels: { enabled: true },
+    } : {
+      type: 'pie', innerSize: '45%', name: 'Incidents',
+      data: dimCounts.map(([dv, v]) => ({ name: label(dv), y: v, drilldown: `${chartPrefix}-item:${idPart(dv)}` })),
+    })] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: isColumn ? { column: { dataLabels: { enabled: true } } } : undefined,
+    drilldown: { series: level2 },
+    tooltip: { shared: true },
+  };
+}
+
+// im-01 (hotel scope): Department Dist (rank-range bucket of departments, via
+// imRankDistBuckets) → Department → Incident Dist (rank-range bucket of items
+// within that department) → Incident — 4-level vertical-bar drilldown. Unlike
+// the corp version (Hotel → Department → Incident Dist → Incident), a hotel
+// dashboard has no real "Hotel" root to use as Level 1, so departments
+// themselves are rank-bucketed to fill that slot instead. Same 4-series
+// dual-axis combo leaf (Total Incident column + Average Duration (h)/Repeat
+// Rate (%)/Closing Rate (%) splines) as the other combo builders.
+function buildImHotelDeptDistIncidentDrilldown(
+  dimMap: Record<string, Record<string, ImDimStats>>,
+  chartPrefix: string,
+  groupLabel: string = 'Departments',
+): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const deptStats = Object.entries(dimMap)
+    .map(([dept, items]) => ({ dept, ...sumImDimStats({ [dept]: items }) }))
+    .filter((d) => d.count > 0);
+  const deptStatsMap = Object.fromEntries(deptStats.map((d) => [d.dept, d]));
+  const deptCounts: Array<[string, number]> = deptStats.map((d) => [d.dept, d.count]);
+  const buckets = imRankDistBuckets(deptCounts);
+
+  for (const b of buckets) {
+    const bKey = idPart(b.name);
+    level2.push({
+      id: `${chartPrefix}-dept:${bKey}`, type: 'column', name: `${b.name} ${groupLabel}`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: b.keys.map((dept) => ({ name: dept, y: deptStatsMap[dept]?.count ?? 0, drilldown: `${chartPrefix}-item:${bKey}:${idPart(dept)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const dept of b.keys) {
+      const dKey = idPart(dept);
+      const itemStats = dimMap[dept] ?? {};
+      const itemCounts: Array<[string, number]> = Object.entries(itemStats).map(([item, s]) => [item, s.count]);
+      const itemBuckets = imRankDistBuckets(itemCounts);
+      level3.push({
+        id: `${chartPrefix}-item:${bKey}:${dKey}`, type: 'column', name: `${dept} — Incident Dist`, color: PURPLE,
+        dataLabels: { enabled: true },
+        data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${bKey}:${dKey}:${idPart(ib.name)}` })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const itemBucket of itemBuckets) {
+        const leafId = `${chartPrefix}-leaf:${bKey}:${dKey}:${idPart(itemBucket.name)}`;
+        leafData[leafId] = itemBucket.keys
+          .map((item) => {
+            const s = itemStats[item];
+            const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
+            const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+            const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
+            return { name: item, count: s.count, avgDur, repeatRate, closingRate };
+          })
+          .sort((a, b2) => b2.count - a.count);
+      }
+    }
+  }
+
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: buckets.map((b) => ({ name: b.name, y: b.total, drilldown: `${chartPrefix}-dept:${idPart(b.name)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  };
+}
+
+// im-05/im-06 (hotel scope): [Dimension] Dist (rank-range bucket of dimension
+// VALUES, via imRankDistBuckets) → [Dimension] — 2-level donut drilldown. The
+// dimension value itself (category/department name) is the leaf, matching
+// buildImHotelCategoryDistDrilldown's shape (used for corp cim-13) one level
+// shallower (no outer "Hotel" root). Leaf = 4-series dual-axis combo.
+function buildImHotelDistLeafDrilldown(
+  dimMap: Record<string, Record<string, ImDimStats>>,
+  chartPrefix: string,
+): Highcharts.Options {
+  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const dimStats = Object.entries(dimMap)
+    .map(([dv, items]) => ({ name: dv, ...sumImDimStats({ [dv]: items }) }))
+    .filter((d) => d.count > 0);
+  const dimStatsMap = Object.fromEntries(dimStats.map((d) => [d.name, d]));
+  const dimCounts: Array<[string, number]> = dimStats.map((d) => [d.name, d.count]);
+  const buckets = imRankDistBuckets(dimCounts);
+
+  for (const b of buckets) {
+    const leafId = `${chartPrefix}-leaf:${idPart(b.name)}`;
+    leafData[leafId] = b.keys
+      .map((dv) => {
+        const d = dimStatsMap[dv];
+        return {
+          name: dv,
+          count: d.count,
+          avgDur: Number(d.avgDurationHours.toFixed(1)),
+          repeatRate: d.count > 0 ? Number(((d.repeat / d.count) * 100).toFixed(1)) : 0,
+          closingRate: d.count > 0 ? Number(((d.closed / d.count) * 100).toFixed(1)) : 0,
+        };
+      })
+      .sort((a, b2) => b2.count - a.count);
+  }
+
+  return {
+    chart: {
+      type: 'pie',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'pie', innerSize: '45%', name: 'Incidents',
+      data: buckets.map((b) => ({ name: b.name, y: b.total, drilldown: `${chartPrefix}-leaf:${idPart(b.name)}` })),
+    }] as Highcharts.SeriesOptionsType[],
+    drilldown: { series: [] },
+    tooltip: { shared: true },
+  };
+}
+
+// im-26 (hotel scope): Guest Name Dist (rank-range bucket of guest names, via
+// imRankDistBuckets) → Guest Name → Incident — 3-level vertical-bar drilldown.
+// Guest name is high-cardinality like department/category, so it's rank-bucketed
+// at Level 1 same as buildImHotelDeptDistIncidentDrilldown, but the leaf is
+// reached directly from the individual guest-name bar (no intermediate
+// "Incident Dist" bucket layer — a single guest's own incident items are
+// listed as-is) since the title specifies only 3 levels, not 4. Same 4-series
+// dual-axis combo leaf as the other combo builders.
+function buildImHotelGuestDistIncidentDrilldown(
+  dimMap: Record<string, Record<string, ImDimStats>>,
+  chartPrefix: string,
+): Highcharts.Options {
+  const ORANGE = '#C2410C', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const guestStats = Object.entries(dimMap)
+    .map(([guest, items]) => ({ guest, ...sumImDimStats({ [guest]: items }) }))
+    .filter((g) => g.count > 0);
+  const guestStatsMap = Object.fromEntries(guestStats.map((g) => [g.guest, g]));
+  const guestCounts: Array<[string, number]> = guestStats.map((g) => [g.guest, g.count]);
+  const buckets = imRankDistBuckets(guestCounts);
+
+  for (const b of buckets) {
+    const bKey = idPart(b.name);
+    level2.push({
+      id: `${chartPrefix}-guest:${bKey}`, type: 'column', name: `${b.name} Guest Names`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: b.keys.map((guest) => ({ name: guest, y: guestStatsMap[guest]?.count ?? 0, drilldown: `${chartPrefix}-leaf:${idPart(guest)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const guest of b.keys) {
+      const leafId = `${chartPrefix}-leaf:${idPart(guest)}`;
+      const itemStats = dimMap[guest] ?? {};
+      leafData[leafId] = Object.entries(itemStats)
+        .map(([item, s]) => {
+          const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
+          const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+          const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
+          return { name: item, count: s.count, avgDur, repeatRate, closingRate };
+        })
+        .sort((a, b2) => b2.count - a.count);
+    }
+  }
+
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: buckets.map((b) => ({ name: b.name, y: b.total, drilldown: `${chartPrefix}-guest:${idPart(b.name)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: level2 },
+    tooltip: { shared: true },
+  };
+}
+
+// im-21 (hotel scope): Repeat Rate Dist → Incident Dist → Incident — 3-level
+// vertical-bar drilldown. Unlike the other dimension charts, "Repeat Rate Dist"
+// buckets items by a VALUE range of each item's own repeat rate (repeat/count),
+// not a per-incident dimension — mirrors cjo-30's "Delay Rate % Dist" pattern
+// one level shallower (no outer "Hotel" root, already hotel-scoped). Reads the
+// flat, hotel-wide 'all' slice of im_dim_item_stats_map (dimValue is always
+// the constant 'ALL'), so every incident counts exactly once regardless of
+// department/category/etc. Same 4-series dual-axis combo leaf as the other
+// combo builders.
+function buildImHotelRepeatRateDistDrilldown(
+  itemMap: Record<string, ImDimStats>,
+  chartPrefix: string,
+): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const RATE_BUCKETS = ['0%', '1-10%', '11-25%', '26-50%', '51-75%', '76-100%'];
+  const bucketLabel = (rate: number): string => {
+    if (rate <= 0) return '0%';
+    if (rate <= 10) return '1-10%';
+    if (rate <= 25) return '11-25%';
+    if (rate <= 50) return '26-50%';
+    if (rate <= 75) return '51-75%';
+    return '76-100%';
+  };
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const bucketed: Record<string, Array<[string, number]>> = {};
+  for (const [item, s] of Object.entries(itemMap)) {
+    if (s.count <= 0) continue;
+    const rate = (s.repeat / s.count) * 100;
+    const b = bucketLabel(rate);
+    if (!bucketed[b]) bucketed[b] = [];
+    bucketed[b].push([item, s.count]);
+  }
+
+  for (const b of RATE_BUCKETS) {
+    const itemCounts = bucketed[b];
+    if (!itemCounts || itemCounts.length === 0) continue;
+    const bKey = idPart(b);
+    const itemBuckets = imRankDistBuckets(itemCounts);
+    level2.push({
+      id: `${chartPrefix}-item:${bKey}`, type: 'column', name: `Repeat Rate ${b} — Incident Dist`, color: PURPLE,
+      dataLabels: { enabled: true },
+      data: itemBuckets.map((ib) => ({ name: ib.name, y: ib.total, drilldown: `${chartPrefix}-leaf:${bKey}:${idPart(ib.name)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const itemBucket of itemBuckets) {
+      const leafId = `${chartPrefix}-leaf:${bKey}:${idPart(itemBucket.name)}`;
+      leafData[leafId] = itemBucket.keys
+        .map((item) => {
+          const s = itemMap[item];
+          const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
+          const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+          const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
+          return { name: item, count: s.count, avgDur, repeatRate, closingRate };
+        })
+        .sort((a, b2) => b2.count - a.count);
+    }
+  }
+
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) {
+            chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
+          }
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: RATE_BUCKETS.filter((b) => (bucketed[b] ?? []).length > 0).map((b) => ({
+        name: b, y: (bucketed[b] ?? []).reduce((s, [, c]) => s + c, 0), drilldown: `${chartPrefix}-item:${idPart(b)}`,
+      })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: level2 },
+    tooltip: { shared: true },
+  };
+}
+
+// im-13 (hotel scope): Monthly Trend (chronological) → Department Dist
+// (rank-range bucket of departments within that month, via imRankDistBuckets) →
+// Department — 3-level vertical-bar drilldown. Leaf is per-department (no
+// per-item breakdown — im_month_dept_stats_map has no item level, unlike
+// im_dim_item_stats_map), 4-series dual-axis combo (Total Incident column +
+// Average Duration (h)/Repeat Rate (%)/Closing Rate (%) splines).
+function buildImHotelMonthDeptDistDrilldown(
+  monthDeptMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>,
+  chartPrefix: string,
+  formatLabel?: (dv: string) => string,
+): Highcharts.Options {
+  const label = formatLabel ?? ((dv: string) => dv);
+  const ORANGE = '#C2410C', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (v: string) => encodeURIComponent(v);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+
+  const months = Object.keys(monthDeptMap).sort();
+  const monthTotals: Record<string, number> = {};
+
+  for (const month of months) {
+    const deptMap = monthDeptMap[month] ?? {};
+    const mKey = idPart(month);
+    const deptCounts: Array<[string, number]> = Object.entries(deptMap)
+      .map(([dept, s]): [string, number] => [dept, s.count])
+      .filter(([, v]) => v > 0);
+    monthTotals[month] = deptCounts.reduce((s, [, v]) => s + v, 0);
+    const buckets = imRankDistBuckets(deptCounts);
+
+    level2.push({
+      id: `${chartPrefix}-dist:${mKey}`, type: 'column', name: `${label(month)} Department Dist`, color: ORANGE,
+      dataLabels: { enabled: true },
+      data: buckets.map((b) => ({ name: b.name, y: b.total, drilldown: `${chartPrefix}-leaf:${mKey}:${idPart(b.name)}` })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const b of buckets) {
+      const leafId = `${chartPrefix}-leaf:${mKey}:${idPart(b.name)}`;
+      leafData[leafId] = b.keys
+        .map((dept) => {
+          const s = deptMap[dept];
+          return {
+            name: dept,
+            count: s.count,
+            avgDur: Number(s.avgDurationHours.toFixed(1)),
+            repeatRate: s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0,
+            closingRate: s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0,
+          };
+        })
+        .sort((a, b2) => b2.count - a.count);
+    }
+  }
+
+  return {
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, ev: Highcharts.DrilldownEventObject) {
+          if (ev.seriesOptions) return;
+          const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(ev.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category' },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: months.map((month) => ({ name: label(month), y: monthTotals[month] ?? 0, drilldown: `${chartPrefix}-dist:${idPart(month)}` })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: level2 },
+    tooltip: { shared: true },
+  };
 }
 
 type JoItemStats = { count: number; avgResponseMins: number; avgCompletionMins: number; delayRate: number };
@@ -1163,47 +2249,32 @@ function buildFilteredOptions(def: ChartDef, fd: FilteredData): Highcharts.Optio
   }
 
   switch (def.id) {
-    case 'im-40': return hcOpts({
-      chart: { type: 'pie' },
-      series: [{ name: 'Status', type: 'pie', innerSize: '45%',
-        data: Object.entries(byStatus).sort(([,a],[,b])=>b-a).map(([name,y])=>({
-          name, y, drilldown: name, ...(STAT_COLORS[name]?{color:STAT_COLORS[name]}:{})
-        })) }],
-      // drilldown data is full-period from stored JSON — dept breakdown always reflects all records
-      drilldown: (def.options as Record<string, unknown>).drilldown,
-      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b><br>{point.y} ({point.percentage:.1f}%)' } } },
-      tooltip: { pointFormat: '<b>{point.name}</b>: {point.y} incidents ({point.percentage:.1f}%)' },
-    });
     case 'im-48': return hcOpts({
       chart: { type: 'pie' },
       series: [{ name: 'Incidents', type: 'pie', innerSize: '45%',
         data: Object.entries(byStatus).sort(([,a],[,b])=>b-a).map(([name,y])=>({ name,y,...(STAT_COLORS[name]?{color:STAT_COLORS[name]}:{}) })) }],
       plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b><br>{point.y} ({point.percentage:.1f}%)' } } },
     });
-    case 'im-41': case 'im-47': return hcOpts({
-      chart: { type: def.id === 'im-41' ? 'column' : 'pie' },
-      ...(def.id === 'im-41'
-        ? { xAxis: { categories: SEV_ORDER.filter(s => bySeverity[s]) }, series: [{ name: 'Count', data: SEV_ORDER.filter(s=>bySeverity[s]).map(s=>({ y: bySeverity[s]??0, color: SEV_COLORS[s as keyof typeof SEV_COLORS] })) }] }
-        : { series: [{ name:'Incidents', type:'pie', innerSize:'50%', data: SEV_ORDER.filter(s=>bySeverity[s]).map(s=>({ name:s, y:bySeverity[s], color:SEV_COLORS[s as keyof typeof SEV_COLORS] })) }] }),
-      plotOptions: def.id === 'im-41'
-        ? { column: { dataLabels: { enabled: true } } }
-        : { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
+    case 'im-47': return hcOpts({
+      chart: { type: 'pie' },
+      series: [{ name:'Incidents', type:'pie', innerSize:'50%', data: SEV_ORDER.filter(s=>bySeverity[s]).map(s=>({ name:s, y:bySeverity[s], color:SEV_COLORS[s as keyof typeof SEV_COLORS] })) }],
+      plotOptions: { pie: { dataLabels: { enabled: true, format: '<b>{point.name}</b>: {point.percentage:.1f}%' } } },
     });
-    case 'im-42': case 'im-49': return hcOpts({
-      chart: { type: def.id === 'im-42' ? 'areaspline' : 'spline' },
+    case 'im-49': return hcOpts({
+      chart: { type: 'spline' },
       xAxis: { categories: sortedDays, tickInterval: tickIv },
       yAxis: { title: { text: 'Incidents' }, min: 0 },
-      series: [{ name: 'Incidents', data: days.map(d => d.total), ...(def.id === 'im-42' ? { fillOpacity: 0.15 } : {}) }],
+      series: [{ name: 'Incidents', data: days.map(d => d.total) }],
       tooltip: { shared: true },
     });
-    case 'im-43': case 'im-46': {
-      const cats = topCats.slice(0, def.id === 'im-46' ? 999 : 24);
+    case 'im-46': {
+      const cats = topCats.slice(0, 999);
       return hcOpts({
-        chart: { type: def.id === 'im-43' ? 'bar' : 'column' },
+        chart: { type: 'column' },
         xAxis: { categories: cats },
         yAxis: { title: { text: 'Incidents' } },
         series: [{ name: 'Incidents', data: cats.map(c=>byCategory[c]??0) }],
-        plotOptions: { [def.id === 'im-43' ? 'bar' : 'column']: { dataLabels: { enabled: true } } },
+        plotOptions: { column: { dataLabels: { enabled: true } } },
       });
     }
     case 'im-50': return hcOpts({
@@ -1426,87 +2497,16 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     const open = e.summary.pending ?? 0;
     return (critical * 5) + (high * 3) + (vip * 4) + (sla * 3) + (open * 2) + total * 0.01;
   };
-  const statusKeys = Array.from(
-    new Set(entries.flatMap((e) => Object.keys(e.summary.status_map ?? {}))),
-  ).sort((a, b) => {
-    const rank = (k: string) => (k === 'Completed' ? 0 : k === 'Pending' ? 1 : k === 'Cancelled' ? 2 : 3);
-    return rank(a) - rank(b) || a.localeCompare(b);
-  });
-
   if (id === 'cim-02') {
-    return hcOpts({
-      chart: { type: 'bar' },
-      xAxis: { categories: codes },
-      yAxis: { min: 0, title: { text: 'Incidents' } },
-      plotOptions: { series: { stacking: 'normal' } },
-      series: statusKeys.map((status) => ({
-        type: 'bar',
-        name: status,
-        data: entries.map((e) => e.summary.status_map[status] ?? 0),
-      })),
-      tooltip: { shared: true },
-    });
+    return buildImDonutDimIncidentDrilldown(entries, 'cim02', (e) => e.summary.im_dim_item_stats_map?.vip ?? {});
   }
 
   if (id === 'cim-03') {
-    return hcOpts({
-      chart: { type: 'column' },
-      xAxis: { categories: codes },
-      yAxis: [
-        { title: { text: 'VIP Incidents' }, min: 0 },
-        { title: { text: 'VIP Closure Rate (%)' }, opposite: true, min: 0, max: 100 },
-      ],
-      series: [
-        {
-          type: 'column',
-          name: 'VIP Incidents',
-          data: entries.map((e) => e.summary.vip_total),
-          color: '#0E7470',
-        },
-        {
-          type: 'spline',
-          name: 'VIP Closure Rate %',
-          yAxis: 1,
-          data: entries.map((e) => {
-            const total = e.summary.vip_total;
-            return total > 0 ? r1((e.summary.vip_completed / total) * 100) : 0;
-          }),
-          color: '#C55A10',
-        },
-      ],
-      tooltip: { shared: true },
-    });
+    return buildImHotelMetricsCombo(entries, (e) => e.summary.im_dim_item_stats_map?.dept ?? {});
   }
 
   if (id === 'cim-09') {
-    return hcOpts({
-      chart: { type: 'column' },
-      xAxis: { categories: codes },
-      yAxis: { min: 0, max: 100, title: { text: 'Share (%)' } },
-      plotOptions: { series: { stacking: 'normal', dataLabels: { enabled: true, format: '{point.y:.1f}%' } } },
-      series: [
-        {
-          type: 'column',
-          name: 'VIP',
-          data: entries.map((e) => {
-            const total = e.summary.total || 0;
-            return total > 0 ? Math.round((e.summary.vip_total / total) * 1000) / 10 : 0;
-          }),
-          color: '#0E7470',
-        },
-        {
-          type: 'column',
-          name: 'Non-VIP',
-          data: entries.map((e) => {
-            const total = e.summary.total || 0;
-            const vip = e.summary.vip_total || 0;
-            return total > 0 ? Math.round(((total - vip) / total) * 1000) / 10 : 0;
-          }),
-          color: '#C55A10',
-        }
-      ],
-      tooltip: { shared: true, pointFormat: '<span style="color:{series.color}">{series.name}</span>: <b>{point.y:.1f}%</b><br/>' },
-    });
+    return buildImHotelDimMetricsCombo(entries, 'cim09', (e) => e.summary.im_dim_item_stats_map?.vip ?? {});
   }
 
   if (id === 'cim-05') {
@@ -1557,32 +2557,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
   if (id === 'cim-01') {
-    const topLevel = entries.map((e) => ({
-      name: e.hotel_code,
-      y: e.summary.total,
-      drilldown: e.hotel_code,
-    }));
-    const drillSeries = entries.map((e) => ({
-      id: e.hotel_code,
-      name: `${e.hotel_code} Top 10`,
-      type: 'pie' as const,
-      innerSize: '45%',
-      data: Object.entries(((e.summary as { item_map?: Record<string, number> }).item_map) ?? e.summary.category_map ?? {})
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 24)
-        .map(([name, y]) => ({ name, y })),
-    }));
-    return hcOpts({
-      chart: { type: 'pie' },
-      series: [{
-        name: 'Hotel Incidents',
-        type: 'pie',
-        innerSize: '45%',
-        data: topLevel,
-      }],
-      drilldown: { series: drillSeries },
-      tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
-    });
+    return buildImDonutDimIncidentDrilldown(entries, 'cim01', (e) => e.summary.im_dim_item_stats_map?.dept ?? {}, 'column');
   }
   if (id === 'cim-06') {
     if (!worldMapData) return undefined;
@@ -1656,220 +2631,38 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     });
   }
   if (id === 'cim-07') {
-    const topLevel = entries.map((e) => ({
-      name: e.hotel_code,
-      y: e.summary.total,
-      drilldown: `hotel:${e.hotel_code}`,
-    }));
-    const drillSeries: Array<{
-      id: string;
-      name: string;
-      type: 'column';
-      data: Array<{ name: string; y: number; drilldown?: string }>;
-    }> = [];
-
-    for (const e of entries) {
-      const hotel = e.hotel_code;
-      const topDepts = Object.entries(e.summary.dept_map ?? {})
-        .sort(([, a], [, b]) => b - a);
-
-      drillSeries.push({
-        id: `hotel:${hotel}`,
-        name: `${hotel} Departments`,
-        type: 'column',
-        data: topDepts.map(([dept, total]) => ({ name: dept, y: total })),
-      });
-    }
-
-    return hcOpts({
-      chart: { type: 'column' },
-      xAxis: { type: 'category' },
-      yAxis: { title: { text: 'Incidents' }, min: 0 },
-      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      series: [{
-        name: 'Incidents',
-        type: 'column',
-        data: topLevel,
-      }],
-      drilldown: { series: drillSeries },
-      tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
-    });
+    return buildImHotelDimMetricsCombo(entries, 'cim07', (e) => e.summary.im_dim_item_stats_map?.dept ?? {});
   }
   if (id === 'cim-08') {
-    const topHotels = entries
-      .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 24);
-    if (topHotels.length === 0) return undefined;
-
-    const drillSeries: Array<{
-      id: string;
-      name: string;
-      type: 'pie';
-      innerSize: string;
-      data: Array<{ name: string; y: number }>;
-    }> = topHotels.map((h) => {
-      const entry = entries.find((e) => e.hotel_code === h.hotel);
-      const rows = Object.entries(entry?.summary.source_map ?? {})
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 24)
-        .map(([name, y]) => ({ name, y }));
-      return {
-        id: `h:${h.hotel}`,
-        name: `${h.hotel} Source of Complaint`,
-        type: 'pie',
-        innerSize: '45%',
-        data: rows.length > 0 ? rows : [{ name: 'Unknown', y: 0 }],
-      };
-    });
-
-    return hcOpts({
-      chart: { type: 'pie' },
-      series: [{
-        name: 'Incidents',
-        type: 'pie',
-        innerSize: '45%',
-        data: topHotels.map((h) => ({ name: h.hotel, y: h.total, drilldown: `h:${h.hotel}` })),
-      }],
-      drilldown: {
-        series: drillSeries,
-      },
-      tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
-    });
+    return buildImHotelDimMetricsCombo(entries, 'cim08', (e) => e.summary.im_dim_item_stats_map?.source ?? {});
   }
   if (id === 'cim-10') {
-    const topHotels = entries
-      .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 24);
-    if (topHotels.length === 0) return undefined;
-    return hcOpts({
-      chart: { type: 'pie' },
-      series: [{
-        name: 'Incidents',
-        type: 'pie',
-        innerSize: '45%',
-        data: topHotels.map((h) => ({ name: h.hotel, y: h.total, drilldown: h.hotel })),
-      }],
-      drilldown: {
-        series: topHotels.map((h) => {
-          const entry = entries.find((e) => e.hotel_code === h.hotel);
-          const booking = (entry?.summary as { booking_map?: Record<string, number> } | undefined)?.booking_map ?? {};
-          const primaryRows = Object.entries(booking)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 24)
-            .map(([name, y]) => ({ name, y }));
-          const sourceFallback = Object.entries(entry?.summary.source_map ?? {})
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 24)
-            .map(([name, y]) => ({ name, y }));
-          const rows = primaryRows.length > 0
-            ? primaryRows
-            : (sourceFallback.length > 0 ? sourceFallback : [{ name: 'Unknown', y: entry?.summary.total ?? 0 }]);
-          return {
-            id: h.hotel,
-            name: `${h.hotel} Booking Source`,
-            type: 'pie' as const,
-            innerSize: '45%',
-            data: rows,
-          };
-        }),
-      },
-      tooltip: { pointFormat: '<b>{point.y}</b> incidents' },
-    });
+    return buildImHotelDimMetricsCombo(entries, 'cim10', (e) => e.summary.im_dim_item_stats_map?.booking ?? {});
   }
 
   if (id === 'cim-11') {
-    const metrics = ['Risk Score', 'Critical %', 'VIP Cases', 'SLA Breach %', 'Trend %'];
-    const byHotel = entries.map((e) => {
-      const t = Math.max(e.summary.total, 1);
-      const criticalPct = safePct(e.summary.severity_map?.Critical ?? 0, t);
-      const breach = Object.entries(e.summary.status_map ?? {})
-        .filter(([k]) => /(breach|overdue|timeout|late|sla)/i.test(k))
-        .reduce((s, [, v]) => s + v, 0);
-      const slaPct = safePct(breach, t);
-      const weeks = Object.entries(e.summary.week_map ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-      const half = Math.floor(weeks.length / 2);
-      const w1 = half > 0 ? weeks.slice(0, half).reduce((s, v) => s + v, 0) / half : 0;
-      const w2 = weeks.length - half > 0 ? weeks.slice(half).reduce((s, v) => s + v, 0) / (weeks.length - half) : 0;
-      const trend = w1 > 0 ? ((w2 - w1) / w1) * 100 : 0;
-      return [riskScore(e), criticalPct, e.summary.vip_total, slaPct, trend];
-    });
-    const data: Array<[number, number, number]> = [];
-    metrics.forEach((_, r) => entries.forEach((_, c) => data.push([c, r, byHotel[c][r] ?? 0])));
-    return hcOpts({
-      chart: { type: 'heatmap' },
-      xAxis: { categories: entries.map((e) => e.hotel_code) },
-      yAxis: { categories: metrics, title: { text: null }, reversed: true },
-      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#C55A10' },
-      series: [{ type: 'heatmap', name: 'Scorecard', data, dataLabels: { enabled: true, formatter: function (this: { point?: { value?: number } }) { return `${r1(Number(this.point?.value ?? 0))}`; } } }],
-      tooltip: { pointFormatter: function (this: Highcharts.Point) { const v = Number((this as unknown as { value?: number }).value ?? 0); return `<b>${metrics[this.y ?? 0]}</b><br/>${entries[this.x ?? 0].hotel_code}: ${r1(v)}`; } },
-    });
+    const HOUR_ORDER = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+    return buildImHotelDimMetricsCombo(entries, 'cim11', (e) => e.summary.im_dim_item_stats_map?.hour ?? {}, HOUR_ORDER);
   }
 
   if (id === 'cim-12') {
-    const ranked = [...entries]
-      .map((e) => ({ hotel: e.hotel_code, risk: riskScore(e) }))
-      .sort((a, b) => b.risk - a.risk);
-    return hcOpts({
-      chart: { type: 'bar' },
-      xAxis: { categories: ranked.map((r) => r.hotel) },
-      yAxis: { min: 0, title: { text: 'Risk Score' } },
-      series: [{ type: 'bar', name: 'Risk Score', data: ranked.map((r) => r.risk) }],
-      plotOptions: { bar: { dataLabels: { enabled: true, formatter: function (this: { point?: { y?: number } }) { return `${r1(Number(this.point?.y ?? 0))}`; } } } },
-    });
+    const DUR_ORDER = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+    return buildImHotelDimMetricsCombo(entries, 'cim12', (e) => e.summary.im_dim_item_stats_map?.durbkt ?? {}, DUR_ORDER);
   }
 
   if (id === 'cim-13') {
-    return hcOpts({
-      chart: { type: 'bubble' },
-      xAxis: { title: { text: 'Incident Volume' } },
-      yAxis: { title: { text: 'Avg Severity Score' }, min: 0, max: 4 },
-      series: [{
-        type: 'bubble',
-        name: 'Hotels',
-        data: entries.map((e) => ({
-          name: e.hotel_code,
-          x: e.summary.total,
-          y: e.summary.total > 0 ? e.summary.severity_sum / e.summary.total : 0,
-          z: e.summary.vip_total,
-          custom: { cc: e.country_code },
-        })),
-      }],
-      tooltip: { pointFormatter: function () { const p = this as unknown as { name?: string; x?: number; y?: number; z?: number; custom?: { cc?: string } }; return `<b>${p.name}</b> (${p.custom?.cc ?? '-'})<br/>Volume: ${p.x}<br/>Avg Severity: ${r2(Number(p.y ?? 0))}<br/>VIP: ${p.z}`; } },
-    });
+    return buildImHotelCategoryDistDrilldown(entries, 'cim13');
   }
 
   if (id === 'cim-14') {
-    const byRegion = new Map<string, { critical: number; vip: number; sla: number; trend: number; count: number }>();
-    for (const e of entries) {
-      const key = e.country_code || 'UNK';
-      const cur = byRegion.get(key) ?? { critical: 0, vip: 0, sla: 0, trend: 0, count: 0 };
-      const t = Math.max(e.summary.total, 1);
-      cur.critical += safePct(e.summary.severity_map?.Critical ?? 0, t);
-      cur.vip += safePct(e.summary.vip_total ?? 0, t);
-      const breach = Object.entries(e.summary.status_map ?? {}).filter(([k]) => /(breach|overdue|timeout|late|sla)/i.test(k)).reduce((s, [, v]) => s + v, 0);
-      cur.sla += safePct(breach, t);
-      const weeks = Object.values(e.summary.week_map ?? {});
-      cur.trend += weeks.length >= 2 ? weeks[weeks.length - 1] - weeks[0] : 0;
-      cur.count += 1;
-      byRegion.set(key, cur);
-    }
-    const regions = Array.from(byRegion.keys()).sort();
-    const metrics = ['Critical %', 'VIP %', 'SLA Breach %', 'Trend'];
-    const data: Array<[number, number, number]> = [];
-    regions.forEach((rg, x) => {
-      const v = byRegion.get(rg)!;
-      const arr = [v.critical / v.count, v.vip / v.count, v.sla / v.count, v.trend / v.count];
-      arr.forEach((n, y) => data.push([x, y, n]));
-    });
-    return hcOpts({
-      chart: { type: 'heatmap' },
-      xAxis: { categories: regions },
-      yAxis: { categories: metrics, title: { text: null }, reversed: true },
-      colorAxis: { min: 0, minColor: '#E6F4F1', maxColor: '#C55A10' },
-      series: [{ type: 'heatmap', name: 'Regional Risk', data, dataLabels: { enabled: true, formatter: function (this: { point?: { value?: number } }) { return `${r1(Number(this.point?.value ?? 0))}`; } } }],
-    });
+    // dimValue is stored as 'YYYY-MM'; displayed as 'Jan-26' style.
+    const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formatMonth = (dv: string) => {
+      const [y, m] = dv.split('-');
+      const mi = Number(m) - 1;
+      return mi >= 0 && mi < 12 ? `${MONTH_ABBR[mi]}-${y.slice(2)}` : dv;
+    };
+    return buildImHotelDimMetricsCombo(entries, 'cim14', (e) => e.summary.im_dim_item_stats_map?.month ?? {}, 'natural-sort', formatMonth);
   }
 
   if (id === 'cim-19') {
@@ -2050,70 +2843,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
   };
 
   if (id === 'cim-04') {
-    // 4-level vertical-bar drilldown: Hotel -> Department -> Incident Category -> Incident Items.
-    // No pre-computed dept+category+item breakdown exists in HotelSummary, so the leaf level
-    // falls back category_item_map[category] -> item_map, matching the established fallback
-    // pattern used by the hotel-level im-42 equivalent (deptCategoryItemRows above).
-    const hotelTop = entries
-      .map((e) => ({ hotel: e.hotel_code, total: e.summary.total }))
-      .sort((a, b) => b.total - a.total);
-    const drillSeries: Highcharts.SeriesOptionsType[] = [];
-    for (const h of hotelTop) {
-      const entry = entries.find((en) => en.hotel_code === h.hotel);
-      if (!entry) continue;
-      const hKey = idPart(h.hotel);
-      const deptTop = topMap(entry.summary.dept_map ?? {}, 50);
-      drillSeries.push({
-        type: 'column',
-        id: `cim04h:${hKey}`,
-        name: `${h.hotel} Departments`,
-        custom: { xAxisTitle: 'Department' },
-        color: '#C55A10',
-        dataLabels: { enabled: true, format: '{point.y}' },
-        data: deptTop.map(([dept, total]) => ({ name: dept, y: total, drilldown: `cim04d:${hKey}:${idPart(dept)}` })),
-      } as Highcharts.SeriesOptionsType);
-      for (const [dept] of deptTop) {
-        const dKey = idPart(dept);
-        const catTop = topMap(entry.summary.dept_category_map?.[dept] ?? {}, 50);
-        drillSeries.push({
-          type: 'column',
-          id: `cim04d:${hKey}:${dKey}`,
-          name: `${h.hotel} ${dept} Categories`,
-          custom: { xAxisTitle: 'Incident Category' },
-          color: '#B45309',
-          dataLabels: { enabled: true, format: '{point.y}' },
-          data: catTop.map(([cat, total]) => ({ name: cat, y: total, drilldown: `cim04c:${hKey}:${dKey}:${idPart(cat)}` })),
-        } as Highcharts.SeriesOptionsType);
-        for (const [cat] of catTop) {
-          const cKey = idPart(cat);
-          const exactItems = topMap(entry.summary.category_item_map?.[cat] ?? {}, 50);
-          const items = exactItems.length > 0 ? exactItems : topMap(entry.summary.item_map ?? {}, 50);
-          drillSeries.push({
-            type: 'column',
-            id: `cim04c:${hKey}:${dKey}:${cKey}`,
-            name: `${h.hotel} ${dept} ${cat} Items`,
-            custom: { xAxisTitle: 'Incident Items' },
-            color: '#1D4ED8',
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map(([item, total]) => ({ name: item, y: total })),
-          } as Highcharts.SeriesOptionsType);
-        }
-      }
-    }
-    return withDrilldownXAxisTitles(hcOpts({
-      chart: { type: 'column' },
-      xAxis: { type: 'category', title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Incidents' }, min: 0 },
-      plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      series: [{
-        type: 'column',
-        name: 'Incidents',
-        color: '#0F766E',
-        dataLabels: { enabled: true, format: '{point.y}' },
-        data: hotelTop.map((h) => ({ name: h.hotel, y: h.total, drilldown: `cim04h:${idPart(h.hotel)}` })),
-      }],
-      drilldown: { series: drillSeries },
-    }), 'Hotel');
+    return buildImHotelMetricsCombo(entries, (e) => ({ VIP: e.summary.im_dim_item_stats_map?.vip?.VIP ?? {} }));
   }
 
   if (id === 'cim-22') {
@@ -5342,19 +6072,6 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     const s = (deptScopedSummary ?? data.summary) as typeof data.summary;
     const fdAny = deptFd ?? fd;
     const days = fdAny?.days ?? deptScopedSummary?.raw_daily ?? data.raw_daily;
-    const dayCats = days.map((d) => d.date);
-    const dayVals = days.map((d) => d.total);
-    const sevMap = fdAny?.bySeverity ?? s.severity_map ?? {};
-    const catMap = fdAny?.byCategory ?? s.category_map ?? {};
-    const statusMap = fdAny?.byStatus ?? s.status_map ?? {};
-    const itemMap = s.item_map ?? {};
-    const roomMap = (s as { room_map?: Record<string, number> }).room_map
-      ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
-    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const topItems = Object.entries(itemMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const severityKeys = Object.keys(sevMap);
-    const statusKeys = Object.keys(statusMap);
     const weekMap = fdAny?.weekMap ?? s.week_map ?? {};
     const weekKeys = Object.keys(weekMap).sort();
     const criticalDaily = days.map((d) => (d.by_severity?.Critical ?? 0));
@@ -5370,153 +6087,16 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
 
     const findDef = (id: string) => [...localizedEac, ...localizedCharts].find((c) => c.id === id);
     return [
-      make('im-01', 'Daily Incident Trend', 'spline', 'Drilldown: Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: dayVals }] }, 'im-01'),
-      make('im-02', 'VIP -> Top 10 Incident Case', 'pie', 'Drilldown: VIP / Non-VIP → Top 10 Incident Case', 'Level 1 = COUNT by VIP segment; Level 2 = TOP 10 incident items by selected segment', {
-        series: [{
-          type: 'pie',
-          innerSize: '48%',
-          name: 'Incident Cases',
-          data: [
-            { name: 'VIP', y: Number(s.vip_total ?? 0), drilldown: 'imd08:VIP' },
-            { name: 'Non-VIP', y: Math.max(0, Number(s.total ?? 0) - Number(s.vip_total ?? 0)), drilldown: 'imd08:Non-VIP' },
-          ],
-        }],
-        drilldown: {
-          series: ['VIP', 'Non-VIP'].map((seg) => {
-            const rows = Object.entries(deptScopedSummary?.vip_item_map?.[seg] ?? {})
-              .sort(([, a], [, b]) => Number(b) - Number(a))
-              .slice(0, 24)
-              .map(([name, y]) => ({ name, y: Number(y) }));
-            return {
-              id: `imd08:${seg}`,
-              type: 'pie',
-              name: `${seg} Top 10 Incident Items`,
-              innerSize: '48%',
-              data: rows.length > 0 ? rows : [{ name: 'No Data', y: 0 }],
-            };
-          }),
-        },
-      }, 'imd08'),
-      make('im-03', '⏰ 24 Hour Distribution > Department > Incident Items', 'column', 'Drilldown: 24 Hour Distribution > Department > Incident Items', 'COUNT by hour, then department, then item', (() => {
-        const scopeSummary = (deptScopedSummary ?? data.summary) as DeptScopedSummary;
-        const topMap = (map: Record<string, number>, limit = 50) => Object.entries(map ?? {})
-          .sort(([, a], [, b]) => Number(b) - Number(a))
-          .slice(0, limit);
-        const hourDeptRows = (summary: DeptScopedSummary, hour: string) => topMap(summary.hour_dept_map?.[hour] ?? {}, 50);
-        const hourDeptItemRows = (summary: DeptScopedSummary, hour: string, dept: string) => topMap(summary.hour_dept_item_map?.[hour]?.[dept] ?? {}, 50);
-        return withDrilldownXAxisTitles(hcOpts({
-          xAxis: { type: 'category', title: { text: '24 Hour Distribution' } },
-          yAxis: { title: { text: 'Incidents' }, min: 0 },
-          plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-          series: [{
-            name: 'Incidents',
-            type: 'column',
-            data: Array.from({ length: 24 }, (_, hour) => ({ name: `${String(hour).padStart(2, '0')}:00`, y: Number(scopeSummary.hour_map?.[hour] ?? 0), drilldown: `im03h:${String(hour)}` })),
-          }],
-          drilldown: {
-            series: Array.from({ length: 24 }, (_, hour) => {
-              const h = String(hour);
-              const depts = hourDeptRows(scopeSummary, h);
-              return [
-                {
-                  id: `im03h:${h}`,
-                  type: 'column',
-                  name: `${String(hour).padStart(2, '0')}:00 Departments`,
-                  custom: { xAxisTitle: 'Department' },
-                  data: depts.map(([dept, y]) => ({ name: dept, y: Number(y), drilldown: `im03d:${h}:${encodeURIComponent(dept)}` })),
-                },
-                ...depts.map(([dept]) => ({
-                  id: `im03d:${h}:${encodeURIComponent(dept)}`,
-                  type: 'column',
-                  name: `${String(hour).padStart(2, '0')}:00 ${dept} Items`,
-                  custom: { xAxisTitle: 'Incident Items' },
-                  data: hourDeptItemRows(scopeSummary, h, dept).map(([name, y]) => ({ name, y })),
-                })),
-              ];
-            }).flat(),
-          },
-        }), '24 Hour Distribution') as unknown as Record<string, unknown>;
-      })(), 'im-45'),
-      make('im-04', 'VIP vs Non-VIP → 24-Hour Distribution', 'column', 'Click VIP or Non-VIP to drill into its 24-hour incident distribution.', 'COUNT by vip_flag; drilldown: COUNT by created_hour', (() => {
-        const vipHourRaw = data.summary.im_vip_hour_map ?? {};
-        const vipHourMap: Record<number, number> = Object.fromEntries(
-          Object.entries(vipHourRaw).map(([h, v]) => [Number(h), Number(v)]),
-        );
-        const vipTotal = data.summary.vip_total ?? 0;
-        const nonVipTotal = (s.total ?? 0) - vipTotal;
-
-        // Total hourly from summary (im_hour_map stored by finalize route)
-        const imHourRaw = data.summary.im_hour_map ?? {};
-        const totalHourArr = Array.from({ length: 24 }, (_, i) => Number(imHourRaw[String(i)] ?? 0));
-
-        const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-
-        return {
-          chart: { type: 'column' },
-          xAxis: { type: 'category' },
-          yAxis: { min: 0, title: { text: 'Incidents' } },
-          plotOptions: { column: { dataLabels: { enabled: true } } },
-          series: [{
-            type: 'column',
-            name: 'Count',
-            colorByPoint: true,
-            data: [
-              { name: 'VIP', y: vipTotal, drilldown: 'im04:VIP' },
-              { name: 'Non-VIP', y: nonVipTotal, drilldown: 'im04:NonVIP' },
-            ],
-            dataLabels: { enabled: true },
-          }],
-          drilldown: {
-            series: [
-              {
-                id: 'im04:VIP',
-                name: 'VIP — 24-Hour Distribution',
-                type: 'column',
-                colorByPoint: false,
-                color: '#f59e0b',
-                dataLabels: { enabled: true },
-                data: hours.map((label, h) => ({ name: label, y: vipHourMap[h] ?? 0 })),
-              },
-              {
-                id: 'im04:NonVIP',
-                name: 'Non-VIP — 24-Hour Distribution',
-                type: 'column',
-                colorByPoint: false,
-                color: '#6366f1',
-                dataLabels: { enabled: true },
-                data: hours.map((label, h) => ({
-                  name: label,
-                  y: Math.max(0, (totalHourArr[h] ?? 0) - (vipHourMap[h] ?? 0)),
-                })),
-              },
-            ],
-          },
-        } as Record<string, unknown>;
-      })(), 'imd27'),
-      make('im-05', 'Incident Resolution SLA Compliance', 'column', 'Drilldown: Department → Severity → Incident Case', 'SLA met / total', { xAxis: { categories: ['SLA Compliance'] }, yAxis: [{ max: 100, title: { text: '%' } }], series: [{ name: 'Compliance %', data: [s.total > 0 ? r1((s.completed / s.total) * 100) : 0] }] }, 'im-02'),
-      make('im-06', 'Severity Breakdown', 'column', 'Drilldown: Severity → Incident Status → Incident Case', 'COUNT by severity', { xAxis: { categories: severityKeys }, series: [{ name: 'Cases', data: severityKeys.map((k) => sevMap[k]) }] }, 'im-03'),
-      make('im-07', 'Incident Root Cause Flow', 'sankey', 'Drilldown: Department → Incident Category → Incident Item Name', 'Root-cause flow proxy', {
-        series: [{
-          type: 'sankey',
-          keys: ['from', 'to', 'weight'],
-          data: topItems.slice(0, 24).map(([item, v], i) => [Object.keys(s.dept_map ?? {})[i % Math.max(1, Object.keys(s.dept_map ?? {}).length)] ?? 'Dept', item, Number(v)]),
-        }],
-      }, 'imo49'),
-      make('im-08', 'Category vs Status', 'bar', 'Stacked comparison of status mix across top incident categories.', 'COUNT by incident_category and incident_status', {
-        xAxis: { categories: topCats.map(([k]) => k) },
-        plotOptions: { series: { stacking: 'normal' } },
-        series: statusKeys.map((status) => ({
-          type: 'bar',
-          name: status,
-          data: topCats.map(([cat]) => Number((deptScopedSummary?.category_status_map?.[cat] ?? {})[status] ?? 0)),
-        })),
-      }, 'imd21'),
-      make('im-09', 'Gauge — Closure Rate', 'pie', 'Drilldown: Incident Status → Incident Case', 'Completed Cases / Total Cases * 100', {
-        series: [{ type: 'pie', data: [{ y: s.total > 0 ? r1((s.completed / s.total) * 100) : 0 }] }],
-      }, 'im-29'),
-      make('im-10', 'Gauge — VIP Closure Rate', 'pie', 'Drilldown: VIP Code → Incident Status → Incident Case', 'VIP Completed Cases / VIP Cases * 100', {
-        series: [{ type: 'pie', data: [{ y: s.vip_total > 0 ? r1((s.vip_completed / s.vip_total) * 100) : 0 }] }],
-      }, 'him43'),
+      make('im-01', '🟣 Department Dist → Department → Incident Dist', 'column', 'Drilldown: Department Dist → Department → Incident Dist → Incident', 'Level 1 = rank-range bucket of departments; Level 2 = COUNT(incident_case) GROUP BY department; Level 3 = rank-range bucket of incident items; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDeptDistIncidentDrilldown(s.im_dim_item_stats_map?.dept ?? {}, 'im01') as unknown as Record<string, unknown>, 'im-01'),
+      make('im-02', '🟣 VIP/Non-VIP → Incident Dist', 'pie', 'Drilldown: VIP/Non-VIP → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY VIP/Non-VIP; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.vip ?? {}, 'im02', 'pie') as unknown as Record<string, unknown>, 'imd08'),
+      make('im-03', '🟣 Duration Distribution → Incident Dist', 'column', 'Drilldown: Duration Distribution → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY duration bucket (< 1h..24h+); Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.durbkt ?? {}, 'im03', 'column') as unknown as Record<string, unknown>, 'im-45'),
+      make('im-04', '🟣 Source of Complaint → Incident Dist', 'pie', 'Drilldown: Source of Complaint → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY source_of_complaint; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.source ?? {}, 'im04', 'pie') as unknown as Record<string, unknown>, 'imd27'),
+      make('im-05', '🟣 Category Dist → Category', 'pie', 'Drilldown: Category Dist → Category', 'Level 1 = rank-range bucket of incident categories; Level 2 = per-category Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDistLeafDrilldown(s.im_dim_item_stats_map?.category ?? {}, 'im05') as unknown as Record<string, unknown>, 'im-02'),
+      make('im-06', '🟣 Department Dist → Department', 'pie', 'Drilldown: Department Dist → Department', 'Level 1 = rank-range bucket of departments; Level 2 = per-department Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDistLeafDrilldown(s.im_dim_item_stats_map?.dept ?? {}, 'im06') as unknown as Record<string, unknown>, 'im-03'),
+      make('im-07', '🟣 Severity → Incident Dist', 'pie', 'Drilldown: Severity → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY severity; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.severity ?? {}, 'im07', 'pie') as unknown as Record<string, unknown>, 'imo49'),
+      make('im-08', '🟣 Source of Complaint → Incident Dist', 'pie', 'Drilldown: Source of Complaint → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY source_of_complaint; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.source ?? {}, 'im08', 'pie') as unknown as Record<string, unknown>, 'imd21'),
+      make('im-09', '🟣 VIP/Non-VIP → Incident Dist', 'pie', 'Drilldown: VIP/Non-VIP → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY VIP/Non-VIP; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.vip ?? {}, 'im09', 'pie') as unknown as Record<string, unknown>, 'im-29'),
+      make('im-10', '🟣 Booking Source → Incident Dist', 'pie', 'Drilldown: Booking Source → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY booking_source; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.booking ?? {}, 'im10', 'pie') as unknown as Record<string, unknown>, 'him43'),
     ];
   }, [isCorp, isJo, data.summary, data.raw_daily, data.charts, fd, deptFd, deptScopedSummary, localizedCharts, localizedEac, t]);
 
@@ -5556,30 +6136,12 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   const imHotelOverTimeCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
     const s = (deptScopedSummary ?? data.summary) as typeof data.summary;
-    const activeFd = deptFd ?? fd;
-    const days = activeFd?.days ?? deptScopedSummary?.raw_daily ?? data.raw_daily;
-    const dayCats = days.map((d) => d.date);
-    const weeklyMap = activeFd?.weekMap ?? s.week_map ?? {};
-    const weekCats = Object.keys(weeklyMap).sort();
-    const monthlyMap: Record<string, number> = {};
-    const dowMap: Record<string, number> = {};
-    const order = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    days.forEach((d) => {
-      const m = d.date.slice(0, 7);
-      monthlyMap[m] = (monthlyMap[m] ?? 0) + d.total;
-      const wd = new Date(d.date).getDay();
-      const k = order[wd];
-      dowMap[k] = (dowMap[k] ?? 0) + d.total;
-    });
-    const monthCats = Object.keys(monthlyMap).sort();
-    const dowCats = order.filter((k) => dowMap[k] !== undefined);
-    const avgResponse = Number((kpis.find((k) => k.id === 'kpi_09')?.value ?? 0) || 0);
-    const forecast = dayCats.map((_, i) => {
-      const start = Math.max(0, i - 6);
-      const arr = days.slice(start, i + 1).map((d) => d.total);
-      const avg = arr.reduce((x, y) => x + y, 0) / Math.max(1, arr.length);
-      return r1(avg);
-    });
+    const formatMonth = (dv: string) => {
+      const [y, m] = dv.split('-');
+      const mi = Number(m) - 1;
+      const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return mi >= 0 && mi < 12 ? `${MONTH_ABBR[mi]}-${y.slice(2)}` : dv;
+    };
     const make = (id: string, title: string, type: string, note: string, formula: string, options: Record<string, unknown>, _legacyKey?: string): ChartDef => ({
       id,
       title: t(`chart_titles_im.${id}`, title),
@@ -5589,61 +6151,20 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       options: { chart: { type }, ...options },
     });
     return [
-      make('im-11', 'Daily Incident Volume', 'areaspline', 'Drilldown: Created Date → Department → Incident Case', 'COUNT by DATE(created_date)', { xAxis: { categories: dayCats }, series: [{ name: 'Incidents', data: days.map((d) => d.total) }] }, 'imt11'),
-      make('im-12', 'Weekly Incident Volume', 'column', 'Drilldown: Week → Department → Incident Case', 'COUNT by ISO week', { xAxis: { categories: weekCats }, series: [{ name: 'Incidents', data: weekCats.map((w) => weeklyMap[w] ?? 0) }] }, 'imt23'),
-      make('im-13', 'Severity Weighted Incident Score', 'spline', 'Drilldown: Severity → Department → Incident Case', '4*Critical + 3*High + 2*Medium + 1*Low by date', { xAxis: { categories: dayCats }, series: [{ name: 'Weighted Score', data: days.map((d) => ((d.by_severity?.Critical ?? 0) * 4) + ((d.by_severity?.High ?? 0) * 3) + ((d.by_severity?.Medium ?? 0) * 2) + ((d.by_severity?.Low ?? 0))) }] }, 'imt32'),
-      make('im-14', 'Monthly Incident Volume', 'column', 'Drilldown: Month → Department → Incident Case', 'COUNT by month', { xAxis: { categories: monthCats }, series: [{ name: 'Incidents', data: monthCats.map((m) => monthlyMap[m] ?? 0) }] }, 'imt37'),
-      make('im-15', 'Incidents by Day of Week', 'column', 'Drilldown: Day of Week → Department → Incident Case', 'COUNT by day of week', { xAxis: { categories: dowCats }, series: [{ name: 'Incidents', data: dowCats.map((d) => dowMap[d] ?? 0) }] }, 'imt39'),
-      make('im-16', 'Incident Forecast Prediction', 'spline', 'Drilldown: Forecast Date → Incident Category', '7-day moving average forecast', { xAxis: { categories: dayCats }, series: [{ name: 'Forecast', data: forecast }] }, 'imt48'),
+      make('im-11', '🟣 24 Hour Distribution → Incident Dist', 'column', 'Drilldown: 24 Hour Distribution → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY hour (00-23); Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.hour ?? {}, 'im11', 'column', Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))) as unknown as Record<string, unknown>, 'imt11'),
+      make('im-12', '🟣 Duration Distribution → Incident Dist', 'column', 'Drilldown: Duration Distribution → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY duration bucket (< 1h..24h+); Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.durbkt ?? {}, 'im12', 'column', ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+']) as unknown as Record<string, unknown>, 'imt23'),
+      make('im-13', '🟣 Monthly Trend → Department Dist', 'column', 'Drilldown: Monthly Trend → Department Dist → Department', 'Level 1 = COUNT(incident_case) GROUP BY month; Level 2 = rank-range bucket of departments within that month; Level 3 = per-department Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelMonthDeptDistDrilldown(s.im_month_dept_stats_map ?? {}, 'im13', formatMonth) as unknown as Record<string, unknown>, 'imt32'),
+      make('im-14', '🟣 Monthly Trend → Incident Dist', 'column', 'Drilldown: Monthly Trend → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY month; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.month ?? {}, 'im14', 'column', 'natural-sort', formatMonth) as unknown as Record<string, unknown>, 'imt37'),
+      make('im-15', '🟣 Category Dist → Category → Incident Dist', 'column', 'Drilldown: Category Dist → Category → Incident Dist → Incident', 'Level 1 = rank-range bucket of incident categories; Level 2 = per-category Total Incident; Level 3 = rank-range bucket of incident items within that category; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDeptDistIncidentDrilldown(s.im_dim_item_stats_map?.category ?? {}, 'im15', 'Categories') as unknown as Record<string, unknown>, 'imt39'),
+      make('im-16', '🟣 Department Dist → Department → Incident Dist', 'column', 'Drilldown: Department Dist → Department → Incident Dist → Incident', 'Level 1 = rank-range bucket of departments; Level 2 = per-department Total Incident; Level 3 = rank-range bucket of incident items within that department; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDeptDistIncidentDrilldown(s.im_dim_item_stats_map?.dept ?? {}, 'im16') as unknown as Record<string, unknown>, 'imt48'),
     ];
-  }, [isCorp, isJo, data.summary, data.raw_daily, fd, deptFd, deptScopedSummary, kpis, t]);
+  }, [isCorp, isJo, data.summary, deptScopedSummary, t]);
 
   const imHotelDrilldownCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
     const s = (deptScopedSummary ?? data.summary) as typeof data.summary;
-    const scopeSummary = (deptScopedSummary ?? data.summary) as DeptScopedSummary;
-    const fdAny = deptFd ?? fd;
-    const catMap = fdAny?.byCategory ?? s.category_map ?? {};
-    const sevMap = fdAny?.bySeverity ?? s.severity_map ?? {};
-    const statusMap = fdAny?.byStatus ?? s.status_map ?? {};
-    const topCats = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const topItems = Object.entries((deptScopedSummary?.item_map ?? s.item_map) ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const roomMap = deptScopedSummary?.room_map ?? Object.fromEntries(Object.entries((data.charts.find(c => c.id === 'im-53')?.options as { series?: Array<{ data?: Array<{ name?: string; y?: number }> }> })?.series?.[0]?.data?.map((p) => [String(p.name), Number(p.y ?? 0)]) ?? []));
-    const topRooms = Object.entries(roomMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const severityKeys = Object.keys(sevMap);
-    const statusKeys = Object.keys(statusMap);
-    const categoryItemMap = deptScopedSummary?.category_item_map ?? {};
-    const itemLocationMap = deptScopedSummary?.item_location_map ?? {};
-    const roomItemMap = deptScopedSummary?.room_item_map ?? {};
-    const statusDeptMap = deptScopedSummary?.status_dept_map ?? {};
-    const sourceDeptMap = deptScopedSummary?.source_dept_map ?? {};
-    const severityCategoryMap = deptScopedSummary?.severity_category_map ?? {};
-    const categoryStatusMap = deptScopedSummary?.category_status_map ?? {};
-    const vipCategoryMap = deptScopedSummary?.vip_category_map ?? {};
-    const topMap = (map: Record<string, number>, limit = 50) => Object.entries(map ?? {})
-      .sort(([, a], [, b]) => Number(b) - Number(a))
-      .slice(0, limit);
-    const idPart = (value: string) => encodeURIComponent(value);
-    const deptKeys = Object.keys(s.dept_map ?? {});
-    const categoryItemRows = (summary: DeptScopedSummary, category: string) => {
-      const exactRows = topMap(summary.category_item_map?.[category] ?? {}, 50);
-      return exactRows.length > 0 ? exactRows : topMap(summary.item_map ?? {}, 50);
-    };
-    const deptCategoryItemRows = (summary: DeptScopedSummary, dept: string, category: string) => {
-      const exactRows = topMap(summary.dept_category_item_map?.[dept]?.[category] ?? {}, 50);
-      if (exactRows.length > 0) return exactRows;
-      const catRows = topMap(summary.category_item_map?.[category] ?? {}, 50);
-      return catRows.length > 0 ? catRows : topMap(summary.item_map ?? {}, 50);
-    };
-    const categoryDurationRows = (summary: DeptScopedSummary, category: string) => topMap(summary.category_item_duration_map?.[category] ?? {}, 50);
-    const hourCategoryRows = (summary: DeptScopedSummary, hour: string) => topMap(summary.hour_category_map?.[hour] ?? {}, 50);
-    const hourDeptRows = (summary: DeptScopedSummary, hour: string) => topMap(summary.hour_dept_map?.[hour] ?? {}, 50);
-    const hourCategoryItemRows = (summary: DeptScopedSummary, hour: string, category: string) => topMap(summary.hour_category_item_map?.[hour]?.[category] ?? {}, 50);
-    const hourDeptItemRows = (summary: DeptScopedSummary, hour: string, dept: string) => topMap(summary.hour_dept_item_map?.[hour]?.[dept] ?? {}, 50);
-    const longOpts = (options: Record<string, unknown>, rootTitle: string) =>
-      withDrilldownXAxisTitles(hcOpts(options), rootTitle) as unknown as Record<string, unknown>;
-    const topCatsLong = Object.entries(catMap).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 50);
-    const deptKeysLong = Object.entries(s.dept_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 50).map(([dept]) => dept);
+    const HOUR_ORDER = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
+    const DUR_ORDER = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
     const make = (id: string, title: string, type: string, note: string, formula: string, options: Record<string, unknown>, _legacyKey?: string): ChartDef => ({
       id,
       title: t(`chart_titles_im.${id}`, title),
@@ -5653,396 +6174,28 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       options: { chart: { type }, ...options },
     });
     return [
-      make('im-17', 'Closure Rate by Category', 'column', 'Drilldown: Incident Category → Incident Status → Incident Case', 'Completed / total by category', {
-        xAxis: { type: 'category' },
-        yAxis: { max: 100, title: { text: 'Closure %' } },
-        series: [{
-          name: 'Closure %',
-          type: 'column',
-          data: topCats.map(([cat]) => {
-            const sm = categoryStatusMap[cat] ?? {};
-            const totalCat = Object.values(sm).reduce((sum, v) => sum + Number(v), 0);
-            const completedCat = Object.entries(sm).reduce((sum, [k, v]) => sum + (/completed|closed/i.test(k) ? Number(v) : 0), 0);
-            return { name: cat, y: totalCat > 0 ? r1((completedCat / totalCat) * 100) : 0, drilldown: `imd07:${cat}` };
-          }),
-        }],
-        drilldown: {
-          series: topCats.map(([cat]) => {
-            const sm = categoryStatusMap[cat] ?? {};
-            return {
-              id: `imd07:${cat}`,
-              type: 'column',
-              name: `${cat} Status`,
-              data: Object.entries(sm).sort(([, a], [, b]) => Number(b) - Number(a)).map(([k, v]) => [k, Number(v)]),
-            };
-          }),
-        },
-      }, 'imd07'),
-      make('im-18', 'Top Incident Categories', 'bar', 'Drilldown: Incident Category → Incident Item Name → Incident Case', 'TOP categories by count', {
-        xAxis: { type: 'category' },
-        series: [{
-          name: 'Incidents',
-          type: 'bar',
-          data: topCats.map(([cat, v]) => ({ name: cat, y: Number(v), drilldown: `imd09:${cat}` })),
-        }],
-        drilldown: {
-          series: topCats.map(([cat]) => ({
-            id: `imd09:${cat}`,
-            type: 'bar',
-            name: `${cat} Items`,
-            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
-          })),
-        },
-      }, 'imd09'),
-      make('im-19', 'Top 15 Incident Items', 'bar', 'Drilldown: Incident Item Name → Incident Location → Incident Case', 'TOP items by count', {
-        xAxis: { type: 'category' },
-        series: [{
-          name: 'Incidents',
-          type: 'bar',
-          data: topItems.map(([item, v]) => ({ name: item, y: Number(v), drilldown: `imd13:${item}` })),
-        }],
-        drilldown: {
-          series: topItems.map(([item]) => ({
-            id: `imd13:${item}`,
-            type: 'bar',
-            name: `${item} Locations`,
-            data: Object.entries(itemLocationMap[item] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
-          })),
-        },
-      }, 'imd13'),
-      make('im-20', 'Category × Severity', 'column', 'Drilldown: Incident Category → Severity → Incident Case', 'COUNT by category x severity', {
-        xAxis: { type: 'category' },
-        series: [{
-          type: 'column',
-          name: 'Incidents',
-          data: topCats.map(([cat, v]) => ({ name: cat, y: Number(v), drilldown: `imd17:${encodeURIComponent(cat)}` })),
-        }],
-        drilldown: {
-          series: topCats.map(([cat]) => ({
-            id: `imd17:${encodeURIComponent(cat)}`,
-            type: 'column',
-            name: `${cat} Severity`,
-            data: severityKeys
-              .map((sev) => [sev, Number((sevMap[sev] ?? 0) > 0 ? Math.round(((Number(severityCategoryMap[sev]?.[cat] ?? 0)) / Math.max(1, Number(sevMap[sev] ?? 0))) * Number(catMap[cat] ?? 0)) : 0)]),
-          })),
-        },
-      }, 'imd17'),
-      make('im-21', 'Top 10 Rooms by Incidents', 'bar', 'Drilldown: Room No → Incident Item Name → Incident Case', 'TOP rooms by incident count', {
-        xAxis: { type: 'category' },
-        series: [{
-          name: 'Incidents',
-          type: 'bar',
-          data: topRooms.map(([room, v]) => ({ name: room, y: Number(v), drilldown: `imd19:${encodeURIComponent(room)}` })),
-        }],
-        drilldown: {
-          series: topRooms.map(([room]) => ({
-            id: `imd19:${encodeURIComponent(room)}`,
-            type: 'bar',
-            name: `${room} Items`,
-            data: (() => {
-              const rows = Object.entries(roomItemMap[room] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]);
-              return rows.length > 0 ? rows : [['No Item Data', 0]];
-            })(),
-          })),
-        },
-      }, 'imd19'),
-      make('im-22', 'VIP Type -> Top 10 Incident', 'column', 'Drilldown: VIP/Non-VIP → Top 10 Incident Items', 'Level 1 = COUNT by VIP type; Level 2 = TOP 10 incident items within selected VIP type', {
-        xAxis: { type: 'category' },
-        series: [{
-          name: 'Incident Cases',
-          type: 'column',
-          data: [
-            { name: 'VIP', y: Number(s.vip_total ?? 0), drilldown: 'imd25:VIP' },
-            { name: 'Non-VIP', y: Math.max(0, Number(s.total ?? 0) - Number(s.vip_total ?? 0)), drilldown: 'imd25:Non-VIP' },
-          ],
-        }],
-        drilldown: {
-          series: [
-            {
-              id: 'imd25:VIP',
-              type: 'column',
-              name: 'VIP Top 10 Incident Items',
-              data: (() => {
-                const rows = Object.entries(deptScopedSummary?.vip_item_map?.VIP ?? {})
-                  .sort(([, a], [, b]) => Number(b) - Number(a))
-                  .slice(0, 24)
-                  .map(([name, y]) => [name, Number(y)]);
-                return rows.length > 0 ? rows : [['No Data', 0]];
-              })(),
-            },
-            {
-              id: 'imd25:Non-VIP',
-              type: 'column',
-              name: 'Non-VIP Top 10 Incident Items',
-              data: (() => {
-                const rows = Object.entries(deptScopedSummary?.vip_item_map?.['Non-VIP'] ?? {})
-                  .sort(([, a], [, b]) => Number(b) - Number(a))
-                  .slice(0, 24)
-                  .map(([name, y]) => [name, Number(y)]);
-                return rows.length > 0 ? rows : [['No Data', 0]];
-              })(),
-            },
-          ],
-        },
-      }, 'imd25'),
-      make('im-23', 'Incidents by Category', 'column', 'Drilldown: Incident Category → Incident Item Name', 'COUNT by category', {
-        xAxis: { type: 'category' },
-        series: [{ name: 'Incidents', type: 'column', data: topCats.map(([cat, v]) => ({ name: cat, y: Number(v), drilldown: `imd31:${cat}` })) }],
-        drilldown: {
-          series: topCats.map(([cat]) => ({
-            id: `imd31:${cat}`,
-            type: 'column',
-            name: `${cat} Items`,
-            data: Object.entries(categoryItemMap[cat] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
-          })),
-        },
-      }, 'imd31'),
-      make('im-24', 'Severity Distribution', 'pie', 'Drilldown: Severity → Incident Category → Incident Case', 'COUNT by severity', {
-        series: [{
-          type: 'pie',
-          innerSize: '45%',
-          data: severityKeys.map((k) => ({ name: k, y: sevMap[k] ?? 0, drilldown: `imd33:${k}` })),
-        }],
-        drilldown: {
-          series: severityKeys.map((k) => ({
-            id: `imd33:${k}`,
-            type: 'pie',
-            name: `${k} Categories`,
-            data: Object.entries(severityCategoryMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([name, y]) => ({ name, y: Number(y) })),
-          })),
-        },
-      }, 'imd33'),
-      make('im-25', 'Status Distribution', 'pie', 'Drilldown: Incident Status → Department → Incident Case', 'COUNT by status', {
-        series: [{
-          type: 'pie',
-          innerSize: '45%',
-          data: statusKeys.map((k) => ({ name: k, y: statusMap[k] ?? 0, drilldown: `imd35:${k}` })),
-        }],
-        drilldown: {
-          series: statusKeys.map((k) => ({
-            id: `imd35:${k}`,
-            type: 'pie',
-            name: `${k} Departments`,
-            data: Object.entries(statusDeptMap[k] ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([name, y]) => ({ name, y: Number(y) })),
-          })),
-        },
-      }, 'imd35'),
-      make('im-26', 'Incident Source → Department', 'column', 'Drilldown: Source of Complaint → Department → Incident Case', 'COUNT by source -> department', {
-        xAxis: { type: 'category' },
-        series: [{
-          type: 'column',
-          name: 'Incidents',
-          data: Object.entries(deptScopedSummary?.source_map ?? s.source_map ?? {})
-            .sort(([, a], [, b]) => Number(b) - Number(a))
-            .slice(0, 24)
-            .map(([src, v]) => ({ name: src, y: Number(v), drilldown: `imd41:${src}` })),
-        }],
-        drilldown: {
-          series: Object.entries(sourceDeptMap).map(([src, dm]) => ({
-            id: `imd41:${src}`,
-            type: 'column',
-            name: `${src} Departments`,
-            data: Object.entries(dm).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24).map(([k, v]) => [k, Number(v)]),
-          })),
-        },
-      }, 'imd41'),
-      make('im-41', 'Incident Category > Incident Items', 'column', 'Drilldown: Incident Category > Incident Items', 'COUNT by incident category with item drilldown', longOpts({
-        xAxis: { type: 'category', title: { text: 'Incident Category' } },
-        yAxis: { title: { text: 'Incidents' }, min: 0 },
-        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-        series: [{
-          name: 'Incidents',
-          type: 'column',
-          data: topCatsLong.map(([cat, v]) => ({ name: cat, y: Number(v), drilldown: `imd41:${encodeURIComponent(cat)}` })),
-        }],
-        drilldown: {
-          series: topCatsLong.map(([cat]) => ({
-            id: `imd41:${encodeURIComponent(cat)}`,
-            type: 'column',
-            name: `${cat} Items`,
-            custom: { xAxisTitle: 'Incident Items' },
-            data: categoryItemRows(scopeSummary, cat).map(([name, y]) => ({ name, y })),
-          })),
-        },
-      }, 'Incident Category'), 'imd41'),
-      make('im-42', 'Department > Incident Category > Incident Items', 'column', 'Drilldown: Department > Incident Category > Incident Items', 'COUNT by department with category and item drilldown', longOpts({
-        xAxis: { type: 'category', title: { text: 'Department' } },
-        yAxis: { title: { text: 'Incidents' }, min: 0 },
-        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-        series: [{
-          name: 'Incidents',
-          type: 'column',
-          data: deptKeysLong.map((dept) => ({ name: dept, y: Number(s.dept_map?.[dept] ?? 0), drilldown: `imd42:${encodeURIComponent(dept)}` })),
-        }],
-        drilldown: {
-          series: deptKeysLong.flatMap((dept) => {
-            const deptId = `imd42:${encodeURIComponent(dept)}`;
-            const cats = Object.entries(scopeSummary.dept_category_map?.[dept] ?? {})
-              .sort(([, a], [, b]) => Number(b) - Number(a))
-              .slice(0, 50);
-            return [{
-              id: deptId,
-              type: 'column',
-              name: `${dept} Categories`,
-              custom: { xAxisTitle: 'Incident Category' },
-              data: cats.map(([cat, y]) => ({ name: cat, y: Number(y), drilldown: `imd42c:${encodeURIComponent(dept)}:${encodeURIComponent(cat)}` })),
-            }, ...cats.map(([cat]) => ({
-              id: `imd42c:${encodeURIComponent(dept)}:${encodeURIComponent(cat)}`,
-              type: 'column',
-              name: `${dept} ${cat} Items`,
-              custom: { xAxisTitle: 'Incident Items' },
-              data: deptCategoryItemRows(scopeSummary, dept, cat).map(([name, y]) => ({ name, y })),
-            }))];
-          }),
-        },
-      }, 'Department'), 'imd42'),
-      make('im-43', 'Incident Category > Incident Item Name > Average Completed Duration (Hour)', 'column', 'Drilldown: Incident Category > Incident Item Name > Average Completed Duration (Hour)', 'Level 1 COUNT by incident category; Level 2 COUNT by incident item name within category; Level 3 AVG completed duration hours for selected incident item', longOpts({
-        xAxis: { type: 'category', title: { text: 'Incident Category' } },
-        yAxis: { title: { text: 'Incidents' }, min: 0 },
-        tooltip: {
-          pointFormatter: function (this: Highcharts.Point) {
-            const seriesId = String((this.series.options as { id?: string }).id ?? '');
-            const value = Number(this.y ?? 0);
-            if (seriesId.startsWith('imd43i:')) return `<span style="color:${this.color}">\u25cf</span> ${this.name}: <b>${r1(value)} h</b><br/>`;
-            return `<span style="color:${this.color}">\u25cf</span> ${this.name}: <b>${Math.round(value)}</b><br/>`;
-          },
-        },
-        plotOptions: {
-          column: {
-            dataLabels: {
-              enabled: true,
-              formatter: function (this: Highcharts.PointLabelObject) {
-                const point = this.point as Highcharts.Point;
-                const seriesId = String((point.series.options as { id?: string }).id ?? '');
-                const value = Number(point.y ?? 0);
-                if (seriesId.startsWith('imd43i:')) return `${r1(value)} h`;
-                return String(Math.round(value));
-              },
-            },
-          },
-        },
-        series: [{
-          name: 'Incidents',
-          type: 'column',
-          data: Object.entries(scopeSummary.category_map ?? {})
-            .sort(([, a], [, b]) => Number(b) - Number(a))
-            .slice(0, 50)
-            .map(([cat, y]) => ({ name: cat, y: Number(y), drilldown: `imd43:${encodeURIComponent(cat)}` })),
-        }],
-        drilldown: {
-          series: Object.keys(scopeSummary.category_map ?? {})
-            .sort((a, b) => Number(scopeSummary.category_map?.[b] ?? 0) - Number(scopeSummary.category_map?.[a] ?? 0))
-            .slice(0, 50)
-            .flatMap((cat) => {
-              const items = categoryItemRows(scopeSummary, cat)
-                .slice(0, 50);
-              return [
-                {
-                  id: `imd43:${encodeURIComponent(cat)}`,
-                  type: 'column',
-                  name: `${cat} Incident Items`,
-                  custom: { xAxisTitle: 'Incident Item Name' },
-                  data: items.map(([name, y]) => ({
-                    name,
-                    y: Number(y),
-                    drilldown: `imd43i:${encodeURIComponent(cat)}:${encodeURIComponent(name)}`,
-                  })),
-                },
-                ...items.map(([name]) => ({
-                  id: `imd43i:${encodeURIComponent(cat)}:${encodeURIComponent(name)}`,
-                  type: 'column',
-                  name: `${name} Average Completed Duration (Hour)`,
-                  custom: { xAxisTitle: 'Incident Item Name' },
-                  data: [{
-                    name,
-                    y: Number(scopeSummary.category_item_duration_map?.[cat]?.[name] ?? 0),
-                  }],
-                })),
-              ];
-            }),
-        },
-      }, 'Incident Category'), 'imd43'),
-      make('im-44', '24 Hour Distribution > Incident Category > Incident Items', 'column', 'Drilldown: 24 Hour Distribution > Incident Category > Incident Items', 'COUNT by hour, then category, then item', longOpts({
-        xAxis: { type: 'category', title: { text: '24 Hour Distribution' } },
-        yAxis: { title: { text: 'Incidents' }, min: 0 },
-        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-        series: [{
-          name: 'Incidents',
-          type: 'column',
-          data: Array.from({ length: 24 }, (_, hour) => ({ name: `${String(hour).padStart(2, '0')}:00`, y: Number(scopeSummary.hour_map?.[hour] ?? 0), drilldown: `imd44:${String(hour)}` })),
-        }],
-        drilldown: {
-          series: Array.from({ length: 24 }, (_, hour) => {
-            const h = String(hour);
-            const cats = hourCategoryRows(scopeSummary, h);
-            return [
-              {
-                id: `imd44:${h}`,
-                type: 'column',
-                name: `${String(hour).padStart(2, '0')}:00 Categories`,
-                custom: { xAxisTitle: 'Incident Category' },
-                data: cats.map(([cat, y]) => ({ name: cat, y: Number(y), drilldown: `imd44c:${h}:${encodeURIComponent(cat)}` })),
-              },
-              ...cats.map(([cat]) => ({
-                id: `imd44c:${h}:${encodeURIComponent(cat)}`,
-                type: 'column',
-                name: `${String(hour).padStart(2, '0')}:00 ${cat} Items`,
-                custom: { xAxisTitle: 'Incident Items' },
-                data: hourCategoryItemRows(scopeSummary, h, cat).map(([name, y]) => ({ name, y })),
-              })),
-            ];
-          }).flat(),
-        },
-      }, '24 Hour Distribution'), 'imd44'),
-      make('im-45', '24 Hour Distribution > Department > Incident Items', 'column', 'Drilldown: 24 Hour Distribution > Department > Incident Items', 'COUNT by hour, then department, then item', longOpts({
-        xAxis: { type: 'category', title: { text: '24 Hour Distribution' } },
-        yAxis: { title: { text: 'Incidents' }, min: 0 },
-        plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-        series: [{
-          name: 'Incidents',
-          type: 'column',
-          data: Array.from({ length: 24 }, (_, hour) => ({ name: `${String(hour).padStart(2, '0')}:00`, y: Number(scopeSummary.hour_map?.[hour] ?? 0), drilldown: `imd45:${String(hour)}` })),
-        }],
-        drilldown: {
-          series: Array.from({ length: 24 }, (_, hour) => {
-            const h = String(hour);
-            const depts = hourDeptRows(scopeSummary, h);
-            return [
-              {
-                id: `imd45:${h}`,
-                type: 'column',
-                name: `${String(hour).padStart(2, '0')}:00 Departments`,
-                custom: { xAxisTitle: 'Department' },
-                data: depts.map(([dept, y]) => ({ name: dept, y: Number(y), drilldown: `imd45d:${h}:${encodeURIComponent(dept)}` })),
-              },
-              ...depts.map(([dept]) => ({
-                id: `imd45d:${h}:${encodeURIComponent(dept)}`,
-                type: 'column',
-                name: `${String(hour).padStart(2, '0')}:00 ${dept} Items`,
-                custom: { xAxisTitle: 'Incident Items' },
-                data: hourDeptItemRows(scopeSummary, h, dept).map(([name, y]) => ({ name, y })),
-              })),
-            ];
-          }).flat(),
-        },
-      }, '24 Hour Distribution'), 'imd45'),
+      make('im-17', '🟣 VIP/Non-VIP → Incident Dist', 'column', 'Drilldown: VIP/Non-VIP → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY VIP/Non-VIP; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.vip ?? {}, 'im17', 'column', ['VIP', 'Non-VIP']) as unknown as Record<string, unknown>, 'imd07'),
+      make('im-18', '🟣 Source of Complaint → Incident Dist', 'column', 'Drilldown: Source of Complaint → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY source_of_complaint; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.source ?? {}, 'im18', 'column') as unknown as Record<string, unknown>, 'imd09'),
+      make('im-19', '🟣 Booking Source → Incident Dist', 'column', 'Drilldown: Booking Source → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY booking_source; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.booking ?? {}, 'im19', 'column') as unknown as Record<string, unknown>, 'imd13'),
+      make('im-20', '🟣 Severity → Incident Dist', 'column', 'Drilldown: Severity → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY severity; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.severity ?? {}, 'im20', 'column') as unknown as Record<string, unknown>, 'imd17'),
+      make('im-21', '🟣 Repeat Rate Dist → Incident Dist', 'column', 'Drilldown: Repeat Rate Dist → Incident Dist → Incident', 'Level 1 = value-range bucket of each incident item\'s own repeat rate (repeat/count); Level 2 = rank-range bucket of incident items within that rate range; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelRepeatRateDistDrilldown(s.im_dim_item_stats_map?.all?.ALL ?? {}, 'im21') as unknown as Record<string, unknown>, 'imd19'),
+      make('im-22', '⏰ 24 Hour Distribution → Incident Dist', 'column', 'Drilldown: 24 Hour Distribution → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY hour (00-23); Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.hour ?? {}, 'im22', 'column', HOUR_ORDER) as unknown as Record<string, unknown>, 'imd25'),
+      make('im-23', '🟣 Duration Distribution → Incident Dist', 'column', 'Drilldown: Duration Distribution → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY duration bucket (< 1h..24h+); Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.durbkt ?? {}, 'im23', 'column', DUR_ORDER) as unknown as Record<string, unknown>, 'imd31'),
+      make('im-24', '🟣 Profile Type → Incident Dist', 'column', 'Drilldown: Profile Type → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY profile_type; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.profile ?? {}, 'im24', 'column') as unknown as Record<string, unknown>, 'imd33'),
+      make('im-25', '🟣 Incident Status → Incident Dist', 'column', 'Drilldown: Incident Status → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY incident_status; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.status ?? {}, 'im25', 'column') as unknown as Record<string, unknown>, 'imd35'),
+      make('im-26', '🟣 Guest Name Dist → Guest Name', 'column', 'Drilldown: Guest Name Dist → Guest Name → Incident', 'Level 1 = rank-range bucket of guest names; Level 2 = per-guest-name Total Incident; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelGuestDistIncidentDrilldown(s.im_dim_item_stats_map?.guestname ?? {}, 'im26') as unknown as Record<string, unknown>, 'imd41'),
     ];
-  }, [isCorp, isJo, data.summary, data.charts, data.eac, fd, deptFd, deptScopedSummary, t]);
+  }, [isCorp, isJo, data.summary, deptScopedSummary, t]);
 
   const imHotelOperationAnalysisCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];
     const s = (deptScopedSummary ?? data.summary) as typeof data.summary;
-    const activeFd = deptFd ?? fd;
-    const days = activeFd?.days ?? deptScopedSummary?.raw_daily ?? data.raw_daily;
-    const dayCats = days.map((d) => d.date);
-    const statusKeys = Object.keys(activeFd?.byStatus ?? s.status_map ?? {});
-    const sevKeys = Object.keys(activeFd?.bySeverity ?? s.severity_map ?? {});
-    const deptKeys = Object.keys(s.dept_map ?? {});
-    const sourceKeys = Object.keys(s.source_map ?? {});
-    const itemTop = Object.entries(s.item_map ?? {}).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const roomMapRaw = (deptScopedSummary?.room_map ?? (s as { room_map?: Record<string, number> }).room_map ?? {}) as Record<string, number>;
-    const roomTop = Object.entries(roomMapRaw).sort(([, a], [, b]) => Number(b) - Number(a)).slice(0, 24);
-    const bookingMap = (deptScopedSummary?.booking_map ?? s.booking_map ?? {}) as Record<string, number>;
+    const formatMonth = (dv: string) => {
+      const [y, m] = dv.split('-');
+      const mi = Number(m) - 1;
+      const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return mi >= 0 && mi < 12 ? `${MONTH_ABBR[mi]}-${y.slice(2)}` : dv;
+    };
 
     const make = (id: string, title: string, type: string, note: string, formula: string, options: Record<string, unknown>, _legacyKey?: string): ChartDef => ({
       id,
@@ -6054,43 +6207,10 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
     });
 
     return [
-      make('im-27', 'Incident Aging Bucket', 'column', 'Drilldown: Incident Status → Aging Bucket → Incident Case', 'Aging proxy by status', { xAxis: { categories: statusKeys }, series: [{ name: 'Cases', data: statusKeys.map((k) => (activeFd?.byStatus ?? s.status_map ?? {})[k] ?? 0) }] }, 'imo12'),
-      make('im-28', 'Incidents by Hour of Day', 'column', 'Drilldown: Incident Hour → Department → Incident Case', 'COUNT by HOUR(incident_datetime)', {
-        xAxis: { categories: Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`) },
-        series: [{
-          name: 'Incidents',
-          data: Array.from({ length: 24 }, (_, h) => Number(deptScopedSummary?.hour_map?.[h] ?? 0)),
-        }],
-      }, 'imo15'),
-      make('im-29', 'Open vs Closed SLA Breach', 'column', 'Drilldown: Incident Status → SLA Breach Flag → Incident Case', 'SLA breach proxy split', { plotOptions: { column: { stacking: 'normal' } }, xAxis: { categories: ['Open', 'Closed'] }, series: [{ name: 'Breach', data: [s.pending, Math.max(0, s.total - s.pending)] }, { name: 'Non-Breach', data: [0, 0] }] }, 'imo16'),
-      make('im-30', 'Guest Journey Incident Stage', 'column', 'Drilldown: Arrival / Stay / Departure Stage → Incident Category → Incident Case', 'Stage proxy split', { xAxis: { categories: ['Arrival', 'Stay', 'Departure'] }, series: [{ name: 'Incidents', data: [Math.round(s.total * 0.2), Math.round(s.total * 0.6), Math.round(s.total * 0.2)] }] }, 'imo18'),
-      make('im-31', 'Repeat Room Failure Analysis', 'packedbubble', 'Drilldown: Room No → Incident Item Name → Incident Case', 'Packed bubble by repeat room failures', {
-        series: [{
-          type: 'packedbubble',
-          name: 'Rooms',
-          data: roomTop.length > 0 ? roomTop.map(([name, value]) => ({ name, value })) : [{ name: 'No Room Data', value: 0 }],
-        }],
-      }, 'imo20'),
-      make('im-32', 'Department SLA Ranking', 'bar', 'Drilldown: Department → SLA Breach Flag → Incident Case', 'Pending-rate proxy by department', { xAxis: { categories: deptKeys }, series: [{ name: 'Risk Score', data: deptKeys.map((k) => s.dept_map?.[k] ?? 0) }] }, 'imo22'),
-      make('im-33', 'Complaint Source Risk Ranking', 'bar', 'Drilldown: Source of Complaint → Severity → Incident Case', 'Source risk proxy', { xAxis: { categories: sourceKeys }, series: [{ name: 'Risk', data: sourceKeys.map((k) => s.source_map?.[k] ?? 0) }] }, 'imo28'),
-      make('im-34', 'Department Incident Burden Score', 'treemap', 'Drilldown: Department → Incident Category → Incident Case', 'Treemap of department burden', { series: [{ type: 'treemap', layoutAlgorithm: 'squarified', data: deptKeys.map((k) => ({ name: k, value: s.dept_map?.[k] ?? 0 })) }] }, 'imo30'),
-      make('im-35', 'Investigation Completion Quality', 'pie', 'Drilldown: Investigation Updated By 1 → Incident Case', 'Completion gauge proxy', {
-        series: [{ type: 'pie', data: [{ y: s.total > 0 ? r1((s.completed / s.total) * 100) : 0 }] }],
-      }, 'imo36'),
-      make('im-36', 'VIP Repeat Incident Analysis', 'heatmap', 'Drilldown: VIP Code → Incident Item Name → Incident Case', 'VIP repeat proxy heatmap', { xAxis: { categories: ['VIP', 'Non-VIP'] }, yAxis: { categories: itemTop.slice(0, 24).map(([k]) => k) }, colorAxis: { min: 0 }, series: [{ type: 'heatmap', data: itemTop.slice(0, 24).flatMap(([, v], yi) => [[0, yi, Math.round(v * 0.25)], [1, yi, Math.round(v * 0.75)]]) }] }, 'imd26'),
-      make('im-37', 'Booking Source Risk Analysis', 'bubble', 'Drilldown: Booking Source → Severity → Incident Case', 'Booking source risk proxy', {
-        xAxis: { categories: Object.keys(bookingMap).length > 0 ? Object.keys(bookingMap) : ['Unknown'] },
-        series: [{
-          type: 'bubble',
-          data: Object.entries(bookingMap).length > 0
-            ? Object.entries(bookingMap).map(([k, v], i) => ({ x: i, y: Number(v), z: Math.max(1, Number(v)) / 2, name: k }))
-            : [{ x: 0, y: 0, z: 1, name: 'Unknown' }],
-        }],
-      }, 'imo44'),
-      make('im-38', 'Corporate Guest Complaint Ranking', 'bar', 'Drilldown: Company Name → Incident Category → Incident Case', 'Corporate complaint proxy', { xAxis: { categories: sourceKeys.slice(0, 24) }, series: [{ name: 'Complaints', data: sourceKeys.slice(0, 24).map((k) => s.source_map?.[k] ?? 0) }] }, 'imo46'),
-      make('im-39', 'Shift Handover Incident Analysis', 'xrange', 'Drilldown: Incident Hour → Department → Incident Case', 'Shift window proxy', { xAxis: { type: 'datetime' }, yAxis: { categories: ['Night', 'Morning', 'Afternoon'], reversed: true }, series: [{ type: 'xrange', data: [{ x: Date.UTC(2026, 0, 1, 0), x2: Date.UTC(2026, 0, 1, 8), y: 0 }, { x: Date.UTC(2026, 0, 1, 8), x2: Date.UTC(2026, 0, 1, 16), y: 1 }, { x: Date.UTC(2026, 0, 1, 16), x2: Date.UTC(2026, 0, 2, 0), y: 2 }] }] }, 'imo47'),
+      make('im-27', '🟣 Monthly Trend → Incident Dist', 'column', 'Drilldown: Monthly Trend → Incident Dist → Incident', 'Level 1 = COUNT(incident_case) GROUP BY month; Level 2 = rank-range bucket of incident items; Level 3 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelScopedDimIncidentDrilldown(s.im_dim_item_stats_map?.month ?? {}, 'im27', 'column', 'natural-sort', formatMonth) as unknown as Record<string, unknown>, 'imo12'),
+      make('im-28', '🟣 Created By Dist → Created by → Incident Dist', 'column', 'Drilldown: Created By Dist → Created by → Incident Dist → Incident', 'Level 1 = rank-range bucket of created-by users; Level 2 = per-created-by Total Incident; Level 3 = rank-range bucket of incident items within that created-by; Level 4 = per-item Total Incident, Average Duration (h), Repeat Rate (%), Closing Rate (%)', buildImHotelDeptDistIncidentDrilldown(s.im_dim_item_stats_map?.createdby ?? {}, 'im28', 'Created By') as unknown as Record<string, unknown>, 'imo15'),
     ];
-  }, [isCorp, isJo, data.summary, data.charts, fd, deptFd, deptScopedSummary, t]);
+  }, [isCorp, isJo, data.summary, deptScopedSummary, t]);
 
   const imSimpleCharts = useMemo<ChartDef[]>(() => {
     if (isCorp || isJo) return [];

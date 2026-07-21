@@ -18,6 +18,9 @@ type ImRow = {
   department: string | null;
   room_no: string | null;
   incident_location: string | null;
+  profile_type: string | null;
+  guest_name: string | null;
+  created_by: string | null;
 };
 
 type DailyBucket = {
@@ -66,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     const q = await supabase
       .from('im_records')
-      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location')
+      .select('created_date, incident_datetime, investigation_updated_on_1, investigation_updated_on_2, incident_status, severity, vip_code, incident_category, incident_item_name, source_of_complaint, booking_source, department, room_no, incident_location, profile_type, guest_name, created_by')
       .eq('chain_code', chain)
       .eq('hotel_code', hotel) as unknown as { data: ImRow[] | null; error: { message: string } | null };
 
@@ -125,6 +128,38 @@ export async function GET(req: NextRequest) {
     const hour_dept_map: Record<string, Record<string, number>> = {};
     const hour_category_item_map: Record<string, Record<string, Record<string, number>>> = {};
     const hour_dept_item_map: Record<string, Record<string, Record<string, number>>> = {};
+    // im-01/02/03/05/06/07/08/09/10/11/12/14: dept/vip/category/severity/
+    // source/booking/durbkt/hour/month slices of im_dim_item_stats_map (same
+    // shape as the corp/hotel-fetch versions), scoped to this route's own
+    // filtered `rows` — except 'hour', computed from `hourRows` below (ignores
+    // the date-range filter, matching hour_map's established full-period convention).
+    type DimStatAcc = { count: number; roomCounts: Record<string, number>; durSum: number; durCount: number; closed: number };
+    const IM_SCOPE_DIM_KEYS = ['dept', 'vip', 'category', 'severity', 'source', 'booking', 'durbkt', 'hour', 'month', 'profile', 'status', 'guestname', 'createdby', 'all'] as const;
+    type ImScopeDimKey = typeof IM_SCOPE_DIM_KEYS[number];
+    const dimItemStatsAcc: Record<ImScopeDimKey, Record<string, Record<string, DimStatAcc>>> = Object.fromEntries(IM_SCOPE_DIM_KEYS.map((k) => [k, {}])) as Record<ImScopeDimKey, Record<string, Record<string, DimStatAcc>>>;
+    const IM_SCOPE_DUR_BUCKETS = ['< 1h', '1-2h', '2-4h', '4-8h', '8-24h', '24h+'];
+    function imScopeDurBucketLabel(hours: number): string {
+      if (hours < 1) return IM_SCOPE_DUR_BUCKETS[0];
+      if (hours < 2) return IM_SCOPE_DUR_BUCKETS[1];
+      if (hours < 4) return IM_SCOPE_DUR_BUCKETS[2];
+      if (hours < 8) return IM_SCOPE_DUR_BUCKETS[3];
+      if (hours < 24) return IM_SCOPE_DUR_BUCKETS[4];
+      return IM_SCOPE_DUR_BUCKETS[5];
+    }
+    const addDimStat = (dim: ImScopeDimKey, dimValue: string, item: string, room: string, hours: number | null, isClosed: boolean) => {
+      if (!dimItemStatsAcc[dim][dimValue]) dimItemStatsAcc[dim][dimValue] = {};
+      if (!dimItemStatsAcc[dim][dimValue][item]) dimItemStatsAcc[dim][dimValue][item] = { count: 0, roomCounts: {}, durSum: 0, durCount: 0, closed: 0 };
+      const acc = dimItemStatsAcc[dim][dimValue][item];
+      acc.count += 1;
+      acc.roomCounts[room] = (acc.roomCounts[room] ?? 0) + 1;
+      if (hours !== null) { acc.durSum += hours; acc.durCount += 1; }
+      if (isClosed) acc.closed += 1;
+    };
+    // im-13: month → department → { count, repeat, avgDurationHours, closed },
+    // one level shallower (no per-item breakdown), scoped to `rows` like the
+    // other date-filtered dims.
+    type MonthDeptAcc = { count: number; roomCounts: Record<string, number>; durSum: number; durCount: number; closed: number };
+    const monthDeptAcc: Record<string, Record<string, MonthDeptAcc>> = {};
 
     let total = 0;
     let completed = 0;
@@ -247,15 +282,45 @@ export async function GET(req: NextRequest) {
       const dt = r.incident_datetime ? new Date(r.incident_datetime) : (r.created_date ? new Date(r.created_date) : null);
       const endRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
       const end = endRaw ? new Date(endRaw) : null;
+      let rowHours: number | null = null;
       if (dt && !Number.isNaN(dt.getTime())) {
         const hours = end && !Number.isNaN(end.getTime()) ? (end.getTime() - dt.getTime()) / 3_600_000 : 48;
         if (Number.isFinite(hours) && hours >= 0 && hours < 3650 * 24) {
+          rowHours = hours;
           category_duration_map[cat].sum += hours;
           category_duration_map[cat].count += 1;
           if (!category_item_duration_map[cat][item]) category_item_duration_map[cat][item] = { sum: 0, count: 0 };
           category_item_duration_map[cat][item].sum += hours;
           category_item_duration_map[cat][item].count += 1;
         }
+      }
+
+      // im-01/02/03/05/06/07/08/09/10/12/14 dim/item stats: same count/repeat/duration/closed shape as elsewhere.
+      // durbkt/month are only known once rowHours/dt are computed, so they're skipped when null (unlike the other dims).
+      const isClosed = /completed|closed/i.test(status);
+      const monthKey = dt && !Number.isNaN(dt.getTime()) ? dt.toISOString().slice(0, 7) : null;
+      const profileLabel = r.profile_type === null || r.profile_type === undefined || String(r.profile_type).trim() === '' ? 'Unknown' : String(r.profile_type);
+      const guestLabel = r.guest_name === null || r.guest_name === undefined || String(r.guest_name).trim() === '' ? 'Unknown Guest' : String(r.guest_name);
+      const createdByLabel = r.created_by === null || r.created_by === undefined || String(r.created_by).trim() === '' ? 'Unknown' : String(r.created_by);
+      const dimValueByKey: Partial<Record<ImScopeDimKey, string>> = { dept, vip: vipSeg, category: cat, severity: sev, source, booking, profile: profileLabel, status, guestname: guestLabel, createdby: createdByLabel, all: 'ALL' };
+      if (rowHours !== null) dimValueByKey.durbkt = imScopeDurBucketLabel(rowHours);
+      if (monthKey) dimValueByKey.month = monthKey;
+      IM_SCOPE_DIM_KEYS.forEach((dim) => {
+        if (dim === 'hour') return; // computed from hourRows below, not this date-filtered pass
+        const dimValue = dimValueByKey[dim];
+        if (dimValue === undefined) return;
+        addDimStat(dim, dimValue, item, room, rowHours, isClosed);
+      });
+
+      // im-13: month → department cross-tab (no per-item breakdown).
+      if (monthKey) {
+        if (!monthDeptAcc[monthKey]) monthDeptAcc[monthKey] = {};
+        if (!monthDeptAcc[monthKey][dept]) monthDeptAcc[monthKey][dept] = { count: 0, roomCounts: {}, durSum: 0, durCount: 0, closed: 0 };
+        const mdAcc = monthDeptAcc[monthKey][dept];
+        mdAcc.count += 1;
+        mdAcc.roomCounts[room] = (mdAcc.roomCounts[room] ?? 0) + 1;
+        if (rowHours !== null) { mdAcc.durSum += rowHours; mdAcc.durCount += 1; }
+        if (isClosed) mdAcc.closed += 1;
       }
 
       const rk = `${r.room_no ?? 'unknown'}|${cat}|${item}`;
@@ -285,7 +350,46 @@ export async function GET(req: NextRequest) {
       if (!hour_dept_item_map[hourKey]) hour_dept_item_map[hourKey] = {};
       if (!hour_dept_item_map[hourKey][dept]) hour_dept_item_map[hourKey][dept] = {};
       hour_dept_item_map[hourKey][dept][item] = (hour_dept_item_map[hourKey][dept][item] ?? 0) + 1;
+
+      // im-11: hour slice of im_dim_item_stats_map — full period, matching hour_map above.
+      const hourRoom = (r.room_no ?? 'Unknown Room').trim() || 'Unknown Room';
+      const hourStatus = (r.incident_status ?? 'Unknown').trim() || 'Unknown';
+      const hourIsClosed = /completed|closed/i.test(hourStatus);
+      const hourEndRaw = r.investigation_updated_on_2 ?? r.investigation_updated_on_1;
+      const hourEnd = hourEndRaw ? new Date(hourEndRaw) : null;
+      const hourDurRaw = hourEnd && !Number.isNaN(hourEnd.getTime()) ? (hourEnd.getTime() - dt.getTime()) / 3_600_000 : 48;
+      const hourDur = Number.isFinite(hourDurRaw) && hourDurRaw >= 0 && hourDurRaw < 3650 * 24 ? hourDurRaw : null;
+      addDimStat('hour', hourKey, item, hourRoom, hourDur, hourIsClosed);
     }
+
+    const im_dim_item_stats_map = Object.fromEntries(IM_SCOPE_DIM_KEYS.map((dim) => [
+      dim,
+      Object.fromEntries(Object.entries(dimItemStatsAcc[dim]).map(([dimValue, items]) => [
+        dimValue,
+        Object.fromEntries(Object.entries(items).map(([itemName, acc]) => [
+          itemName,
+          {
+            count: acc.count,
+            repeat: Object.values(acc.roomCounts).reduce((s, c) => s + (c >= 2 ? c : 0), 0),
+            avgDurationHours: acc.durCount > 0 ? acc.durSum / acc.durCount : 0,
+            closed: acc.closed,
+          },
+        ])),
+      ])),
+    ])) as Record<ImScopeDimKey, Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>>;
+
+    const im_month_dept_stats_map = Object.fromEntries(Object.entries(monthDeptAcc).map(([month, depts]) => [
+      month,
+      Object.fromEntries(Object.entries(depts).map(([dept, acc]) => [
+        dept,
+        {
+          count: acc.count,
+          repeat: Object.values(acc.roomCounts).reduce((s, c) => s + (c >= 2 ? c : 0), 0),
+          avgDurationHours: acc.durCount > 0 ? acc.durSum / acc.durCount : 0,
+          closed: acc.closed,
+        },
+      ])),
+    ]));
 
     const repeat_count = Object.values(repeatKeyCount).filter((v) => v > 1).reduce((s, v) => s + v, 0);
     const avg_first_response = response_count > 0 ? response_sum_min / response_count : null;
@@ -308,6 +412,8 @@ export async function GET(req: NextRequest) {
       vip_cancelled,
       severity_sum,
       repeat_count,
+      im_dim_item_stats_map,
+      im_month_dept_stats_map,
       status_map,
       severity_map,
       category_map,

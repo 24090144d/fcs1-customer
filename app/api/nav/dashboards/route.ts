@@ -21,7 +21,7 @@ type DashRow = {
 };
 
 export interface NavDashItem {
-  module:       'im' | 'jo' | 'mo' | 'co';
+  module:       'im' | 'jo' | 'mo' | 'co' | 'co-ir';
   hotel_code:   string;
   hotel_name:   string;
   country_code: string;
@@ -46,10 +46,11 @@ export async function GET() {
       sb.from('co_dashboard_json').select('generated_json, generated_at').order('generated_at', { ascending: false }) as unknown as Promise<SbR<DashRow[]>>,
     ]);
 
-    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<'im' | 'jo' | 'mo' | 'co'> }>>();
+    type NavModule = NavDashItem['module'];
+    const chainMap = new Map<string, Map<string, { hotel_name: string; country_code: string; mods: Set<NavModule> }>>();
     const seen = new Set<string>(); // module|chain|hotel
 
-    const addRow = (module: 'im' | 'jo' | 'mo' | 'co', row: DashRow) => {
+    const addRow = (module: NavModule, row: DashRow) => {
       const m = row.generated_json?.meta;
       if (!m) return;
       const chain = (m.chain_code ?? '').trim().toUpperCase();
@@ -73,14 +74,14 @@ export async function GET() {
     for (const r of (imRows ?? [])) addRow('im', r);
     for (const r of (joRows ?? [])) addRow('jo', r);
     for (const r of (moRows ?? [])) addRow('mo', r);
-    for (const r of (coRows ?? [])) addRow('co', r);
+    for (const r of (coRows ?? [])) addRow(r.generated_json?.meta?.schema === 'co-ir-v1' ? 'co-ir' : 'co', r);
 
     if (chainMap.size === 0) return NextResponse.json({ chains: [] });
 
     const chains: NavChain[] = Array.from(chainMap.entries()).map(([chain, hotelMap]) => {
       const items: NavDashItem[] = [];
 
-      for (const moduleCode of ['im', 'jo', 'mo', 'co'] as const) {
+      for (const moduleCode of ['im', 'jo', 'mo', 'co', 'co-ir'] as const) {
         const hotelsForModule = Array.from(hotelMap.entries())
           .filter(([, { mods }]) => mods.has(moduleCode))
           .sort(([a], [b]) => a.localeCompare(b));
@@ -91,7 +92,7 @@ export async function GET() {
             hotel_code: 'CORP',
             hotel_name: 'Corp',
             country_code: '',
-            label: moduleCode === 'im' ? 'Corp · IM' : moduleCode === 'jo' ? 'Corp · JO' : moduleCode === 'mo' ? 'Corp · MO' : 'Corp · CO ACSR',
+            label: moduleCode === 'im' ? 'Corp · IM' : moduleCode === 'jo' ? 'Corp · JO' : moduleCode === 'mo' ? 'Corp · MO' : moduleCode === 'co-ir' ? 'Corp · CO IR' : 'Corp · CO ACSR',
             href: `/dashboard?hotel=corp&chain=${encodeURIComponent(chain)}&module=${moduleCode}`,
             scope: 'corp',
           });
@@ -103,7 +104,7 @@ export async function GET() {
             hotel_code,
             hotel_name,
             country_code,
-            label: `${hotel_code} · ${moduleCode === 'co' ? 'CO ACSR' : moduleCode.toUpperCase()}`,
+            label: `${hotel_code} · ${moduleCode === 'co' ? 'CO ACSR' : moduleCode === 'co-ir' ? 'CO IR' : moduleCode.toUpperCase()}`,
             href: moduleCode === 'im'
               ? `/dashboard?hotel=${hotel_code}&chain=${encodeURIComponent(chain)}`
               : `/dashboard?module=${moduleCode}&hotel=${hotel_code}&chain=${encodeURIComponent(chain)}`,

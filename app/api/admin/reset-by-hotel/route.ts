@@ -5,7 +5,7 @@ import { getPool } from '@/lib/db/supabaseCompat';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO-ACSR' | 'CO-IR' | 'IM';
 type ResetHotelAction = 'list' | 'preview' | 'execute';
 
 export interface HotelModuleStat {
@@ -43,16 +43,17 @@ export interface HotelTableStat {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODULES: Exclude<ResetHotelModule, 'ALL'>[] = ['JO', 'MO', 'CO', 'IM'];
+const MODULES: Exclude<ResetHotelModule, 'ALL'>[] = ['JO', 'MO', 'CO-ACSR', 'CO-IR', 'IM'];
 
-const MODULE_RECORD_TABLES:    Record<string, string> = { JO: 'jo_records',       MO: 'mo_records',       CO: 'co_records',       IM: 'im_records'       };
-const MODULE_STAGING_TABLES:   Record<string, string> = { JO: 'jo_staging_rows',  MO: 'mo_staging_rows',  CO: 'co_staging_rows',  IM: 'im_staging_rows'  };
-const MODULE_DASHBOARD_TABLES: Record<string, string> = { JO: 'jo_dashboard_json',MO: 'mo_dashboard_json',CO: 'co_dashboard_json',IM: 'im_dashboard_json' };
+const MODULE_RECORD_TABLES: Record<string, string> = { JO: 'jo_records', MO: 'mo_records', 'CO-ACSR': 'co_records', 'CO-IR': 'co_ir_records', IM: 'im_records' };
+const MODULE_STAGING_TABLES: Record<string, string> = { JO: 'jo_staging_rows', MO: 'mo_staging_rows', 'CO-ACSR': 'co_staging_rows', 'CO-IR': 'co_staging_rows', IM: 'im_staging_rows' };
+const MODULE_DASHBOARD_TABLES: Record<string, string> = { JO: 'jo_dashboard_json', MO: 'mo_dashboard_json', 'CO-ACSR': 'co_dashboard_json', 'CO-IR': 'co_dashboard_json', IM: 'im_dashboard_json' };
 
 const TABLE_LABELS: Record<string, string> = {
   jo_records: 'JO Records',     jo_staging_rows: 'JO Staging',    jo_dashboard_json: 'JO Dashboard Cache',
   mo_records: 'MO Records',     mo_staging_rows: 'MO Staging',    mo_dashboard_json: 'MO Dashboard Cache',
   co_records: 'CO Records',     co_staging_rows: 'CO Staging',    co_dashboard_json: 'CO Dashboard Cache',
+  co_ir_records: 'CO IR Records',
   im_records: 'IM Records',     im_staging_rows: 'IM Staging',    im_dashboard_json: 'IM Dashboard Cache',
   uploaded_files: 'Uploaded Files',
   upload_jobs:    'Upload Jobs',
@@ -64,6 +65,17 @@ const TABLE_LABELS: Record<string, string> = {
 
 function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
+}
+
+function schemaFilter(module: Exclude<ResetHotelModule, 'ALL'>): string {
+  return module === 'CO-ACSR' ? ` AND generated_json->'meta'->>'schema' = 'co-v1'`
+    : module === 'CO-IR' ? ` AND generated_json->'meta'->>'schema' = 'co-ir-v1'` : '';
+}
+
+function tableLabel(module: string, table: string): string {
+  if (module === 'CO-ACSR') return table === 'co_records' ? 'CO ACSR Records' : table === 'co_staging_rows' ? 'CO ACSR Staging' : 'CO ACSR Dashboard Cache';
+  if (module === 'CO-IR') return table === 'co_ir_records' ? 'CO IR Records' : table === 'co_staging_rows' ? 'CO IR Staging' : 'CO IR Dashboard Cache';
+  return TABLE_LABELS[table] ?? table;
 }
 
 function todayPasswordHKT(): string {
@@ -91,7 +103,7 @@ async function resolveJobIds(
     const dashTable = MODULE_DASHBOARD_TABLES[mc];
     const { rows } = await pool.query<{ upload_job_id: string }>(
       `SELECT upload_job_id FROM ${quoteIdent(dashTable)}
-       WHERE generated_json->'meta'->>'hotel_code' = $1`,
+       WHERE generated_json->'meta'->>'hotel_code' = $1${schemaFilter(mc)}`,
       [hotelCode],
     );
     const ids = rows.map((r) => r.upload_job_id);
@@ -124,6 +136,7 @@ async function actionList(pool: ReturnType<typeof getPool>): Promise<NextRespons
          LEFT JOIN upload_jobs uj ON uj.id = d.upload_job_id
          WHERE d.generated_json->'meta'->>'hotel_code' IS NOT NULL
            AND d.generated_json->'meta'->>'hotel_code' <> ''
+           ${schemaFilter(mc).replaceAll('generated_json', 'd.generated_json')}
          GROUP BY 1, 2`,
       );
 
@@ -220,7 +233,7 @@ async function actionPreview(
         `SELECT count(*)::text AS cnt FROM ${quoteIdent(tbl)} WHERE upload_job_id IN (${ph})`,
         ids,
       );
-      tables.push({ table_name: tbl, label: TABLE_LABELS[tbl] ?? tbl, row_count: parseInt(rows[0]?.cnt ?? '0', 10) });
+      tables.push({ table_name: tbl, label: tableLabel(mc, tbl), row_count: parseInt(rows[0]?.cnt ?? '0', 10) });
     }
   }
 
@@ -322,8 +335,9 @@ export async function POST(req: Request) {
       };
       password  = String(body?.password   ?? '');
       hotelCode = String(body?.hotel_code ?? '');
-      module    = (['ALL', 'JO', 'MO', 'CO', 'IM'].includes(body?.module ?? '')
-        ? (body!.module as ResetHotelModule) : 'ALL');
+      const requestedModule = body?.module === 'CO' ? 'CO-ACSR' : body?.module;
+      module    = (['ALL', 'JO', 'MO', 'CO-ACSR', 'CO-IR', 'IM'].includes(requestedModule ?? '')
+        ? (requestedModule as ResetHotelModule) : 'ALL');
       action    = (['list', 'preview', 'execute'].includes(body?.action ?? '')
         ? (body!.action as ResetHotelAction) : 'list');
     } catch { /* empty body */ }

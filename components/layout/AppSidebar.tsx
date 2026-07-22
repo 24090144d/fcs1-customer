@@ -35,7 +35,7 @@ function SectionLabel({ label, T: t }: { label: string; T: { dim: string; rule: 
 }
 
 function moduleLabel(moduleCode: string): string {
-  return moduleCode === 'co' ? 'CO ACSR' : moduleCode.toUpperCase();
+  return moduleCode === 'co' ? 'CO ACSR' : moduleCode === 'co-ir' ? 'CO IR' : moduleCode.toUpperCase();
 }
 
 // ── Nav item — 4px left border accent (mirrors KPI / chart card spec) ─────────
@@ -462,7 +462,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                         (item.hotel_code !== 'CORP' && item.hotel_code === currentHotel)
                       )
             );
-            const moduleGroups = (['im', 'jo', 'mo', 'co'] as const).map((m) => ({
+            const moduleGroups = (['im', 'jo', 'mo', 'co', 'co-ir'] as const).map((m) => ({
               module: m,
               entries: items.filter((it) => it.module === m),
             })).filter((g) => g.entries.length > 0);
@@ -542,7 +542,7 @@ export function AppSidebar({ open, onClose, pinned, onTogglePin }: AppSidebarPro
                                 <BarChart2 size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : item.module === 'mo' ? (
                                 <Wrench size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
-                              ) : item.module === 'co' ? (
+                              ) : item.module === 'co' || item.module === 'co-ir' ? (
                                 <Sparkles size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />
                               ) : (
                                 <LineChart size={14} strokeWidth={active ? 2.5 : 2} className="shrink-0" />

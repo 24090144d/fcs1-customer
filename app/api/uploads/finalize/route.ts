@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, CoDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
-import type { CoRow } from '@/types/csv';
+import type { KpiDef, ChartDef, DailyBucket, ImDashboardJson, MoDashboardJson, CoDashboardJson, CoIrDashboardJson, HotelSummary, MaintenanceType } from '@/types/dashboard';
+import type { CoIrRow, CoRow } from '@/types/csv';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { deriveMoType } from './mo-helpers.mjs';
 import { buildCoRow } from '@/lib/csv/coMapping';
+import { buildCoIrRow } from '@/lib/csv/coIrMapping';
 import { parseCsvDate, localHour, localDateKey, localWeekday } from '@/lib/timezone';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,6 +215,24 @@ function normaliseCoForIm(row: CoRow): Record<string, unknown> {
     booking_source: row.cleaning_type,
     created_by: row.created_by,
     department: row.department ?? row.supervisor,
+  };
+}
+
+function normaliseCoIrForIm(row: CoIrRow): Record<string, unknown> {
+  return {
+    incident_case: row.row_key,
+    incident_status: row.inspection_result === 'Fail' ? 'Open' : 'Completed',
+    incident_category: row.room_status,
+    incident_item_name: row.location,
+    incident_location: row.location,
+    severity: row.inspection_result === 'Fail' ? 'Critical' : row.inspection_result === 'Conditional Pass' ? 'High' : 'Low',
+    subject: 'Room Inspection',
+    created_date: row.inspection_date ?? row.start_time ?? row.complete_time,
+    incident_datetime: row.start_time ?? row.complete_time ?? row.inspection_date,
+    guest_name: row.cleaned_by,
+    room_no: row.location,
+    created_by: row.inspector,
+    department: 'Housekeeping Inspection',
   };
 }
 
@@ -2117,9 +2136,10 @@ export async function POST(req: NextRequest) {
   type JobRow = {
     organization_id: string; module_code: 'im' | 'jo' | 'mo' | 'co'; source_name: string | null;
     chain_code: string | null; hotel_code: string | null; hotel_name: string | null; country_code: string | null;
+    data_range: string | null;
   };
   const { data: job, error: jobError } = await supabase
-    .from('upload_jobs').select('organization_id, module_code, source_name, chain_code, hotel_code, hotel_name, country_code')
+    .from('upload_jobs').select('organization_id, module_code, source_name, chain_code, hotel_code, hotel_name, country_code, data_range')
     .eq('id', upload_job_id).single() as unknown as SbResult<JobRow>;
 
   if (jobError || !job) return NextResponse.json({ error: 'Upload job not found' }, { status: 404 });
@@ -2130,6 +2150,8 @@ export async function POST(req: NextRequest) {
   const { data: orgRow } = await supabase
     .from('organizations').select('timezone').eq('id', organization_id).maybeSingle() as unknown as SbResult<{ timezone: string | null }>;
   const orgTimezone = orgRow?.timezone ?? 'UTC';
+  const isCoIrUpload = module_code === 'co'
+    && /(?:^|[^A-Z0-9])IR(?:[^A-Z0-9]|$)/i.test(job.data_range ?? source_name ?? '');
 
   const stagingTable = module_code === 'im'
     ? 'im_staging_rows'
@@ -2144,7 +2166,7 @@ export async function POST(req: NextRequest) {
       ? 'jo_records'
       : module_code === 'mo'
         ? 'mo_records'
-        : 'co_records';
+        : isCoIrUpload ? 'co_ir_records' : 'co_records';
   const dashboardTable = module_code === 'im'
     ? 'im_dashboard_json'
     : module_code === 'jo'
@@ -2240,7 +2262,7 @@ export async function POST(req: NextRequest) {
   const moDimDefectAcc: Record<string, Record<string, Record<string, MoDefectAcc>>> = {};
   // cmo-13: completed-by person → defect → { count, durSum (hours), delayed }
   const moCompletedByDefectAcc: Record<string, Record<string, MoDefectAcc>> = {};
-  const coRowsById = module_code === 'co'
+  const coRowsById = module_code === 'co' && !isCoIrUpload
     ? await (async () => {
         const gathered: StagingRow[] = [];
         let lastRowId = 0;
@@ -2260,6 +2282,27 @@ export async function POST(req: NextRequest) {
           co: buildCoRow(row.raw_row, row.row_number, orgTimezone),
         })));
         return new Map(prepared.map((entry) => [entry.id, entry.co] as const));
+      })()
+    : null;
+  const coIrRowsById = module_code === 'co' && isCoIrUpload
+    ? await (async () => {
+        const gathered: StagingRow[] = [];
+        let lastRowId = 0;
+        for (;;) {
+          const pageResult = await supabase
+            .from(stagingTable).select('id, uploaded_file_id, row_number, raw_row')
+            .eq('upload_job_id', upload_job_id).eq('is_valid', true)
+            .gt('id', lastRowId).order('id', { ascending: true }).limit(PAGE_SIZE);
+          const pageRows = (pageResult.data ?? null) as StagingRow[] | null;
+          if (!pageRows || pageRows.length === 0) break;
+          gathered.push(...pageRows);
+          lastRowId = pageRows[pageRows.length - 1].id;
+          if (pageRows.length < PAGE_SIZE) break;
+        }
+        return new Map(gathered.map((entry) => [
+          entry.id,
+          buildCoIrRow(entry.raw_row, entry.row_number, orgTimezone),
+        ] as const));
       })()
     : null;
   let totalInserted = 0;
@@ -2395,6 +2438,37 @@ export async function POST(req: NextRequest) {
     } else if (module_code === 'co') {
       payload = rows.map(r => {
         const rr = r.raw_row;
+        if (isCoIrUpload) {
+          const ir = coIrRowsById?.get(r.id) ?? buildCoIrRow(rr, r.row_number, orgTimezone);
+          accumulate(acc, normaliseCoIrForIm(ir), orgTimezone);
+          return {
+            organization_id,
+            upload_job_id,
+            uploaded_file_id: uploaded_file_id ?? r.uploaded_file_id,
+            source_row_id: r.id,
+            chain_code: hotel.chainCode || null,
+            hotel_code: hotel.hotelCode || null,
+            module_code,
+            country_code: hotel.countryCode || null,
+            row_key: ir.row_key,
+            row_number: ir.row_number,
+            report_variant: ir.report_variant,
+            inspection_date: ir.inspection_date,
+            inspector: ir.inspector,
+            location: ir.location,
+            start_time: ir.start_time,
+            complete_time: ir.complete_time,
+            cleaned_by: ir.cleaned_by,
+            turn_over_minutes: ir.turn_over_minutes,
+            inspection_duration_minutes: ir.inspection_duration_minutes,
+            duration_source: ir.duration_source,
+            inspection_result: ir.inspection_result,
+            inspection_score: ir.inspection_score,
+            room_status: ir.room_status,
+            inspection_credit: ir.inspection_credit,
+            normalized_row: { ...rr, ...ir },
+          };
+        }
         const co = coRowsById?.get(r.id) ?? buildCoRow(rr, r.row_number, orgTimezone);
         const imLike = normaliseCoForIm(co);
         accumulate(acc, imLike, orgTimezone);
@@ -2729,7 +2803,7 @@ export async function POST(req: NextRequest) {
 
   // ── Build + upsert dashboard JSON ────────────────────────────────────────
 
-  let generatedJson: ImDashboardJson | MoDashboardJson | CoDashboardJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
+  let generatedJson: ImDashboardJson | MoDashboardJson | CoDashboardJson | CoIrDashboardJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel);
   if (module_code === 'jo') {
     generatedJson.meta.schema = 'jo-v1';
     generatedJson.kpis = buildJoKpis(joKpiAcc);
@@ -2924,8 +2998,13 @@ export async function POST(req: NextRequest) {
       generatedJson.summary_by_type.MO.mo_completedby_defect_stats_map = moCompletedByDefectStatsMap;
     }
   } else if (module_code === 'co') {
-    generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
-    generatedJson.meta.schema = 'co-v1';
+    if (isCoIrUpload) {
+      generatedJson = buildImJson(acc, upload_job_id, source_name ?? upload_job_id, hotel) as unknown as CoIrDashboardJson;
+      generatedJson.meta.schema = 'co-ir-v1';
+    } else {
+      generatedJson = buildCoJson(acc, moTypeAcc, upload_job_id, source_name ?? upload_job_id, hotel);
+      generatedJson.meta.schema = 'co-v1';
+    }
   }
 
   const now = new Date().toISOString();

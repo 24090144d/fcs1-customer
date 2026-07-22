@@ -3,9 +3,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getPool } from '@/lib/db/supabaseCompat';
 import { resolveLiveTimezone } from '@/lib/dashboard-fetch';
 
-type TableLevel = 'hotels' | 'cleaning_types' | 'stay_statuses' | 'inspectors' | 'attendants' | 'details';
+type TableLevel = 'dates' | 'hotels' | 'cleaning_types' | 'stay_statuses' | 'inspectors' | 'room_types' | 'attendants' | 'details';
 
-const LEVELS = new Set<TableLevel>(['hotels', 'cleaning_types', 'stay_statuses', 'inspectors', 'attendants', 'details']);
+const LEVELS = new Set<TableLevel>(['dates', 'hotels', 'cleaning_types', 'stay_statuses', 'inspectors', 'room_types', 'attendants', 'details']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function clean(value: string | null, max = 200): string {
@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
     const cleaningType = clean(url.searchParams.get('cleaning_type'));
     const stayStatus = clean(url.searchParams.get('stay_status'));
     const inspector = clean(url.searchParams.get('inspector'));
+    const roomType = clean(url.searchParams.get('drill_room_type'));
     const attendant = clean(url.searchParams.get('attendant'));
+    const selectedDate = clean(url.searchParams.get('date'), 10);
     const from = clean(url.searchParams.get('from'), 10);
     const to = clean(url.searchParams.get('to'), 10);
     const floorFilter = clean(url.searchParams.get('floor'));
@@ -32,17 +34,17 @@ export async function GET(req: NextRequest) {
     if (!LEVELS.has(level) || !chain) {
       return NextResponse.json({ error: 'Valid level and chain are required.' }, { status: 400 });
     }
-    if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to)) || (from && to && from > to)) {
+    if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to)) || (selectedDate && !DATE_RE.test(selectedDate)) || (from && to && from > to)) {
       return NextResponse.json({ error: 'Invalid date range.' }, { status: 400 });
     }
-    if (level !== 'hotels' && !hotel) {
+    if (!['dates', 'hotels'].includes(level) && !hotel) {
       return NextResponse.json({ error: 'hotel is required for this level.' }, { status: 400 });
     }
-    if (['stay_statuses', 'inspectors', 'attendants', 'details'].includes(level) && !cleaningType) {
+    if (['stay_statuses', 'inspectors', 'room_types', 'attendants', 'details'].includes(level) && !cleaningType) {
       return NextResponse.json({ error: 'cleaning_type is required for this level.' }, { status: 400 });
     }
-    if (['attendants', 'details'].includes(level) && !stayStatus && !inspector) {
-      return NextResponse.json({ error: 'stay_status or inspector is required for this level.' }, { status: 400 });
+    if (['attendants', 'details'].includes(level) && !stayStatus && !inspector && !roomType) {
+      return NextResponse.json({ error: 'stay_status, inspector, or room_type is required for this level.' }, { status: 400 });
     }
     if (level === 'details' && !attendant) {
       return NextResponse.json({ error: 'attendant is required for details.' }, { status: 400 });
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     const supabase = createAdminClient();
     const timezone = await resolveLiveTimezone(supabase, 'co_records', hotel ? [hotel] : [], chain);
-    const params: unknown[] = [chain];
+    const params: unknown[] = [chain, timezone];
     const scopedWhere: string[] = [];
     const add = (value: unknown, sql: (index: number) => string) => {
       params.push(value);
@@ -61,19 +63,15 @@ export async function GET(req: NextRequest) {
     if (cleaningType) add(cleaningType, (i) => `cleaning_type_key = $${i}`);
     if (stayStatus) add(stayStatus, (i) => `stay_status_key = $${i}`);
     if (inspector) add(inspector, (i) => `inspector_key = $${i}`);
+    if (roomType) add(roomType, (i) => `room_type_key = $${i}`);
     if (attendant) add(attendant, (i) => `attendant_key = $${i}`);
     if (floorFilter && floorFilter !== 'ALL') add(floorFilter, (i) => `floor_key = $${i}`);
     if (attendantFilter && attendantFilter !== 'ALL') add(attendantFilter, (i) => `attendant_key = $${i}`);
     if (roomTypeFilter && roomTypeFilter !== 'ALL') add(roomTypeFilter, (i) => `room_type_key = $${i}`);
     if (statusFilter && statusFilter !== 'ALL') add(statusFilter, (i) => `derived_status = $${i}`);
-    if (from) {
-      params.push(timezone, from);
-      scopedWhere.push(`(event_datetime AT TIME ZONE $${params.length - 1})::date >= $${params.length}::date`);
-    }
-    if (to) {
-      params.push(timezone, to);
-      scopedWhere.push(`(event_datetime AT TIME ZONE $${params.length - 1})::date <= $${params.length}::date`);
-    }
+    if (selectedDate) add(selectedDate, (i) => `local_date = $${i}::date`);
+    if (from) add(from, (i) => `local_date >= $${i}::date`);
+    if (to) add(to, (i) => `local_date <= $${i}::date`);
 
     const base = `
       WITH source AS (
@@ -86,6 +84,7 @@ export async function GET(req: NextRequest) {
           COALESCE(NULLIF(BTRIM(floor), ''), 'Unknown Floor') AS floor_key,
           COALESCE(NULLIF(BTRIM(room_type), ''), 'Unknown Room Type') AS room_type_key,
           COALESCE(created_date, completed_time, start_time) AS event_datetime,
+          (COALESCE(created_date, completed_time, start_time) AT TIME ZONE $2)::date AS local_date,
           COALESCE(is_completed, false) OR completed_time IS NOT NULL AS completed_flag,
           (COALESCE(is_completed, false) OR completed_time IS NOT NULL) AND (
             NOT COALESCE(is_on_time, false)
@@ -129,7 +128,22 @@ export async function GET(req: NextRequest) {
     const validDuration = `time_spent_minutes IS NOT NULL AND time_spent_minutes >= 0 AND time_spent_minutes < 10080`;
     let sql = '';
 
-    if (level === 'hotels') {
+    if (level === 'dates') {
+      sql = `${base}
+        SELECT
+          TO_CHAR(local_date, 'YYYY-MM-DD') AS name,
+          COUNT(*)::int AS cleaning_records,
+          COUNT(DISTINCT hotel_code)::int AS hotels,
+          COUNT(DISTINCT cleaning_type_key)::int AS cleaning_types,
+          COUNT(DISTINCT attendant_key)::int AS attendants,
+          COUNT(DISTINCT inspector_key)::int AS inspectors,
+          ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits,
+          ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes
+        FROM base
+        WHERE local_date IS NOT NULL
+        GROUP BY local_date
+        ORDER BY local_date ASC`;
+    } else if (level === 'hotels') {
       sql = `${base}
         SELECT
           hotel_code AS name,
@@ -185,6 +199,21 @@ export async function GET(req: NextRequest) {
       )
       SELECT *, ROUND(100.0 * rooms / NULLIF(SUM(rooms) OVER (), 0), 1)::float8 AS share
       FROM grouped ORDER BY rooms DESC, name ASC`;
+    } else if (level === 'room_types') {
+      sql = `${base}, grouped AS (
+        SELECT
+          room_type_key AS name,
+          COUNT(*)::int AS rooms,
+          COUNT(DISTINCT attendant_key)::int AS attendants,
+          COUNT(DISTINCT inspector_key)::int AS inspectors,
+          ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes,
+          ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits,
+          COUNT(*) FILTER (WHERE behind_flag)::int AS behind_target
+        FROM base
+        GROUP BY room_type_key
+      )
+      SELECT *, ROUND(100.0 * rooms / NULLIF(SUM(rooms) OVER (), 0), 1)::float8 AS share
+      FROM grouped ORDER BY rooms DESC, name ASC`;
     } else if (level === 'attendants') {
       sql = `${base}
         SELECT
@@ -204,6 +233,7 @@ export async function GET(req: NextRequest) {
       sql = `${base}
         SELECT
           COALESCE(NULLIF(BTRIM(cleaning_order_no), ''), 'Unknown Order') AS cleaning_order_no,
+          event_datetime AS co_date,
           COALESCE(NULLIF(BTRIM(room_no), ''), '—') AS room,
           floor_key AS floor,
           COALESCE(NULLIF(BTRIM(service_round), ''), '—') AS service_round,
@@ -221,7 +251,7 @@ export async function GET(req: NextRequest) {
             ELSE 'bad'
           END AS flag
         FROM base
-        ORDER BY cleaning_order_no ASC, row_number ASC`;
+        ORDER BY event_datetime ASC NULLS LAST, cleaning_order_no ASC, row_number ASC`;
     }
 
     const result = await getPool().query(sql, params);

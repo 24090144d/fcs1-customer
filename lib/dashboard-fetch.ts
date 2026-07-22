@@ -7,12 +7,12 @@ import { unstable_noStore as noStore } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getPool } from '@/lib/db/supabaseCompat';
 import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, ChainEntry, DailyBucket, HotelSummary } from '@/types/dashboard';
-import type { CoRow } from '@/types/csv';
+import type { CoIrRow, CoRow } from '@/types/csv';
 import { localHour } from '@/lib/timezone';
 
 type SbResult<T> = { data: T | null; error: { message: string } | null };
 
-const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'im_records']);
+const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'co_ir_records', 'im_records']);
 
 /**
  * Resolve the org timezone live, at request time, so a Configuration →
@@ -30,7 +30,7 @@ const TIMEZONE_TABLES = new Set(['jo_records', 'mo_records', 'co_records', 'im_r
  */
 export async function resolveLiveTimezone(
   supabase: ReturnType<typeof createAdminClient>,
-  table: 'jo_records' | 'mo_records' | 'co_records' | 'im_records',
+  table: 'jo_records' | 'mo_records' | 'co_records' | 'co_ir_records' | 'im_records',
   hotelCodes: string[],
   chainCode?: string | null,
 ): Promise<string> {
@@ -516,7 +516,7 @@ function resolveDashboardTable(moduleCode?: string): 'im_dashboard_json' | 'jo_d
   const mod = String(moduleCode ?? '').toLowerCase();
   if (mod === 'jo') return 'jo_dashboard_json';
   if (mod === 'mo') return 'mo_dashboard_json';
-  if (mod === 'co') return 'co_dashboard_json';
+  if (mod === 'co' || mod === 'co-ir') return 'co_dashboard_json';
   return 'im_dashboard_json';
 }
 
@@ -534,8 +534,11 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
         ? 'mo-v1'
         : normalizedModule === 'co'
           ? 'co-v1'
+          : normalizedModule === 'co-ir'
+            ? 'co-ir-v1'
           : 'im-v1';
     const isCo = normalizedModule === 'co';
+    const isCoIr = normalizedModule === 'co-ir';
     const base = supabase
       .from(table)
       .select('generated_json')
@@ -572,7 +575,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
     const data = result.data?.generated_json ?? null;
     if (!data) return null;
     const isMo = normalizedModule === 'mo';
-    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : 'im_records';
+    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : isCoIr ? 'co_ir_records' : 'im_records';
     const hotelUpper = hotelCode ? hotelCode.toUpperCase() : (data.meta.hotel_code ?? '').toUpperCase();
     const timezone = await resolveLiveTimezone(supabase, recordTable, hotelUpper ? [hotelUpper] : [], data.meta.chain_code);
 
@@ -640,7 +643,7 @@ export async function fetchDashboard(hotelCode?: string, moduleCode?: string): P
       } as MoDashboardJson;
     }
 
-    if (isCo && hotelCode) {
+    if ((isCo || isCoIr) && hotelCode) {
       return {
         ...data,
         meta: {
@@ -780,6 +783,55 @@ export async function fetchCoRows(hotelCode?: string, chainCode?: string): Promi
   }
 }
 
+export async function fetchCoIrRows(hotelCode?: string, chainCode?: string): Promise<CoIrRow[]> {
+  noStore();
+  try {
+    const scopeHotel = String(hotelCode ?? '').trim().toUpperCase();
+    const scopeChain = String(chainCode ?? '').trim().toUpperCase();
+    if (!scopeHotel && !scopeChain) return [];
+    const supabase = createAdminClient();
+    const columns = [
+      'row_key', 'row_number', 'report_variant', 'chain_code', 'hotel_code',
+      'inspection_date', 'inspector', 'location', 'start_time', 'complete_time',
+      'cleaned_by', 'turn_over_minutes', 'inspection_duration_minutes',
+      'duration_source', 'inspection_result', 'inspection_score', 'room_status',
+      'inspection_credit',
+    ].join(',');
+    const query = scopeHotel && scopeHotel !== 'CORP'
+      ? supabase.from('co_ir_records').eq('hotel_code', scopeHotel)
+      : supabase.from('co_ir_records').eq('chain_code', scopeChain);
+    const result = await query.select(columns).order('inspection_date', { ascending: true }) as unknown as SbResult<Record<string, unknown>[]>;
+    if (result.error) {
+      console.error('[dashboard/fetchCoIrRows] query failed', { scopeHotel, scopeChain, error: result.error });
+      return [];
+    }
+    return (result.data ?? []).map((row) => ({
+      ...(row as unknown as CoIrRow),
+      report_variant: 'IR',
+      inspection_date: toDateOnly(row.inspection_date),
+      turn_over_minutes: toNumberOrNull(row.turn_over_minutes),
+      inspection_duration_minutes: toNumberOrNull(row.inspection_duration_minutes),
+      inspection_score: toNumberOrNull(row.inspection_score),
+      inspection_credit: toNumberOrNull(row.inspection_credit),
+    }));
+  } catch (error) {
+    console.error('[dashboard/fetchCoIrRows] unexpected failure', { hotelCode, chainCode, error });
+    return [];
+  }
+}
+
+function toDateOnly(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  const text = String(value).trim();
+  const direct = text.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (direct) return direct;
+  const parsed = new Date(text);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString().slice(0, 10) : null;
+}
+
 function toNumberOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -799,7 +851,12 @@ export async function fetchChainEntries(chainCode: string, currentHotelCode: str
     const supabase = createAdminClient();
     type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
-    const isCo = String(moduleCode ?? '').toLowerCase() === 'co';
+    const normalizedModule = String(moduleCode ?? '').toLowerCase();
+    const expectedSchema = normalizedModule === 'jo' ? 'jo-v1'
+      : normalizedModule === 'mo' ? 'mo-v1'
+        : normalizedModule === 'co' ? 'co-v1'
+          : normalizedModule === 'co-ir' ? 'co-ir-v1'
+            : 'im-v1';
     const { data: rows } = await supabase
       .from(table)
       .select('generated_json, created_at')
@@ -809,6 +866,7 @@ export async function fetchChainEntries(chainCode: string, currentHotelCode: str
     const seen = new Map<string, ChainEntry>();
     for (const row of rows) {
       const json = row.generated_json;
+      if (json?.meta?.schema !== expectedSchema) continue;
       if (!json?.meta?.hotel_code) continue;
       if (seen.has(json.meta.hotel_code)) continue;
       if (!json.summary) continue;
@@ -1027,8 +1085,9 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
     const normalizedModule = String(moduleCode ?? '').toLowerCase();
     const isMo = normalizedModule === 'mo';
     const isCo = normalizedModule === 'co';
+    const isCoIr = normalizedModule === 'co-ir';
     const isJo = normalizedModule === 'jo';
-    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : 'im_records';
+    const recordTable = isJo ? 'jo_records' : isMo ? 'mo_records' : isCo ? 'co_records' : isCoIr ? 'co_ir_records' : 'im_records';
     type DashRow = { generated_json: DashboardJson; created_at: string };
     const table = resolveDashboardTable(moduleCode);
     const rowsResult = await supabase
@@ -1045,7 +1104,12 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
       });
     }
 
-    const rows = rowsResult.data ?? [];
+    const expectedSchema = normalizedModule === 'jo' ? 'jo-v1'
+      : normalizedModule === 'mo' ? 'mo-v1'
+        : normalizedModule === 'co' ? 'co-v1'
+          : normalizedModule === 'co-ir' ? 'co-ir-v1'
+            : 'im-v1';
+    const rows = (rowsResult.data ?? []).filter((row) => row.generated_json?.meta?.schema === expectedSchema);
     if (rows.length === 0) return { data: null, chainEntries: [] };
 
     const latestByHotel = new Map<string, DashboardJson>();

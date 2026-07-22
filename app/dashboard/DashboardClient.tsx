@@ -6,12 +6,13 @@ import { Sun, Moon, Printer, CalendarDays, X } from 'lucide-react';
 import Highcharts from 'highcharts';
 import { KpiCard }  from '@/components/dashboard/KpiCard';
 import type { DashboardJson, ImDashboardJson, MoDashboardJson, CoDashboardJson, MaintenanceType, DailyBucket, KpiDef, KpiBenchmark, ChartDef, ChainEntry, HotelSummary } from '@/types/dashboard';
-import type { CoRow } from '@/types/csv';
+import type { CoIrRow, CoRow } from '@/types/csv';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
+import { CoIrDashboardView } from '@/components/dashboard/CoIrDashboardView';
 import { CorpImDrilldownTable } from '@/components/dashboard/CorpImDrilldownTable';
 import { CorpJoDrilldownTable } from '@/components/dashboard/CorpJoDrilldownTable';
 import { CorpMoDrilldownTable } from '@/components/dashboard/CorpMoDrilldownTable';
@@ -7301,7 +7302,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   );
 }
 
-export function DashboardClient({ data, chainEntries = [], coRows = [], myDash, myDashEmbed }: { data: DashboardJson | null; chainEntries?: ChainEntry[]; coRows?: CoRow[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
+export function DashboardClient({ data, chainEntries = [], coRows = [], coIrRows = [], myDash, myDashEmbed }: { data: DashboardJson | null; chainEntries?: ChainEntry[]; coRows?: CoRow[]; coIrRows?: CoIrRow[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
   // CO: data may be null when no co_dashboard_json exists but co_records rows do.
   // Build a minimal meta shell so CoDashboardView can compute KPIs/charts from rows.
   if (!data) {
@@ -7333,9 +7334,13 @@ export function DashboardClient({ data, chainEntries = [], coRows = [], myDash, 
     return null;
   }
   const isCo = data.meta.schema === 'co-v1';
+  const isCoIr = data.meta.schema === 'co-ir-v1';
   const isMo = data.meta.schema === 'mo-v1';
   if (isCo) {
     return <CoDashboardView data={data as CoDashboardJson} rows={coRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
+  }
+  if (isCoIr) {
+    return <CoIrDashboardView data={data} rows={coIrRows} chainEntries={chainEntries} />;
   }
   if (isMo) {
     return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;

@@ -5,7 +5,7 @@ import { getPool } from '@/lib/db/supabaseCompat';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO-ACSR' | 'CO-IR' | 'IM';
 type ResetAction = 'preview' | 'execute' | 'compact';
 
 export interface TableStat {
@@ -24,12 +24,14 @@ const MODULE_TABLES: Record<ResetModule, string[]> = {
   IM: ['im_records', 'im_staging_rows', 'im_dashboard_json'],
   JO: ['jo_records', 'jo_staging_rows', 'jo_dashboard_json'],
   MO: ['mo_records', 'mo_staging_rows', 'mo_dashboard_json'],
-  CO: ['co_records', 'co_staging_rows', 'co_dashboard_json'],
+  'CO-ACSR': ['co_records', 'co_staging_rows', 'co_dashboard_json'],
+  'CO-IR': ['co_ir_records', 'co_staging_rows', 'co_dashboard_json'],
   ALL: [
     'im_records', 'im_staging_rows', 'im_dashboard_json',
     'jo_records', 'jo_staging_rows', 'jo_dashboard_json',
     'mo_records', 'mo_staging_rows', 'mo_dashboard_json',
     'co_records', 'co_staging_rows', 'co_dashboard_json',
+    'co_ir_records',
     'organizations', 'upload_jobs', 'uploaded_files',
     'user_chart_visibility', 'ai_chart_definitions',
   ],
@@ -46,6 +48,7 @@ const TABLE_LABELS: Record<string, string> = {
   mo_staging_rows:     'MO Staging',
   mo_dashboard_json:   'MO Dashboard Cache',
   co_records:          'CO Records',
+  co_ir_records:       'CO IR Records',
   co_staging_rows:     'CO Staging',
   co_dashboard_json:   'CO Dashboard Cache',
   organizations:       'Organizations',
@@ -105,6 +108,64 @@ async function getTableStats(
   return stats;
 }
 
+function coSchema(module: 'CO-ACSR' | 'CO-IR'): string {
+  return module === 'CO-IR' ? 'co-ir-v1' : 'co-v1';
+}
+
+async function getCoScopeStats(
+  pool: ReturnType<typeof getPool>,
+  module: 'CO-ACSR' | 'CO-IR',
+): Promise<TableStat[]> {
+  const recordTable = module === 'CO-IR' ? 'co_ir_records' : 'co_records';
+  const recordStats = await getTableStats(pool, [recordTable]);
+  const schema = coSchema(module);
+  const shared: TableStat[] = [];
+  for (const [table, label, condition] of [
+    ['co_staging_rows', `${module} Staging`, `upload_job_id IN (SELECT upload_job_id FROM co_dashboard_json WHERE generated_json->'meta'->>'schema' = $1)`],
+    ['co_dashboard_json', `${module} Dashboard Cache`, `generated_json->'meta'->>'schema' = $1`],
+  ] as const) {
+    try {
+      const { rows } = await pool.query<{ cnt: string }>(
+        `SELECT count(*)::text AS cnt FROM ${quoteIdent(table)} WHERE ${condition}`,
+        [schema],
+      );
+      shared.push({ table_name: table, label, row_count: parseInt(rows[0]?.cnt ?? '0', 10), size: 'shared table', size_bytes: 0 });
+    } catch {
+      shared.push({ table_name: table, label, row_count: 0, size: 'n/a', size_bytes: 0 });
+    }
+  }
+  recordStats[0] = { ...recordStats[0], label: `${module} Records` };
+  return [...recordStats, ...shared];
+}
+
+async function resetCoScope(
+  pool: ReturnType<typeof getPool>,
+  module: 'CO-ACSR' | 'CO-IR',
+): Promise<{ deleted: number; vacuumed: number }> {
+  const recordTable = module === 'CO-IR' ? 'co_ir_records' : 'co_records';
+  const schema = coSchema(module);
+  let deleted = 0;
+  const { rowCount: recordRows } = await pool.query(`DELETE FROM ${quoteIdent(recordTable)}`);
+  deleted += recordRows ?? 0;
+  const { rowCount: stagingRows } = await pool.query(
+    `DELETE FROM co_staging_rows WHERE upload_job_id IN (
+       SELECT upload_job_id FROM co_dashboard_json WHERE generated_json->'meta'->>'schema' = $1
+     )`,
+    [schema],
+  );
+  deleted += stagingRows ?? 0;
+  const { rowCount: dashboardRows } = await pool.query(
+    `DELETE FROM co_dashboard_json WHERE generated_json->'meta'->>'schema' = $1`,
+    [schema],
+  );
+  deleted += dashboardRows ?? 0;
+  let vacuumed = 0;
+  for (const table of [recordTable, 'co_staging_rows', 'co_dashboard_json']) {
+    try { await pool.query(`VACUUM ANALYZE ${quoteIdent(table)}`); vacuumed++; } catch { /* non-critical */ }
+  }
+  return { deleted, vacuumed };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,8 +176,9 @@ export async function POST(req: Request) {
     try {
       const body = await req.json() as { password?: string; module?: string; action?: string };
       password = String(body?.password ?? '');
-      module   = (['ALL', 'JO', 'MO', 'CO', 'IM'].includes(body?.module ?? '')
-        ? (body!.module as ResetModule)
+      const requestedModule = body?.module === 'CO' ? 'CO-ACSR' : body?.module;
+      module   = (['ALL', 'JO', 'MO', 'CO-ACSR', 'CO-IR', 'IM'].includes(requestedModule ?? '')
+        ? (requestedModule as ResetModule)
         : 'ALL');
       action   = body?.action === 'preview' ? 'preview' : body?.action === 'compact' ? 'compact' : 'execute';
     } catch { /* empty / malformed body */ }
@@ -131,7 +193,9 @@ export async function POST(req: Request) {
 
     // ── Preview: return row counts + sizes, no mutations ─────────────────────
     if (action === 'preview') {
-      const stats = await getTableStats(pool, tables);
+      const stats = module === 'CO-ACSR' || module === 'CO-IR'
+        ? await getCoScopeStats(pool, module)
+        : await getTableStats(pool, tables);
       return NextResponse.json({ ok: true, module, tables: stats });
     }
 
@@ -171,6 +235,17 @@ export async function POST(req: Request) {
           + `${(before.reduce((s, t) => s + t.size_bytes, 0) - after.reduce((s, t) => s + t.size_bytes, 0)) > 0
               ? `reclaimed ${Math.round((beforeBytes - afterBytes) / 1024 / 1024)} MB`
               : 'no size change'}${failed.length > 0 ? ` (${failed.length} failed — check logs)` : ''}.`,
+      });
+    }
+
+    if (module === 'CO-ACSR' || module === 'CO-IR') {
+      const result = await resetCoScope(pool, module);
+      return NextResponse.json({
+        ok: true,
+        module,
+        deleted_rows: result.deleted,
+        vacuumed_tables: result.vacuumed,
+        message: `${module} reset completed — ${result.deleted.toLocaleString()} rows deleted${result.vacuumed > 0 ? `, ${result.vacuumed} tables vacuumed` : ''}.`,
       });
     }
 

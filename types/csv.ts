@@ -255,7 +255,29 @@ export interface CoRow {
   additional_task_status: string | null;
 }
 
-export type ParsedRow = ImRow | JoRow | MoRow | CoRow;
+/** Cleaning Order Inspection Report row. Stored separately from CO-ACSR. */
+export interface CoIrRow {
+  row_key: string;
+  row_number: number;
+  report_variant: 'IR';
+  chain_code?: string | null;
+  hotel_code?: string | null;
+  inspection_date: string | null;
+  inspector: string;
+  location: string;
+  start_time: string | null;
+  complete_time: string | null;
+  cleaned_by: string | null;
+  turn_over_minutes: number | null;
+  inspection_duration_minutes: number | null;
+  duration_source: 'TIMESTAMP_DIFF' | 'TURN_OVER_TIME' | null;
+  inspection_result: string;
+  inspection_score: number | null;
+  room_status: string;
+  inspection_credit: number | null;
+}
+
+export type ParsedRow = ImRow | JoRow | MoRow | CoRow | CoIrRow;
 
 // ── Parse result ──────────────────────────────────────────────────────────────
 

@@ -7,6 +7,8 @@ import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { csvSlug, downloadCsvFile, type CsvValue } from '@/lib/download-csv';
+import { useDraggableDialog } from '@/components/dashboard/useDraggableDialog';
+import { TableCodeTitle } from '@/components/dashboard/TableCodeTitle';
 
 type ModalLevel = 'departments' | 'categories' | 'items' | 'details';
 
@@ -67,6 +69,8 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
   const { t } = useI18n();
   const { theme } = useTheme();
   const tokens = getAppThemeTokens(theme, dark);
+  const tableCode = rootLevel === 'hotels' ? 'cjot-01' : 'jot-01';
+  const { dialogStyle, dragHandleProps, resetDialogPosition } = useDraggableDialog();
   const [rootRows, setRootRows] = useState<SummaryRow[]>([]);
   const [rootLoading, setRootLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,6 +144,10 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [modalLevel]);
+
+  useEffect(() => {
+    if (!modalLevel) resetDialogPosition();
+  }, [modalLevel, resetDialogPosition]);
 
   const hotelLabel = useCallback((code: string) => {
     const name = hotelNames[code];
@@ -320,7 +328,7 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
       <div className="overflow-hidden" style={{ background: tokens.card.bg, border: `1px solid ${tokens.card.border}`, borderLeft: `4px solid ${tokens.accent}`, borderRadius: '12px' }}>
         <div className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>
           <div>
-            <h4 className="font-serif font-semibold" style={{ color: tokens.text }}>{rootLevel === 'hotels' ? t('dashboard_ui.jo_table_hotel_summary', 'Hotel Job Order Summary') : t('dashboard_ui.jo_table_department_summary', 'Department Summary')}</h4>
+            <TableCodeTitle code={tableCode} title={rootLevel === 'hotels' ? t('dashboard_ui.jo_table_hotel_summary', 'Hotel Job Order Summary') : t('dashboard_ui.jo_table_department_summary', 'Department Summary')} titleColor={tokens.text} codeColor={tokens.accent} background={tokens.chart.codeBg} />
             <p className="mt-1 font-mono text-[0.62rem]" style={{ color: tokens.dashboard.tableMuted }}>{rootLevel === 'hotels' ? t('dashboard_ui.jo_table_hierarchy', 'Hotel → Department → Category → Service Items → Detail') : t('dashboard_ui.jo_table_hotel_hierarchy', 'Department → Category → Service Items → Detail')}</p>
           </div>
           <ExportButton onClick={exportRootCsv} disabled={rootLoading || rootRows.length === 0} />
@@ -333,10 +341,10 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
 
       {modalLevel && path && typeof document !== 'undefined' && createPortal((
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-3 md:p-6 print-hidden" onMouseDown={(e) => { if (e.currentTarget === e.target) setModalLevel(null); }}>
-          <div role="dialog" aria-modal="true" aria-label={modalTitle} className="w-full max-w-7xl max-h-[88vh] overflow-hidden shadow-2xl" style={{ background: tokens.card.bg, border: `1px solid ${tokens.card.border}`, borderRadius: '12px' }}>
-            <div className="flex items-start justify-between gap-4 px-4 py-3" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>
+          <div role="dialog" aria-modal="true" aria-label={modalTitle} className="w-full max-w-7xl max-h-[88vh] overflow-hidden shadow-2xl" style={{ background: tokens.card.bg, border: `1px solid ${tokens.card.border}`, borderRadius: '12px', ...dialogStyle }}>
+            <div {...dragHandleProps} className="flex cursor-move touch-none select-none items-start justify-between gap-4 px-4 py-3" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>
               <div className="min-w-0">
-                <div className="flex items-center gap-2"><button type="button" onClick={back} className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[0.65rem] hover:opacity-75" style={{ color: tokens.accent, border: `1px solid ${tokens.accent}55` }}><ArrowLeft size={13} /> {t('dashboard_ui.jo_table_back', 'Back')}</button><h4 className="font-serif font-semibold" style={{ color: tokens.text }}>{modalTitle}</h4></div>
+                <div className="flex items-center gap-2"><button type="button" onClick={back} className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[0.65rem] hover:opacity-75" style={{ color: tokens.accent, border: `1px solid ${tokens.accent}55` }}><ArrowLeft size={13} /> {t('dashboard_ui.jo_table_back', 'Back')}</button><TableCodeTitle code={tableCode} title={modalTitle} titleColor={tokens.text} codeColor={tokens.accent} background={tokens.chart.codeBg} /></div>
                 <div className="mt-2 flex flex-wrap items-center gap-1 font-mono" style={{ color: tokens.dashboard.tableMuted, fontSize: 'calc(0.62rem + 5px)' }}>
                   {breadcrumb.map((part, index) => { const active = index === breadcrumb.length - 1; return <span key={`${part}-${index}`} className={active ? 'font-bold' : undefined} style={active ? { color: tokens.text } : undefined}>{index > 0 && <span className="mx-1">→</span>}{part}</span>; })}
                 </div>

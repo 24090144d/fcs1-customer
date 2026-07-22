@@ -707,7 +707,7 @@ function SystemSettingsPanel({ pal }: { pal: Palette }) {
 // Reset Database panel (System tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetModule = 'ALL' | 'JO' | 'MO' | 'CO-ACSR' | 'CO-IR' | 'IM';
 type ResetStep   = 'form' | 'previewing' | 'preview' | 'executing' | 'done';
 
 interface TableStat {
@@ -727,7 +727,8 @@ const RESET_MODULES: { key: ResetModule; label: string; color: string }[] = [
   { key: 'ALL', label: 'ALL',  color: '#C55A10' },
   { key: 'JO',  label: 'JO',  color: '#2563EB' },
   { key: 'MO',  label: 'MO',  color: '#059669' },
-  { key: 'CO',  label: 'CO',  color: '#7C3AED' },
+  { key: 'CO-ACSR', label: 'CO ACSR', color: '#7C3AED' },
+  { key: 'CO-IR', label: 'CO IR', color: '#9333EA' },
   { key: 'IM',  label: 'IM',  color: '#B45309' },
 ];
 
@@ -1121,7 +1122,7 @@ function ResetPanel({ pal, t }: ResetPanelProps) {
 // Reset by Chain panel (System tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetChainModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetChainModule = 'ALL' | 'JO' | 'MO' | 'CO-ACSR' | 'CO-IR' | 'IM';
 type ResetChainStep   = 'idle' | 'loading' | 'ready' | 'previewing' | 'preview' | 'executing' | 'done';
 
 interface ChainModuleStat { module_code: string; job_count: number; total_rows: number; }
@@ -1137,7 +1138,8 @@ const CHAIN_MODULES: { key: ResetChainModule; label: string; color: string }[] =
   { key: 'ALL', label: 'ALL', color: '#C55A10' },
   { key: 'JO',  label: 'JO',  color: '#2563EB' },
   { key: 'MO',  label: 'MO',  color: '#059669' },
-  { key: 'CO',  label: 'CO',  color: '#7C3AED' },
+  { key: 'CO-ACSR', label: 'CO ACSR', color: '#7C3AED' },
+  { key: 'CO-IR', label: 'CO IR', color: '#9333EA' },
   { key: 'IM',  label: 'IM',  color: '#B45309' },
 ];
 
@@ -1524,7 +1526,7 @@ function ResetByChainPanel({ pal, t: _t }: ResetPanelProps) {
 // Reset by Hotel panel (System tab)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO' | 'IM';
+type ResetHotelModule = 'ALL' | 'JO' | 'MO' | 'CO-ACSR' | 'CO-IR' | 'IM';
 type ResetHotelStep   = 'idle' | 'loading' | 'ready' | 'previewing' | 'preview' | 'executing' | 'done';
 
 interface HotelModuleStat { module_code: string; job_count: number; total_rows: number; }
@@ -1540,7 +1542,8 @@ const HOTEL_MODULES: { key: ResetHotelModule; label: string; color: string }[] =
   { key: 'ALL', label: 'ALL', color: '#C55A10' },
   { key: 'JO',  label: 'JO',  color: '#2563EB' },
   { key: 'MO',  label: 'MO',  color: '#059669' },
-  { key: 'CO',  label: 'CO',  color: '#7C3AED' },
+  { key: 'CO-ACSR', label: 'CO ACSR', color: '#7C3AED' },
+  { key: 'CO-IR', label: 'CO IR', color: '#9333EA' },
   { key: 'IM',  label: 'IM',  color: '#B45309' },
 ];
 

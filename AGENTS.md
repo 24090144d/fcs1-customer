@@ -9,10 +9,10 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 | Key | Value |
 |---|---|
-| Version | **v1.1.23** (released 2026-07-22) |
+| Version | **v1.1.24** (released 2026-07-22) |
 | Branch | `main` |
 | Local dev | `npm run dev` → `http://localhost:3010` |
-| Previous version | v1.1.22 |
+| Previous version | v1.1.23 |
 
 **Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
@@ -59,6 +59,7 @@ Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHA
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.24** | 2026-07-22 | Added the independent CO Inspection Report (`CO-IR`) upload and dashboard pipeline, hotel/corp navigation, KPI benchmarks, multi-level charts, long charts, draggable inspector drilldown tables, reset scopes, four-language labels, and the idempotent `co_ir_records` Neon schema migration. |
 | **v1.1.23** | 2026-07-22 | JO, MO, CO, and IM detail-table date/time columns now use the compact, timezone-aware `DD/MM/YY HH:mm` format. Detail-table minimum widths were reduced to match the shorter values, including separate CO widths for Stay Status and Inspector hierarchies. |
 | **v1.1.22** | 2026-07-22 | Added a second, independent Inspector drilldown table to Corp and Hotel CO while preserving the existing Stay Status hierarchy. Corp drills Hotel → Cleaning Type → Inspector → Attendant → Detail; Hotel starts at Cleaning Type. Every level includes icon-only CSV export, inspector counts/details, and blank inspector values fall back to `Inspector`; labels were added across all four languages. |
 | **v1.1.21** | 2026-07-22 | Added live, filter-aware analytical Table sections for Corp and Hotel IM/JO/MO/CO. Each module has its own database route and drilldown hierarchy, renders the root summary inline, opens deeper levels in a modal, exports every level to CSV, and includes four-language labels. CO adds benchmark flag icons to cleaning-record details. |

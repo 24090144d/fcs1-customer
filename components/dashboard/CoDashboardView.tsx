@@ -4688,6 +4688,15 @@ export function CoDashboardView({
               filters={filters}
               dark={dark}
             />
+            <CorpCoDrilldownTable
+              chainCode={data.meta.chain_code ?? ''}
+              hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
+              hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
+              rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
+              hierarchy="room-type"
+              filters={filters}
+              dark={dark}
+            />
           </div>
         </section>
 

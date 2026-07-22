@@ -81,6 +81,15 @@ function parseFileName(filename: string): ParsedFileName | null {
   };
 }
 
+function isCoIrFile(parsed: ParsedFileName): boolean {
+  return parsed.module.toUpperCase() === 'CO' && /(?:^|-)IR(?:-|$)/i.test(parsed.dataRange);
+}
+
+function dashboardHrefFor(parsed: ParsedFileName): string {
+  const module = isCoIrFile(parsed) ? 'co-ir' : parsed.module.toLowerCase();
+  return `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=${encodeURIComponent(module)}${parsed.chainCode ? `&chain=${encodeURIComponent(parsed.chainCode)}` : ''}`;
+}
+
 const KNOWN_MODULES: ModuleCode[] = ['IM', 'JO', 'MO', 'CO'];
 
 function buildValidationMessages(file: File, parsed: ParsedFileName | null): ValidationMessage[] {
@@ -112,7 +121,9 @@ function buildValidationMessages(file: File, parsed: ParsedFileName | null): Val
     msgs.push({
       id:       'module-ok',
       severity: 'info',
-      message:  `Module ${moduleUpper} recognised — CSV columns will be validated against ${moduleUpper} schema.`,
+      message:  isCoIrFile(parsed)
+        ? 'CO Inspection Report recognised — CSV columns will be validated against the CO-IR schema.'
+        : `Module ${moduleUpper} recognised — CSV columns will be validated against ${moduleUpper} schema.`,
     });
   }
 
@@ -354,9 +365,7 @@ export default function OnboardingPage() {
         severity: 'success',
         message:  `Finalized — ${fmt(records_inserted)} records written to database. Dashboard JSON updated.`,
       });
-      const dashboardHref = parsed?.module?.toLowerCase() === 'co'
-        ? `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=co${parsed.chainCode ? `&chain=${encodeURIComponent(parsed.chainCode)}` : ''}`
-        : `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=${encodeURIComponent(parsed.module.toLowerCase())}`;
+      const dashboardHref = dashboardHrefFor(parsed);
       router.replace(dashboardHref);
     } catch (err) {
       setStatus('error');
@@ -489,7 +498,7 @@ export default function OnboardingPage() {
           <div className="min-w-0">
             <h1 className="font-serif text-2xl font-bold text-slate-800 leading-tight">{t('onboarding.page_title', 'Upload CSV')}</h1>
             <p className="font-sans text-sm text-slate-500 mt-1 max-w-2xl">
-              {t('onboarding.page_subtitle', 'Upload IM, JO, MO, or CO CSV data. IM supports incident dashboards, JO supports job-order dashboards, MO supports maintenance dashboards with MO/PM order analysis, and CO supports cleaning-order dashboards.')}
+              {t('onboarding.page_subtitle', 'Upload IM, JO, MO, or CO CSV data. CO supports both Cleaning Order ACSR and Cleaning Inspection IR dashboards.')}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {[
@@ -497,6 +506,7 @@ export default function OnboardingPage() {
                 ['JO', 'Job Order'],
                 ['MO', 'Maintenance Order / PM'],
                 ['CO', 'Cleaning Order ACSR'],
+                ['CO-IR', 'Cleaning Inspection IR'],
               ].map(([code, label]) => (
                 <span
                   key={code}
@@ -649,9 +659,7 @@ export default function OnboardingPage() {
                   </div>
                 </div>
                 <Link
-                  href={parsed.module.toLowerCase() === 'co'
-                    ? `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=co${parsed.chainCode ? `&chain=${encodeURIComponent(parsed.chainCode)}` : ''}`
-                    : `/dashboard?hotel=${encodeURIComponent(parsed.hotelCode)}&module=${encodeURIComponent(parsed.module.toLowerCase())}`}
+                  href={dashboardHrefFor(parsed)}
                   className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-lg font-sans font-semibold text-xs transition-all duration-150 active:scale-[0.98]"
                   style={{
                     background: '#0E7470',
@@ -672,8 +680,9 @@ export default function OnboardingPage() {
               </code>
               <p className="font-sans text-[11px] text-slate-500 leading-relaxed">
                 Supported modules: <span className="font-semibold text-slate-700">IM</span> for incident data,{' '}
-                <span className="font-semibold text-slate-700">JO</span> for job-order data, and{' '}
-                <span className="font-semibold text-slate-700">MO</span> for maintenance CSVs containing MO and PM order numbers, and <span className="font-semibold text-slate-700">CO</span> for cleaning-order CSVs.
+                <span className="font-semibold text-slate-700">JO</span> for job-order data,{' '}
+                <span className="font-semibold text-slate-700">MO</span> for maintenance CSVs containing MO and PM order numbers, and{' '}
+                <span className="font-semibold text-slate-700">CO</span> for Cleaning Order ACSR or Cleaning Inspection IR CSVs. For Cleaning Inspection IR, use module <span className="font-semibold text-slate-700">CO</span> and begin DataRange with <span className="font-mono font-semibold text-slate-700">IR-</span>.
               </p>
               <div className="space-y-1">
                 {[

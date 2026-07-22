@@ -4,7 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardHeaderActions } from '@/components/layout/DashboardHeaderActions';
 import { DashboardClient } from './DashboardClient';
 import type { ChainEntry } from '@/types/dashboard';
-import { fetchDashboard, fetchCorpDashboard, fetchChainEntries, fetchCoRows } from '@/lib/dashboard-fetch';
+import { fetchDashboard, fetchCorpDashboard, fetchChainEntries, fetchCoIrRows, fetchCoRows } from '@/lib/dashboard-fetch';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +21,8 @@ export default async function DashboardPage({
   const isCorp = String(hotelCode ?? '').toLowerCase() === 'corp';
   const moduleBreadcrumb = moduleCode === 'co'
     ? 'CO ACSR Dashboard'
+    : moduleCode === 'co-ir'
+      ? 'CO Inspection Report Dashboard'
     : moduleCode === 'mo'
       ? 'MO Dashboard'
       : moduleCode === 'jo'
@@ -42,7 +44,7 @@ export default async function DashboardPage({
             </div>
             <h1 className="font-serif text-2xl font-bold text-slate-800">No Dashboard Data</h1>
             <p className="font-sans text-sm text-slate-500 max-w-sm">
-              Upload an IM, JO, MO, or CO CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
+              Upload an IM, JO, MO, CO ACSR, or CO Inspection Report CSV file to generate your dashboard. The analysis will appear here automatically after finalization.
             </p>
             <Link
               href="/onboarding"
@@ -65,6 +67,9 @@ export default async function DashboardPage({
   const coRows = moduleCode === 'co'
     ? await fetchCoRows(data.meta.hotel_code, data.meta.chain_code)
     : [];
+  const coIrRows = moduleCode === 'co-ir'
+    ? await fetchCoIrRows(data.meta.hotel_code, data.meta.chain_code)
+    : [];
 
   const { chain_code, hotel_code, hotel_name, country_code } = data.meta;
   const hotelLabel = hotel_code
@@ -74,7 +79,7 @@ export default async function DashboardPage({
 
   return (
     <AppLayout breadcrumbs={[{ label: 'Dashboard' }, { label: moduleBreadcrumb }, { label: hotelLabel }]} headerRight={<DashboardHeaderActions />}>
-      <DashboardClient data={data} chainEntries={chainEntries} coRows={coRows} />
+      <DashboardClient data={data} chainEntries={chainEntries} coRows={coRows} coIrRows={coIrRows} />
     </AppLayout>
   );
 }

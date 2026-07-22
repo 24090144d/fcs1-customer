@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import type { ModuleCode, ImRow, JoRow, MoRow, CoRow, ValidationError } from '@/types/csv';
+import type { ModuleCode, ImRow, JoRow, MoRow, CoRow, CoIrRow, ValidationError } from '@/types/csv';
 import { buildCoRow, normaliseCoKeys } from '@/lib/csv/coMapping';
+import { buildCoIrRow, isCoIrShape, normaliseCoIrKeys } from '@/lib/csv/coIrMapping';
 
 // ── Required column lists ─────────────────────────────────────────────────────
 
@@ -23,6 +24,10 @@ export const MO_REQUIRED_COLUMNS = [
 ] as const;
 
 export const CO_REQUIRED_COLUMNS = [] as const;
+export const CO_IR_REQUIRED_COLUMNS = [
+  'inspection_date', 'inspector', 'location', 'start_time', 'complete_time',
+  'inspection_result', 'room_status', 'inspection_credit',
+] as const;
 
 // ── Zod primitives ────────────────────────────────────────────────────────────
 
@@ -481,7 +486,24 @@ export function validateMoRow(
 export function validateCoRow(
   raw: Record<string, string>,
   rowNumber: number,
-): { row: CoRow | null; errors: ValidationError[] } {
+): { row: CoRow | CoIrRow | null; errors: ValidationError[] } {
+  if (isCoIrShape(raw)) {
+    const row = buildCoIrRow(raw, rowNumber);
+    const norm = normaliseCoIrKeys(raw);
+    const rawOrNull = (value: unknown) => {
+      const normalized = String(value ?? '').trim();
+      return normalized && normalized !== '-' ? normalized : null;
+    };
+    return {
+      row: {
+        ...row,
+        inspection_date: rawOrNull(norm.inspection_date),
+        start_time: rawOrNull(norm.start_time),
+        complete_time: rawOrNull(norm.complete_time),
+      },
+      errors: [],
+    };
+  }
   // This runs client-side, before the org's configured timezone is known, so
   // buildCoRow's date parsing here falls back to its 'UTC' default — wrong
   // for CO's actual CSV format (naive local wall-clock time, e.g. "04 June
@@ -518,11 +540,18 @@ export function validateHeaders(
   module: ModuleCode,
 ): { ok: boolean; missing: string[] } {
   const normalised = headers.map(canonicalKey);
+  const looksLikeCoIr = module === 'CO' && normalised.some((header) =>
+    ['inspection_score', 'inspection_credit', 'turn_over_time', 'pass_conditional_pass_fail'].includes(header)
+  );
+  const coIrNormalised = looksLikeCoIr
+    ? headers.map((header) => Object.keys(normaliseCoIrKeys({ [header]: '' }))[0])
+    : normalised;
   const required =
     module === 'IM' ? IM_REQUIRED_COLUMNS
       : module === 'JO' ? JO_REQUIRED_COLUMNS
       : module === 'MO' ? MO_REQUIRED_COLUMNS
-      : CO_REQUIRED_COLUMNS;
-  const missing = required.filter((col) => !normalised.includes(col));
+      : looksLikeCoIr ? CO_IR_REQUIRED_COLUMNS : CO_REQUIRED_COLUMNS;
+  const available = looksLikeCoIr ? coIrNormalised : normalised;
+  const missing = required.filter((col) => !available.includes(col));
   return { ok: missing.length === 0, missing };
 }

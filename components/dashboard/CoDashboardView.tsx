@@ -8,6 +8,8 @@ import type { ChartDef, ChainEntry, CoDashboardJson } from '@/types/dashboard';
 import type { CoRow } from '@/types/csv';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
+import { CorpCoDrilldownTable } from '@/components/dashboard/CorpCoDrilldownTable';
+import { formatDashboardDate, formatDashboardDateTime } from '@/lib/dashboard-date-format';
 import { getAppThemeTokens } from '@/lib/theme';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
@@ -49,8 +51,8 @@ const REPORT_VARIANT = 'ACSR';
 // Multi-level drilldown charts rendered full-width (1 per row) in the "Long Charts" section.
 const LONG_CHART_IDS = new Set([
   'co-06', 'co-22', 'co-24', 'co-26', 'co-27', 'co-30', 'co-33', 'co-36', 'co-39', 'co-40', 'co-41', 'co-42',
-  'cco-25', 'cco-26', 'cco-27', 'cco-29', 'cco-30',
-  'cco-33', 'cco-36', 'cco-39', 'cco-42', 'cco-43', 'cco-44', 'cco-45', 'cco-46',
+  'cco-25', 'cco-26', 'cco-27', 'cco-28', 'cco-29', 'cco-30',
+  'cco-33', 'cco-36', 'cco-39', 'cco-40', 'cco-41', 'cco-42', 'cco-43', 'cco-44', 'cco-45', 'cco-46',
 ]);
 const DEFAULT_FILTERS: CoFilters = {
   dateFrom: '',
@@ -70,7 +72,7 @@ const CO_24H_CHART_IDS = new Set([
   'co-25', 'co-26', 'co-27', 'co-28', 'co-29', 'co-30', 'co-31', 'co-32', 'co-33',
   'co-40', 'co-42',
   'cco-18', 'cco-19', 'cco-20', 'cco-21', 'cco-22', 'cco-23', 'cco-26', 'cco-27',
-  'cco-28', 'cco-29', 'cco-30', 'cco-31', 'cco-32', 'cco-33', 'cco-34', 'cco-35', 'cco-36',
+  'cco-31', 'cco-32', 'cco-34', 'cco-35', 'cco-36',
   'cco-46',
 ]);
 
@@ -2409,23 +2411,6 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     completedRows.filter((r) => { const v = toMinutes(r); return Number.isFinite(v) && fn(v); }).length
   );
 
-  // cco-28-30: 24-Hour Delayed Order distribution drilldown dimensions
-  const ccoDelayedRows = completedRows.filter(isDelayed);
-  const ccoDelayedHourRows = bucketRowsByHour(ccoDelayedRows, hourByRow);
-  const ccoDelayedHourCounts = ccoDelayedHourRows.map((rows) => rows.length);
-  const ccoDelayedHourStayStatus = ccoDelayedHourRows.map((rows) => {
-    const m = groupCount(rows, (r) => normText(r.stay_status) || 'Unknown');
-    return topEntries(m, 20).map(([name, y]) => ({ name, y }));
-  });
-  const ccoDelayedHourAttendant = ccoDelayedHourRows.map((rows) => {
-    const m = groupCount(rows, (r) => normText(r.attendant) || 'Unknown Attendant');
-    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
-  });
-  const ccoDelayedHourRoomType = ccoDelayedHourRows.map((rows) => {
-    const m = groupCount(rows, (r) => normText(r.room_type) || 'Unknown Room Type');
-    return topEntries(m, 50).map(([name, y]) => ({ name, y }));
-  });
-
   // cco-31-42: Hotel → Dimension → 24-Hour / Cleaning Duration drilldowns (3-level)
   const _ccog1ByHour = (rows: CoRow[]) => {
     const counts = new Array(24).fill(0);
@@ -2488,17 +2473,11 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
 
   const ccoH31 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.stay_status) || 'Unknown', 12), _ccog1ByHour, 'cco31');
   const ccoH32 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, rowStatus, 12), _ccog1ByHour, 'cco32');
-  const ccoH33 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _ccog1ByHour, 'cco33');
   const ccoH34 = ccoBuildHotelDrilldown(completedRows, _ccoOtdBuckets, _ccog1ByHour, 'cco34');
   const ccoH35 = ccoBuildHotelDrilldown(allRows, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _ccog1ByHour, 'cco35');
-  const ccoH36 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.attendant) || 'Unknown Attendant', 50), _ccog1ByHour, 'cco36');
 
   const ccoH37 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.stay_status) || 'Unknown', 12), _ccog2ByDur, 'cco37');
   const ccoH38 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, rowStatus, 12), _ccog2ByDur, 'cco38');
-  const ccoH39 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _ccog2ByDur, 'cco39');
-  const ccoH40 = ccoBuildHotelDrilldown(completedRows, _ccoOtdBuckets, _ccog2ByDur, 'cco40');
-  const ccoH41 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _ccog2ByDur, 'cco41');
-  const ccoH42 = ccoBuildHotelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.attendant) || 'Unknown Attendant', 50), _ccog2ByDur, 'cco42');
 
   // Flatten into Highcharts drilldown series for cco-45/46 (index-based ids; names may contain colons)
   type DdSeries = { id: string; name: string; type: 'column'; color: string; dataLabels: { enabled: boolean; format?: string }; data: Array<{ name: string; y: number; drilldown?: string }> };
@@ -2512,93 +2491,8 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
     return a.localeCompare(b);
   };
-  // Shared by cco-43/44's leaf-level "Daily Performance" builders: per-day
-  // credit/count/duration bucket, keyed by hotel→floor→(attendant|inspector).
-  type CcoDailyAgg = { count: number; credit: number; dailyMap: Map<string, { credit: number; count: number; durations: number[] }> };
-  function ccoAccumulateFloorDaily(rowsBy: (row: CoRow) => string): Map<string, Map<string, Map<string, CcoDailyAgg>>> {
-    const out = new Map<string, Map<string, Map<string, CcoDailyAgg>>>();
-    for (const row of completedRows) {
-      const hotel = normText(row.hotel_code) || 'Unknown Hotel';
-      const floor = normText(row.floor) || 'Unknown Floor';
-      const key = normText(rowsBy(row)) || 'Unknown';
-      const credit = typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
-      if (!out.has(hotel)) out.set(hotel, new Map());
-      const floorMap = out.get(hotel)!;
-      if (!floorMap.has(floor)) floorMap.set(floor, new Map());
-      const keyMap = floorMap.get(floor)!;
-      if (!keyMap.has(key)) keyMap.set(key, { count: 0, credit: 0, dailyMap: new Map() });
-      const agg = keyMap.get(key)!;
-      agg.count += 1;
-      agg.credit += credit;
-      const dayKey = toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone) || 'Unknown';
-      if (!agg.dailyMap.has(dayKey)) agg.dailyMap.set(dayKey, { credit: 0, count: 0, durations: [] });
-      const day = agg.dailyMap.get(dayKey)!;
-      day.credit += credit;
-      day.count += 1;
-      const dur = toMinutes(row);
-      if (dur !== null && Number.isFinite(dur)) day.durations.push(dur);
-    }
-    return out;
-  }
-  // Builds Hotel → Floor → (Attendant|Inspector) Average Credit → Daily
-  // Performance 4-level series. Level 1/2 plot order-count volume; Level 3
-  // plots the average credit per attendant/inspector; the leaf's 3 series
-  // (Total Credit, Orders, Avg Duration) are registered in leafData for the
-  // custom chart.events.drilldown handler in each chart's options.
-  function ccoBuildFloorAvgCreditDrilldown(
-    hotelFloorMap: Map<string, Map<string, Map<string, CcoDailyAgg>>>,
-    idPrefix: string,
-    level3Label: string,
-  ) {
-    const primary: Array<{ name: string; y: number; drilldown: string }> = [];
-    const dd: DdSeries[] = [];
-    const leafData: Record<string, Array<{ date: string; credit: number; count: number; avgDur: number }>> = {};
-    const hotelsSorted = Array.from(hotelFloorMap.entries())
-      .map(([hotel, floorMap]) => {
-        let n = 0;
-        for (const keyMap of floorMap.values()) for (const a of keyMap.values()) n += a.count;
-        return { hotel, floorMap, n };
-      })
-      .sort((a, b) => b.n - a.n || a.hotel.localeCompare(b.hotel))
-      .slice(0, 50);
-    hotelsSorted.forEach(({ hotel, floorMap, n }, hIdx) => {
-      primary.push({ name: hotel, y: n, drilldown: `${idPrefix}h:${hIdx}` });
-      const floorSorted = Array.from(floorMap.entries())
-        .map(([floor, keyMap]) => {
-          let m = 0;
-          for (const a of keyMap.values()) m += a.count;
-          return { floor, keyMap, m };
-        })
-        .sort((a, b) => b.m - a.m || a.floor.localeCompare(b.floor))
-        .slice(0, 50)
-        .sort((a, b) => naturalFloorCompare(a.floor, b.floor));
-      const floorData: DdSeries['data'] = [];
-      floorSorted.forEach(({ floor, keyMap, m }, fIdx) => {
-        floorData.push({ name: floor, y: m, drilldown: `${idPrefix}f:${hIdx}:${fIdx}` });
-        const keySorted = Array.from(keyMap.entries())
-          .map(([key, agg]) => ({ key, agg, avgCredit: agg.count > 0 ? agg.credit / agg.count : 0 }))
-          .sort((a, b) => b.avgCredit - a.avgCredit || a.key.localeCompare(b.key))
-          .slice(0, 50);
-        const keyData: DdSeries['data'] = [];
-        keySorted.forEach(({ key, agg, avgCredit }, kIdx) => {
-          const leafId = `${idPrefix}a:${hIdx}:${fIdx}:${kIdx}`;
-          keyData.push({ name: key, y: Number(avgCredit.toFixed(2)), drilldown: leafId });
-          leafData[leafId] = Array.from(agg.dailyMap.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([date, d]) => ({
-              date,
-              credit: Number(d.credit.toFixed(2)),
-              count: d.count,
-              avgDur: d.durations.length > 0 ? Number(mean(d.durations)!.toFixed(1)) : 0,
-            }));
-        });
-        dd.push({ id: `${idPrefix}f:${hIdx}:${fIdx}`, name: `${floor} — ${level3Label} Avg Credit`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: keyData });
-      });
-      dd.push({ id: `${idPrefix}h:${hIdx}`, name: `${hotel} — Floors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: floorData });
-    });
-    return { primary, dd, leafData };
-  }
-  // Custom multi-series drilldown handler shared by cco-43/44: registers each
+  // Custom multi-series drilldown handler shared across cco-25 through
+  // cco-46: registers each
   // leaf series via addSingleSeriesAsDrilldown (not the all-in-one
   // addSeriesAsDrilldown, which corrupts chart state if called more than once
   // per click), then applies the drilldown once at the end.
@@ -2733,19 +2627,73 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     rows: rows.filter((r) => hourByRow.get(r) === h),
   }));
 
-  // Builds Hotel → Bucket → Attendant → Room Type 4-level series, shared by
-  // cco-25/26/27 (bucket = duration bin / hour-of-day / delayed hour-of-day).
-  // Level 1/2 plot order-count volume (same shape as ccoBuildHotelDrilldown);
-  // Level 3 ranks attendants by their own order count within that
-  // hotel+bucket slice; the leaf breaks the selected attendant's orders down
-  // by room type, plotting 3 averaged metrics (Avg Credit, Avg Order/Day,
-  // Avg Duration) per room type via the shared multi-series drilldown
-  // pattern, since Highcharts' point.drilldown shorthand only supports
-  // adding a single series per click.
-  function ccoBuildHotelBucketAttendantRoomTypeDrilldown(
+  // Groups a hotel's people (attendants or inspectors, per personFn) into
+  // rank-based ranges by their own order count (descending — rank 1 =
+  // busiest), bucket width scaled to the total distinct-person count so the
+  // chart stays readable regardless of hotel size: > 500 people → width 50,
+  // > 200 → width 20, else width 10. The final bucket is an open-ended "N+"
+  // range when the total isn't an exact multiple of the width.
+  function ccoPersonDistBuckets(rows: CoRow[], personFn: (row: CoRow) => string, unknownLabel: string): Array<{ name: string; rows: CoRow[] }> {
+    const personMap = new Map<string, CoRow[]>();
+    for (const row of rows) {
+      const person = normText(personFn(row)) || unknownLabel;
+      if (!personMap.has(person)) personMap.set(person, []);
+      personMap.get(person)!.push(row);
+    }
+    const total = personMap.size;
+    const width = total > 500 ? 50 : total > 200 ? 20 : 10;
+    const ranked = Array.from(personMap.entries())
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const buckets: Array<{ name: string; rows: CoRow[] }> = [];
+    const fullBucketCount = Math.floor(total / width);
+    for (let i = 0; i < fullBucketCount; i++) {
+      const start = i * width + 1;
+      const end = (i + 1) * width;
+      const slice = ranked.slice(i * width, (i + 1) * width);
+      buckets.push({ name: `${start}-${end}`, rows: slice.flatMap(([, r]) => r) });
+    }
+    if (total % width !== 0) {
+      const start = fullBucketCount * width + 1;
+      const slice = ranked.slice(fullBucketCount * width);
+      buckets.push({ name: `${start}+`, rows: slice.flatMap(([, r]) => r) });
+    }
+    return buckets;
+  }
+  const ccoAttendantDistBuckets = (rows: CoRow[]) => ccoPersonDistBuckets(rows, (row) => row.attendant as string, 'Unknown Attendant');
+  const ccoInspectorDistBuckets = (rows: CoRow[]) => ccoPersonDistBuckets(rows, (row) => row.supervisor as string, 'Unknown Inspector');
+
+  // Ranks a hotel's people (attendants or inspectors) by their own order
+  // count and returns the top N as individually-named buckets (not grouped
+  // into ranges) — used where the next level shows named individuals rather
+  // than a rank-range distribution, e.g. cco-45's "Room Attendant" level.
+  function _ccoPersonBuckets(rows: CoRow[], personFn: (row: CoRow) => string, unknownLabel: string, limit: number): Array<{ name: string; rows: CoRow[] }> {
+    const personMap = new Map<string, CoRow[]>();
+    for (const row of rows) {
+      const person = normText(personFn(row)) || unknownLabel;
+      if (!personMap.has(person)) personMap.set(person, []);
+      personMap.get(person)!.push(row);
+    }
+    return Array.from(personMap.entries())
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+      .slice(0, limit)
+      .map(([name, bucketRows]) => ({ name, rows: bucketRows }));
+  }
+
+  // Fully generic Hotel → Bucket1 → Bucket2 → Leaf 4-level drilldown builder,
+  // shared by cco-25/26/27/28/29/30/33/36/39/40/41/42/43/44/45/46. Level 1/2/3
+  // all plot order-count volume; the leaf groups its rows by leafKeyFn
+  // (a date, room type, attendant, or inspector name depending on the chart)
+  // and computes Total Credit / Total Orders / Avg Duration per key, reusing
+  // ccoDailyPerformanceDrilldownHandler's shared 3-series combo pattern —
+  // that handler only treats its "date" field as a category label, so any
+  // key (attendant name, room type, etc.) can stand in for it here.
+  function ccoBuild4LevelDrilldown(
     rows: CoRow[],
-    bucketFn: (hotelRows: CoRow[]) => Array<{ name: string; rows: CoRow[] }>,
+    bucket1Fn: (hotelRows: CoRow[]) => Array<{ name: string; rows: CoRow[] }>,
+    bucket2Fn: (bucket1Rows: CoRow[]) => Array<{ name: string; rows: CoRow[] }>,
+    leafKeyFn: (row: CoRow) => string,
     idPrefix: string,
+    bucket2Label: string,
   ) {
     const hotels = topEntries(groupCount(rows, (r) => normText(r.hotel_code) || 'Unknown Hotel'), 50);
     const level1 = hotels.map(([hotel, total]) => ({
@@ -2753,111 +2701,88 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     }));
     const level2: Highcharts.SeriesOptionsType[] = [];
     const level3: Highcharts.SeriesOptionsType[] = [];
-    const leafData: Record<string, Array<{ roomType: string; avgCredit: number; avgOrderPerDay: number; avgDur: number }>> = {};
+    const leafData: Record<string, Array<{ date: string; credit: number; count: number; avgDur: number }>> = {};
     for (const [hotel] of hotels) {
       const hotelRows = rows.filter((r) => (normText(r.hotel_code) || 'Unknown Hotel') === hotel);
       const hKey = encodeURIComponent(hotel);
-      const buckets = bucketFn(hotelRows);
+      const b1 = bucket1Fn(hotelRows);
       level2.push({
         id: `${idPrefix}-h:${hKey}`, type: 'column', name: hotel, color: CCO_L1,
         dataLabels: { enabled: true, format: '{point.y}' },
-        data: buckets.map((b) => ({ name: b.name, y: b.rows.length, drilldown: `${idPrefix}-d:${hKey}:${encodeURIComponent(b.name)}` })),
+        data: b1.map((d) => ({ name: d.name, y: d.rows.length, drilldown: `${idPrefix}-b1:${hKey}:${encodeURIComponent(d.name)}` })),
       } as Highcharts.SeriesOptionsType);
-      for (const b of buckets) {
-        const dKey = encodeURIComponent(b.name);
-        const attMap = new Map<string, { count: number; rows: CoRow[] }>();
-        for (const row of b.rows) {
-          const att = normText(row.attendant) || 'Unknown Attendant';
-          if (!attMap.has(att)) attMap.set(att, { count: 0, rows: [] });
-          const agg = attMap.get(att)!;
-          agg.count += 1;
-          agg.rows.push(row);
-        }
-        const attSorted = Array.from(attMap.entries())
-          .sort((a, b2) => b2[1].count - a[1].count || a[0].localeCompare(b2[0]))
-          .slice(0, 50);
-        const attData: Array<{ name: string; y: number; drilldown: string }> = [];
-        attSorted.forEach(([att, agg], aIdx) => {
-          const leafId = `${idPrefix}-a:${hKey}:${dKey}:${aIdx}`;
-          attData.push({ name: att, y: agg.count, drilldown: leafId });
-          // Leaf: room-type averages (not added to drilldown.series — handled
-          // by the custom chart.events.drilldown handler in each make() call).
-          const rtMap = new Map<string, { count: number; credit: number; durations: number[]; days: Set<string> }>();
-          for (const row of agg.rows) {
-            const rt = normText(row.room_type) || 'Unknown Room Type';
-            if (!rtMap.has(rt)) rtMap.set(rt, { count: 0, credit: 0, durations: [], days: new Set() });
-            const rtAgg = rtMap.get(rt)!;
-            rtAgg.count += 1;
-            rtAgg.credit += typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
-            const dur = toMinutes(row);
-            if (dur !== null && Number.isFinite(dur)) rtAgg.durations.push(dur);
-            rtAgg.days.add(toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone) || 'Unknown');
-          }
-          leafData[leafId] = Array.from(rtMap.entries())
-            .sort((a, b3) => b3[1].count - a[1].count || a[0].localeCompare(b3[0]))
-            .map(([roomType, rtAgg]) => ({
-              roomType,
-              avgCredit: rtAgg.count > 0 ? Number((rtAgg.credit / rtAgg.count).toFixed(2)) : 0,
-              avgOrderPerDay: rtAgg.days.size > 0 ? Number((rtAgg.count / rtAgg.days.size).toFixed(2)) : 0,
-              avgDur: rtAgg.durations.length > 0 ? Number(mean(rtAgg.durations)!.toFixed(1)) : 0,
-            }));
-        });
+      for (const d1 of b1) {
+        const d1Key = encodeURIComponent(d1.name);
+        const b2 = bucket2Fn(d1.rows);
         level3.push({
-          id: `${idPrefix}-d:${hKey}:${dKey}`, type: 'column', name: `${hotel} — ${b.name} — Attendant`, color: CCO_L2,
+          id: `${idPrefix}-b1:${hKey}:${d1Key}`, type: 'column', name: `${hotel} — ${d1.name} — ${bucket2Label}`, color: CCO_L2,
           dataLabels: { enabled: true, format: '{point.y}' },
-          data: attData,
+          data: b2.map((d2) => ({ name: d2.name, y: d2.rows.length, drilldown: `${idPrefix}-b2:${hKey}:${d1Key}:${encodeURIComponent(d2.name)}` })),
         } as Highcharts.SeriesOptionsType);
+        for (const d2 of b2) {
+          const d2Key = encodeURIComponent(d2.name);
+          const leafMap = new Map<string, { count: number; credit: number; durations: number[] }>();
+          for (const row of d2.rows) {
+            const key = normText(leafKeyFn(row)) || 'Unknown';
+            if (!leafMap.has(key)) leafMap.set(key, { count: 0, credit: 0, durations: [] });
+            const agg = leafMap.get(key)!;
+            agg.count += 1;
+            agg.credit += typeof row.cleaning_credit === 'number' && Number.isFinite(row.cleaning_credit) ? row.cleaning_credit : 0;
+            const dur = toMinutes(row);
+            if (dur !== null && Number.isFinite(dur)) agg.durations.push(dur);
+          }
+          const leafId = `${idPrefix}-b2:${hKey}:${d1Key}:${d2Key}`;
+          leafData[leafId] = Array.from(leafMap.entries())
+            .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+            .slice(0, 20)
+            .map(([key, agg]) => ({
+              date: key,
+              credit: Number(agg.credit.toFixed(2)),
+              count: agg.count,
+              avgDur: agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0,
+            }));
+        }
       }
     }
     return { level1, level2, level3, leafData };
   }
-  // Leaf handler shared by cco-25/26/27: 3-series dual-axis combo (Avg
-  // Credit + Avg Order/Day columns, Avg Duration spline) plotted by room
-  // type instead of by date.
-  function ccoRoomTypeAvgDrilldownHandler(leafData: Record<string, Array<{ roomType: string; avgCredit: number; avgOrderPerDay: number; avgDur: number }>>) {
-    return function (this: Highcharts.Chart, e: Highcharts.DrilldownEventObject) {
-      if (e.seriesOptions) return;
-      const leafId = (e.point as unknown as { drilldown?: string }).drilldown;
-      const rts = leafId ? leafData[leafId] : undefined;
-      if (!rts) return;
-      const chart = this as unknown as Highcharts.Chart & {
-        addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-        applyDrilldown: () => void;
-      };
-      chart.addSingleSeriesAsDrilldown(e.point, {
-        id: `${leafId}-credit`, type: 'column', name: 'Avg Credit', color: CCO_L3,
-        dataLabels: { enabled: true, format: '{point.y}' },
-        data: rts.map((d) => ({ name: d.roomType, y: d.avgCredit })),
-      } as Highcharts.SeriesOptionsType);
-      chart.addSingleSeriesAsDrilldown(e.point, {
-        id: `${leafId}-orderday`, type: 'column', name: 'Avg Order/Day', color: '#0E7490',
-        dataLabels: { enabled: true, format: '{point.y}' },
-        data: rts.map((d) => ({ name: d.roomType, y: d.avgOrderPerDay })),
-      } as Highcharts.SeriesOptionsType);
-      chart.addSingleSeriesAsDrilldown(e.point, {
-        id: `${leafId}-avgdur`, type: 'spline', name: 'Avg Duration (min)', color: '#EA580C', yAxis: 1,
-        lineWidth: 3, marker: { enabled: true, radius: 4 },
-        dataLabels: { enabled: true, format: '{point.y}' },
-        data: rts.map((d) => ({ name: d.roomType, y: d.avgDur })),
-      } as Highcharts.SeriesOptionsType);
-      chart.applyDrilldown();
-    };
-  }
+  const _leafKeyDate = (row: CoRow) => toDateKey(row.created_date ?? row.completed_time ?? row.start_time, timeZone) || 'Unknown';
+  const _leafKeyRoomType = (row: CoRow) => normText(row.room_type) || 'Unknown Room Type';
+  const _leafKeyAttendant = (row: CoRow) => normText(row.attendant) || 'Unknown Attendant';
+  const _leafKeyInspector = (row: CoRow) => normText(row.supervisor) || 'Unknown Inspector';
 
-  // cco-25: Hotel → Duration Distribution → Attendant → Room Type
-  const cco25 = ccoBuildHotelBucketAttendantRoomTypeDrilldown(completedRows, _ccoDurBuckets, 'cco25');
-  // cco-26: Hotel → 24-Hour Distribution → Attendant → Room Type
-  const cco26 = ccoBuildHotelBucketAttendantRoomTypeDrilldown(completedRows, _ccoHourBuckets, 'cco26');
-  // cco-27: Hotel → 24-Hour Delayed Distribution → Attendant → Room Type
-  const cco27 = ccoBuildHotelBucketAttendantRoomTypeDrilldown(completedRows.filter(isDelayed), _ccoHourBuckets, 'cco27');
-
-  // cco-43: Hotel → Floor → Attendant Average Credit → Daily Performance
-  const ccoHotelFloorAttDaily = ccoAccumulateFloorDaily((row) => row.attendant as string);
-  const cco43 = ccoBuildFloorAvgCreditDrilldown(ccoHotelFloorAttDaily, 'cco43', 'Attendant');
-
-  // cco-44: Hotel → Floor → Inspector Average Credit → Daily Performance
-  const ccoHotelFloorInspDaily = ccoAccumulateFloorDaily((row) => row.supervisor as string);
-  const cco44 = ccoBuildFloorAvgCreditDrilldown(ccoHotelFloorInspDaily, 'cco44', 'Inspector');
+  // cco-25: Hotel → Duration Dist → Attendant Dist → Room Type
+  const cco25 = ccoBuild4LevelDrilldown(completedRows, _ccoDurBuckets, ccoAttendantDistBuckets, _leafKeyRoomType, 'cco25', 'Attendant Dist');
+  // cco-26: Hotel → 24-Hour Dist → Attendant Dist → Daily Performance
+  const cco26 = ccoBuild4LevelDrilldown(completedRows, _ccoHourBuckets, ccoAttendantDistBuckets, _leafKeyDate, 'cco26', 'Attendant Dist');
+  // cco-27: Hotel → 24-Hour Delayed → Attendant Dist → Daily Performance
+  const cco27 = ccoBuild4LevelDrilldown(completedRows.filter(isDelayed), _ccoHourBuckets, ccoAttendantDistBuckets, _leafKeyDate, 'cco27', 'Attendant Dist');
+  // cco-28: Hotel → Room Type → Duration Dist → Attendant
+  const cco28 = ccoBuild4LevelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _ccoDurBuckets, _leafKeyAttendant, 'cco28', 'Duration');
+  // cco-29: Hotel → Cleaning Type → Duration Dist → Attendant
+  const cco29 = ccoBuild4LevelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _ccoDurBuckets, _leafKeyAttendant, 'cco29', 'Duration');
+  // cco-30: Hotel → Stay Status → Duration Dist → Attendant
+  const cco30 = ccoBuild4LevelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.stay_status) || 'Unknown', 12), _ccoDurBuckets, _leafKeyAttendant, 'cco30', 'Duration');
+  // cco-33: Hotel → On-Time/Delayed → Attendant Dist → Attendant
+  const cco33 = ccoBuild4LevelDrilldown(completedRows, _ccoOtdBuckets, ccoAttendantDistBuckets, _leafKeyAttendant, 'cco33', 'Attendant Dist');
+  // cco-36: Hotel → On-Time/Delayed → Inspector Dist → Inspector
+  const cco36 = ccoBuild4LevelDrilldown(completedRows, _ccoOtdBuckets, ccoInspectorDistBuckets, _leafKeyInspector, 'cco36', 'Inspector Dist');
+  // cco-39: Hotel → Attendant Dist → Duration → Attendant
+  const cco39 = ccoBuild4LevelDrilldown(completedRows, ccoAttendantDistBuckets, _ccoDurBuckets, _leafKeyAttendant, 'cco39', 'Duration');
+  // cco-40: Hotel → Attendant Dist → Room Type → Attendant
+  const cco40 = ccoBuild4LevelDrilldown(completedRows, ccoAttendantDistBuckets, (r) => _ccoDimBuckets(r, (row) => normText(row.room_type) || 'Unknown Room Type', 50), _leafKeyAttendant, 'cco40', 'Room Type');
+  // cco-41: Hotel → Attendant Dist → Cleaning Type → Attendant
+  const cco41 = ccoBuild4LevelDrilldown(completedRows, ccoAttendantDistBuckets, (r) => _ccoDimBuckets(r, (row) => normText(row.cleaning_type) || 'Unknown', 12), _leafKeyAttendant, 'cco41', 'Cleaning Type');
+  // cco-42: Hotel → Attendant Dist → On-Time/Delayed → Attendant
+  const cco42 = ccoBuild4LevelDrilldown(completedRows, ccoAttendantDistBuckets, _ccoOtdBuckets, _leafKeyAttendant, 'cco42', 'On-Time/Delayed');
+  // cco-43: Hotel → Floor → Attendant Dist → Attendant
+  const cco43 = ccoBuild4LevelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.floor) || 'Unknown Floor', 50), ccoAttendantDistBuckets, _leafKeyAttendant, 'cco43', 'Attendant Dist');
+  // cco-44: Hotel → Floor → Inspector Dist → Inspector
+  const cco44 = ccoBuild4LevelDrilldown(completedRows, (r) => _ccoDimBuckets(r, (row) => normText(row.floor) || 'Unknown Floor', 50), ccoInspectorDistBuckets, _leafKeyInspector, 'cco44', 'Inspector Dist');
+  // cco-45: Hotel → Inspector Dist → Room Attendant → Room Type
+  const cco45 = ccoBuild4LevelDrilldown(completedRows, ccoInspectorDistBuckets, (r) => _ccoPersonBuckets(r, (row) => row.attendant as string, 'Unknown Attendant', 50), _leafKeyRoomType, 'cco45', 'Room Attendant');
+  // cco-46: Hotel → Inspector Dist → Duration Dist → Room Type
+  const cco46 = ccoBuild4LevelDrilldown(completedRows, ccoInspectorDistBuckets, _ccoDurBuckets, _leafKeyRoomType, 'cco46', 'Duration Dist');
 
   // ── cco-45 / cco-46: Hotel → Inspector → Attendant nested aggregation ──────
   type CcoAttAgg = { count: number; credit: number; durations: number[]; roomTypeDur: Map<string, number[]>; hourCount: Map<number, number> };
@@ -2885,10 +2810,6 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     const h = hourFromSource(hourSource, timeZone);
     if (h !== null) agg.hourCount.set(h, (agg.hourCount.get(h) ?? 0) + 1);
   }
-  const cco45Primary: Array<{ name: string; y: number; drilldown: string }> = [];
-  const cco45Dd: DdSeries[] = [];
-  const cco46Primary: Array<{ name: string; y: number; drilldown: string }> = [];
-  const cco46Dd: DdSeries[] = [];
   const ccoInspHotelsSorted = Array.from(ccoHotelInspAtt.entries())
     .map(([hotel, inspMap]) => {
       let n = 0;
@@ -2897,66 +2818,18 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
     })
     .sort((a, b) => b.n - a.n || a.hotel.localeCompare(b.hotel))
     .slice(0, 50);
-  ccoInspHotelsSorted.forEach(({ hotel, inspMap, n }, hIdx) => {
-    cco45Primary.push({ name: hotel, y: n, drilldown: `cco45h:${hIdx}` });
-    cco46Primary.push({ name: hotel, y: n, drilldown: `cco46h:${hIdx}` });
-    const inspSorted = Array.from(inspMap.entries())
-      .map(([insp, attMap]) => {
-        let m = 0;
-        for (const a of attMap.values()) m += a.count;
-        return { insp, attMap, m };
-      })
-      .sort((a, b) => b.m - a.m || a.insp.localeCompare(b.insp))
-      .slice(0, 50);
-    const insp45Data: DdSeries['data'] = [];
-    const insp46Data: DdSeries['data'] = [];
-    inspSorted.forEach(({ insp, attMap, m }, iIdx) => {
-      insp45Data.push({ name: insp, y: m, drilldown: `cco45i:${hIdx}:${iIdx}` });
-      insp46Data.push({ name: insp, y: m, drilldown: `cco46i:${hIdx}:${iIdx}` });
-      const attSorted = Array.from(attMap.entries())
-        .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
-        .slice(0, 50);
-      const att45Data: DdSeries['data'] = [];
-      const att46Data: DdSeries['data'] = [];
-      attSorted.forEach(([att, agg], aIdx) => {
-        att45Data.push({ name: att, y: agg.count, drilldown: `cco45a:${hIdx}:${iIdx}:${aIdx}` });
-        att46Data.push({ name: att, y: agg.count, drilldown: `cco46a:${hIdx}:${iIdx}:${aIdx}` });
-        // cco-45 leaf: average cleaning duration (mins) per room type, with overall avg first
-        const overallAvg = agg.durations.length > 0 ? Number(mean(agg.durations)!.toFixed(1)) : 0;
-        const rtData = Array.from(agg.roomTypeDur.entries())
-          .map(([rt, arr]) => ({ name: rt, y: Number(mean(arr)!.toFixed(1)) }))
-          .sort((a, b) => b.y - a.y)
-          .slice(0, 50);
-        cco45Dd.push({
-          id: `cco45a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — Avg Cleaning Duration (min)`,
-          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
-          data: [{ name: 'ALL ROOMS', y: overallAvg }, ...rtData],
-        });
-        // cco-46 leaf: 24-hour cleaning distribution
-        cco46Dd.push({
-          id: `cco46a:${hIdx}:${iIdx}:${aIdx}`, name: `${att} — 24-Hour Cleaning Distribution`,
-          type: 'column', color: CCO_L3, dataLabels: { enabled: true, format: '{point.y}' },
-          data: Array.from({ length: 24 }, (_, h) => ({ name: `${String(h).padStart(2, '0')}:00`, y: agg.hourCount.get(h) ?? 0 })),
-        });
-      });
-      cco45Dd.push({ id: `cco45i:${hIdx}:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att45Data });
-      cco46Dd.push({ id: `cco46i:${hIdx}:${iIdx}`, name: `${insp} — Attendants`, type: 'column', color: CCO_L2, dataLabels: { enabled: true, format: '{point.y}' }, data: att46Data });
-    });
-    cco45Dd.push({ id: `cco45h:${hIdx}`, name: `${hotel} — Inspectors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp45Data });
-    cco46Dd.push({ id: `cco46h:${hIdx}`, name: `${hotel} — Inspectors`, type: 'column', color: CCO_L1, dataLabels: { enabled: true, format: '{point.y}' }, data: insp46Data });
-  });
 
   const make = (id: string, title: string, note: string, formula: string, options: Highcharts.Options): ChartDef =>
     makeChartBase(id, title, `${note} ${suffix}.`, `${formula} WHERE ${clause}`, options);
 
   return [
     (() => {
-      // cco-01: Hotel → Top Attendant Avg Orders/Day → Daily Avg Credit vs
+      // cco-01: Hotel → Top Attendant Avg Orders/Day → Daily Credit vs
       // Duration (3-level donut drilldown). Level 1/2 are pie/donut; level 2
       // ranks attendants by average completed orders per day worked (count ÷
       // distinct days), not raw count or credit. The leaf plots the
-      // selected attendant's day-by-day Average Credit per order (column) +
-      // Average Duration per order (spline, secondary axis) via a custom
+      // selected attendant's day-by-day Total Credit (column) + Average
+      // Duration per order (spline, secondary axis) via a custom
       // chart.events.drilldown handler, since Highcharts' point.drilldown
       // shorthand only supports adding a single series per click.
       type Cco01Agg = { count: number; credit: number; dailyMap: Map<string, { credit: number; count: number; durations: number[] }> };
@@ -2982,7 +2855,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
 
       const cco01Primary: Array<{ name: string; y: number; drilldown: string }> = [];
       const cco01Dd: Highcharts.SeriesOptionsType[] = [];
-      const cco01LeafData: Record<string, Array<{ date: string; avgCredit: number; avgDur: number }>> = {};
+      const cco01LeafData: Record<string, Array<{ date: string; credit: number; avgDur: number }>> = {};
       const cco01HotelsSorted = Array.from(cco01HotelAtt.entries())
         .map(([hotel, attMap]) => {
           let n = 0;
@@ -3011,7 +2884,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, d]) => ({
               date,
-              avgCredit: d.count > 0 ? Number((d.credit / d.count).toFixed(2)) : 0,
+              credit: Number(d.credit.toFixed(2)),
               avgDur: d.durations.length > 0 ? Number(mean(d.durations)!.toFixed(1)) : 0,
             }));
         });
@@ -3024,7 +2897,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
         } as Highcharts.SeriesOptionsType);
       });
 
-      return make('cco-01', '🟢 Hotel → Top Attendant Avg Orders/Day → Daily Avg Credit vs Duration', 'Completed orders per hotel. Click a hotel to see attendants ranked by average orders completed per day worked, then an attendant to see their daily average credit per order and average cleaning duration per order.', 'COUNT(*) GROUP BY hotel_code DRILLDOWN AVG(daily_order_count) BY attendant DRILLDOWN (AVG(cleaning_credit), AVG(duration_minutes)) BY DATE(created_date)', {
+      return make('cco-01', '🟢 Hotel → Attendant Avg Orders/Day → Credit vs Duration', 'Completed orders per hotel. Click a hotel to see attendants ranked by average orders completed per day worked, then an attendant to see their daily total credit and average cleaning duration per order.', 'COUNT(*) GROUP BY hotel_code DRILLDOWN AVG(daily_order_count) BY attendant DRILLDOWN (SUM(cleaning_credit), AVG(duration_minutes)) BY DATE(created_date)', {
         chart: {
           type: 'pie',
           events: {
@@ -3043,9 +2916,9 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
                 applyDrilldown: () => void;
               };
               chart.addSingleSeriesAsDrilldown(e.point, {
-                id: `${leafId}-credit`, type: 'column', name: 'Avg Credit (per order)', color: CCO_L3,
+                id: `${leafId}-credit`, type: 'column', name: 'Total Credit', color: CCO_L3,
                 dataLabels: { enabled: true, format: '{point.y}' },
-                data: days.map((d) => ({ name: d.date, y: d.avgCredit })),
+                data: days.map((d) => ({ name: d.date, y: d.credit })),
               } as Highcharts.SeriesOptionsType);
               chart.addSingleSeriesAsDrilldown(e.point, {
                 id: `${leafId}-avgdur`, type: 'spline', name: 'Avg Duration (min, per order)', color: '#EA580C', yAxis: 1,
@@ -3059,7 +2932,7 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
         },
         title: { text: undefined },
         yAxis: [
-          { title: { text: 'Avg Credit per Order' } },
+          { title: { text: 'Cleaning Credit' } },
           { title: { text: 'Avg Duration (min)' }, opposite: true },
         ],
         plotOptions: {
@@ -3670,8 +3543,8 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: durBucketLabels.map((label, i) => ({ name: label, y: ccoDurBinCounts[i], drilldown: `cco-durss:${i}` })) }],
       drilldown: { series: durBucketLabels.map((label, i) => ({ id: `cco-durss:${i}`, name: `${label} — Stay Status`, type: 'bar' as const, color: '#B45309', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDurBinStayStatus[i] })) },
     }),
-    make('cco-25', '🟢 Hotel → Duration Dist → Attendant → Room Type', 'Completed orders per hotel. Click a hotel to see its cleaning duration buckets, a bucket to see attendants ranked by order count, and an attendant to see room-type averages: average credit, average orders/day, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN duration_bin DRILLDOWN attendant DRILLDOWN (AVG(cleaning_credit), AVG(daily_order_count), AVG(duration_minutes)) BY room_type', {
-      chart: { type: 'column', events: { drilldown: ccoRoomTypeAvgDrilldownHandler(cco25.leafData) } },
+    make('cco-25', '🟢 Hotel → Duration Dist → Attendant Dist → Room Type', 'Completed orders per hotel. Click a hotel to see its cleaning duration buckets, a bucket to see attendants grouped into rank-based ranges by order volume, and a range to see room types: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN duration_bin DRILLDOWN attendant_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY room_type', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco25.leafData) } },
       title: { text: undefined },
       legend: { enabled: true },
       xAxis: { type: 'category' as const },
@@ -3684,13 +3557,13 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco25.level1 }] as unknown as Highcharts.SeriesOptionsType[],
       drilldown: { series: [...cco25.level2, ...cco25.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-26', '⏰ 🟢 Hotel → 24-Hour Dist → Attendant → Room Type', 'Completed orders per hotel. Click a hotel to see its 24-hour distribution, an hour to see attendants ranked by order count, and an attendant to see room-type averages: average credit, average orders/day, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN HOUR(any_time) DRILLDOWN attendant DRILLDOWN (AVG(cleaning_credit), AVG(daily_order_count), AVG(duration_minutes)) BY room_type', {
-      chart: { type: 'column', events: { drilldown: ccoRoomTypeAvgDrilldownHandler(cco26.leafData) } },
+    make('cco-26', '⏰ 🟢 Hotel → 24-Hour Dist → Attendant Dist → Daily Performance', 'Completed orders per hotel. Click a hotel to see its 24-hour distribution, an hour to see attendants grouped into rank-based ranges by order volume, and a range to see daily performance: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN HOUR(any_time) DRILLDOWN attendant_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY DATE(created_date)', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco26.leafData) } },
       title: { text: undefined },
       legend: { enabled: true },
       xAxis: { type: 'category' as const },
       yAxis: [
-        { title: { text: 'Orders / Avg Credit' } },
+        { title: { text: 'Orders / Cleaning Credit' } },
         { title: { text: 'Avg Duration (min)' }, opposite: true },
       ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
@@ -3698,13 +3571,13 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco26.level1 }] as unknown as Highcharts.SeriesOptionsType[],
       drilldown: { series: [...cco26.level2, ...cco26.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-27', '⏰ 🟢 Hotel → 24-Hour Delayed → Attendant → Room Type', 'Delayed orders per hotel. Click a hotel to see its 24-hour delayed distribution, an hour to see attendants ranked by delayed order count, and an attendant to see room-type averages: average credit, average orders/day, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN HOUR(any_time) DRILLDOWN attendant DRILLDOWN (AVG(cleaning_credit), AVG(daily_order_count), AVG(duration_minutes)) BY room_type WHERE delayed = true', {
-      chart: { type: 'column', events: { drilldown: ccoRoomTypeAvgDrilldownHandler(cco27.leafData) } },
+    make('cco-27', '⏰ 🟢 Hotel → 24-Hour Delayed → Attendant Dist → Daily Performance', 'Delayed orders per hotel. Click a hotel to see its 24-hour delayed distribution, an hour to see attendants grouped into rank-based ranges by delayed order volume, and a range to see daily performance: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN HOUR(any_time) DRILLDOWN attendant_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY DATE(created_date) WHERE delayed = true', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco27.leafData) } },
       title: { text: undefined },
       legend: { enabled: true },
       xAxis: { type: 'category' as const },
       yAxis: [
-        { title: { text: 'Delayed Orders / Avg Credit' } },
+        { title: { text: 'Delayed Orders / Cleaning Credit' } },
         { title: { text: 'Avg Duration (min)' }, opposite: true },
       ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
@@ -3712,32 +3585,47 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Delayed Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco27.level1 }] as unknown as Highcharts.SeriesOptionsType[],
       drilldown: { series: [...cco27.level2, ...cco27.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-28', '24-Hour Delayed → Stay Status', 'Delayed orders by hour of day with drilldown into stay status per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN stay_status WHERE delayed = true', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
-      yAxis: { title: { text: 'Delayed Orders' } },
+    make('cco-28', '🟢 Hotel → Room Type → Duration Dist → Attendant', 'Completed orders per hotel. Click a hotel to see its room types, a room type to see its cleaning duration buckets, and a duration bucket to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN room_type DRILLDOWN duration_bin DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco28.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> delayed orders — click to see stay status split' },
-      series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyss:${h}` })) }],
-      drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyss:${h}`, name: `${label} — Stay Status`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourStayStatus[h] })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco28.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco28.level2, ...cco28.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-29', '24-Hour Delayed → Attendant', 'Delayed orders by hour of day with drilldown into top attendants per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN attendant WHERE delayed = true', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
-      yAxis: { title: { text: 'Delayed Orders' } },
+    make('cco-29', '🟢 Hotel → Cleaning Type → Duration Dist → Attendant', 'Completed orders per hotel. Click a hotel to see its cleaning types, a cleaning type to see its cleaning duration buckets, and a duration bucket to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN cleaning_type DRILLDOWN duration_bin DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco29.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> delayed orders — click to see attendant split' },
-      series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyatt:${h}` })) }],
-      drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyatt:${h}`, name: `${label} — Attendants`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourAttendant[h] })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco29.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco29.level2, ...cco29.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-30', '24-Hour Delayed → Room Type', 'Delayed orders by hour of day with drilldown into room type per hour', 'COUNT(*) GROUP BY HOUR(any_time) DRILLDOWN room_type WHERE delayed = true', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hour of Day' } },
-      yAxis: { title: { text: 'Delayed Orders' } },
+    make('cco-30', '🟢 Hotel → Stay Status → Duration Dist → Attendant', 'Completed orders per hotel. Click a hotel to see its stay statuses, a stay status to see its cleaning duration buckets, and a duration bucket to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN stay_status DRILLDOWN duration_bin DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco30.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> delayed orders — click to see room type split' },
-      series: [{ type: 'column', name: 'Delayed Orders', color: '#92400e', data: ccoHourCategories.map((label, h) => ({ name: label, y: ccoDelayedHourCounts[h], drilldown: `cco-dlyrt:${h}` })) }],
-      drilldown: { series: ccoHourCategories.map((label, h) => ({ id: `cco-dlyrt:${h}`, name: `${label} — Room Type`, type: 'bar' as const, color: '#ea580c', dataLabels: { enabled: true, format: '{point.y}' }, data: ccoDelayedHourRoomType[h] })) },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco30.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco30.level2, ...cco30.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
     make('cco-31', 'Hotel → Stay Status → 24-Hour Cleaning Distribution', 'Orders by hotel and stay status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, stay_status DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
@@ -3757,14 +3645,19 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH32.level1 }],
       drilldown: { series: [...ccoH32.level2, ...ccoH32.level3] },
     }),
-    make('cco-33', 'Hotel → Room Type → 24-Hour Cleaning Distribution', 'Orders by hotel and room type with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, room_type DRILLDOWN HOUR(any_time)', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Orders' } },
+    make('cco-33', '🟢 Hotel → On-Time/Delayed → Attendant Dist → Attendant', 'Completed orders per hotel. Click a hotel to see on-time vs delayed orders, that status to see attendants grouped into rank-based ranges by order volume, and a range to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN is_on_time DRILLDOWN attendant_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco33.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
-      series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH33.level1 }],
-      drilldown: { series: [...ccoH33.level2, ...ccoH33.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco33.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco33.level2, ...cco33.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
     make('cco-34', 'Hotel → On-Time/Delayed → 24-Hour Cleaning Distribution', 'Completed orders by hotel and on-time/delayed status with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, is_on_time DRILLDOWN HOUR(any_time)', {
       chart: { type: 'column' }, title: { text: undefined },
@@ -3784,14 +3677,19 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Orders', color: '#0F766E', data: ccoH35.level1 }],
       drilldown: { series: [...ccoH35.level2, ...ccoH35.level3] },
     }),
-    make('cco-36', 'Hotel → Top 50 Attendants → 24-Hour Cleaning Distribution', 'Top 50 attendants per hotel by completed orders with drilldown into 24-hour completion pattern', 'COUNT(*) GROUP BY hotel, attendant TOP 50 DRILLDOWN HOUR(any_time)', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Completed Orders' } },
+    make('cco-36', '🟢 Hotel → On-Time/Delayed → Inspector Dist → Inspector', 'Completed orders per hotel. Click a hotel to see on-time vs delayed orders, that status to see inspectors grouped into rank-based ranges by order volume, and a range to see inspectors ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN is_on_time DRILLDOWN inspector_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY supervisor', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco36.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> orders' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: ccoH36.level1 }],
-      drilldown: { series: [...ccoH36.level2, ...ccoH36.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco36.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco36.level2, ...cco36.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
     make('cco-37', 'Hotel → Stay Status → Cleaning Duration Distribution', 'Completed orders by hotel and stay status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, stay_status DRILLDOWN duration_bin', {
       chart: { type: 'column' }, title: { text: undefined },
@@ -3811,85 +3709,117 @@ function buildCorpCharts(filteredRows: CoRow[], filters: CoFilters, timeZone: st
       series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH38.level1 }],
       drilldown: { series: [...ccoH38.level2, ...ccoH38.level3] },
     }),
-    make('cco-39', 'Hotel → Room Type → Cleaning Duration Distribution', 'Completed orders by hotel and room type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, room_type DRILLDOWN duration_bin', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Completed Orders' } },
+    make('cco-39', '🟢 Hotel → Attendant Dist → Duration → Attendant', 'Completed orders per hotel. Click a hotel to see attendants grouped into rank-based ranges by order volume, a range to see its cleaning duration buckets, and a duration bucket to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN attendant_rank_range DRILLDOWN duration_bin DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco39.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH39.level1 }],
-      drilldown: { series: [...ccoH39.level2, ...ccoH39.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco39.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco39.level2, ...cco39.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-40', 'Hotel → On-Time/Delayed → Cleaning Duration Distribution', 'Completed orders by hotel and on-time/delayed status with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, is_on_time DRILLDOWN duration_bin', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Completed Orders' } },
+    make('cco-40', '🟢 Hotel → Attendant Dist → Room Type → Attendant', 'Completed orders per hotel. Click a hotel to see attendants grouped into rank-based ranges by order volume, a range to see its room types, and a room type to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN attendant_rank_range DRILLDOWN room_type DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco40.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH40.level1 }],
-      drilldown: { series: [...ccoH40.level2, ...ccoH40.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco40.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco40.level2, ...cco40.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-41', 'Hotel → Cleaning Type → Cleaning Duration Distribution', 'Completed orders by hotel and cleaning type with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, cleaning_type DRILLDOWN duration_bin', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Completed Orders' } },
+    make('cco-41', '🟢 Hotel → Attendant Dist → Cleaning Type → Attendant', 'Completed orders per hotel. Click a hotel to see attendants grouped into rank-based ranges by order volume, a range to see its cleaning types, and a cleaning type to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN attendant_rank_range DRILLDOWN cleaning_type DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco41.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH41.level1 }],
-      drilldown: { series: [...ccoH41.level2, ...ccoH41.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco41.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco41.level2, ...cco41.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-42', 'Hotel → Top 50 Attendants → Cleaning Duration Distribution', 'Top 50 attendants per hotel by completed orders with drilldown into cleaning duration distribution', 'COUNT(*) GROUP BY hotel, attendant TOP 50 DRILLDOWN duration_bin', {
-      chart: { type: 'column' }, title: { text: undefined },
-      xAxis: { type: 'category' as const, title: { text: 'Hotel' } },
-      yAxis: { title: { text: 'Completed Orders' } },
+    make('cco-42', '🟢 Hotel → Attendant Dist → On-Time/Delayed → Attendant', 'Completed orders per hotel. Click a hotel to see attendants grouped into rank-based ranges by order volume, a range to see on-time vs delayed orders, and that status to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN attendant_rank_range DRILLDOWN is_on_time DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco42.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
+      xAxis: { type: 'category' as const },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
-      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b> completed orders' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#ea580c', data: ccoH42.level1 }],
-      drilldown: { series: [...ccoH42.level2, ...ccoH42.level3] },
+      tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco42.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco42.level2, ...cco42.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-43', '🟢 Hotel → Floor → Attendant Average Credit → Daily Performance (Total Credit/Order/Average Duration) for Attendant', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see its attendants ranked by average cleaning credit, and an attendant to see their daily performance: total credit, order count, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN AVG(cleaning_credit) BY attendant DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY DATE(created_date)', {
+    make('cco-43', '🟢 Hotel → Floor → Attendant Dist → Attendant', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see attendants grouped into rank-based ranges by order volume, and a range to see attendants ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN attendant_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY attendant', {
       chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco43.leafData) } },
       title: { text: undefined },
+      legend: { enabled: true },
       xAxis: { type: 'category' as const },
       yAxis: [
-        { title: { text: 'Completed Orders / Avg Credit' } },
+        { title: { text: 'Orders / Cleaning Credit' } },
         { title: { text: 'Avg Duration (min)' }, opposite: true },
       ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco43.primary, dataLabels: { enabled: true, format: '{point.y}' } }],
-      drilldown: { series: cco43.dd as unknown as Highcharts.SeriesOptionsType[] },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco43.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco43.level2, ...cco43.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-44', '🟢 Hotel → Floor → Inspector Average Credit → Daily Performance (Total Credit/Order/Average Duration) for Inspector', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see its inspectors ranked by average cleaning credit, and an inspector to see their daily performance: total credit, order count, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN AVG(cleaning_credit) BY supervisor DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY DATE(created_date)', {
+    make('cco-44', '🟢 Hotel → Floor → Inspector Dist → Inspector', 'Completed orders per hotel. Click a hotel to see its floors, a floor to see inspectors grouped into rank-based ranges by order volume, and a range to see inspectors ranked by order count: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN floor DRILLDOWN inspector_dist_range DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY supervisor', {
       chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco44.leafData) } },
       title: { text: undefined },
+      legend: { enabled: true },
       xAxis: { type: 'category' as const },
       yAxis: [
-        { title: { text: 'Completed Orders / Avg Credit' } },
+        { title: { text: 'Orders / Cleaning Credit' } },
         { title: { text: 'Avg Duration (min)' }, opposite: true },
       ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco44.primary, dataLabels: { enabled: true, format: '{point.y}' } }],
-      drilldown: { series: cco44.dd as unknown as Highcharts.SeriesOptionsType[] },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco44.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco44.level2, ...cco44.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-45', 'Hotel → Inspector → Room Attendant → Average Cleaning Duration (by Room Type)', 'Completed orders per hotel. Click a hotel to see its inspectors, an inspector to see their room attendants, and an attendant to see average cleaning duration (mins) overall and by room type', 'COUNT(*) GROUP BY hotel DRILLDOWN supervisor DRILLDOWN attendant DRILLDOWN AVG(duration_minutes) BY room_type', {
-      chart: { type: 'column' }, title: { text: undefined },
+    make('cco-45', '🟢 Hotel → Inspector Dist → Room Attendant → Room Type', 'Completed orders per hotel. Click a hotel to see inspectors grouped into rank-based ranges by order volume, a range to see room attendants ranked by order count, and an attendant to see room types: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN inspector_dist_range DRILLDOWN attendant DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY room_type', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco45.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
       xAxis: { type: 'category' as const },
-      yAxis: { title: { text: 'Completed Orders / Avg Minutes' } },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco45Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
-      drilldown: { series: cco45Dd as unknown as Highcharts.SeriesOptionsType[] },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco45.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco45.level2, ...cco45.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
-    make('cco-46', 'Hotel → Inspector → Room Attendant → 24-Hour Cleaning Distribution', 'Completed orders per hotel. Click a hotel to see its inspectors, an inspector to see their room attendants, and an attendant to see their 24-hour cleaning completion distribution', 'COUNT(*) GROUP BY hotel DRILLDOWN supervisor DRILLDOWN attendant DRILLDOWN HOUR(completed_time)', {
-      chart: { type: 'column' }, title: { text: undefined },
+    make('cco-46', '🟢 Hotel → Inspector Dist → Duration Dist → Room Type', 'Completed orders per hotel. Click a hotel to see inspectors grouped into rank-based ranges by order volume, a range to see its cleaning duration buckets, and a duration bucket to see room types: total credit, total orders, and average cleaning duration.', 'COUNT(*) GROUP BY hotel DRILLDOWN inspector_dist_range DRILLDOWN duration_bin DRILLDOWN (SUM(cleaning_credit), COUNT(*), AVG(duration_minutes)) BY room_type', {
+      chart: { type: 'column', events: { drilldown: ccoDailyPerformanceDrilldownHandler(cco46.leafData) } },
+      title: { text: undefined },
+      legend: { enabled: true },
       xAxis: { type: 'category' as const },
-      yAxis: { title: { text: 'Completed Orders' } },
+      yAxis: [
+        { title: { text: 'Orders / Cleaning Credit' } },
+        { title: { text: 'Avg Duration (min)' }, opposite: true },
+      ],
       plotOptions: { column: { dataLabels: { enabled: true, format: '{point.y}' } } },
       tooltip: { headerFormat: '<b>{point.key}</b><br/>', pointFormat: '<b>{point.y}</b>' },
-      series: [{ type: 'column', name: 'Completed Orders', color: '#0F766E', data: cco46Primary, dataLabels: { enabled: true, format: '{point.y}' } }],
-      drilldown: { series: cco46Dd as unknown as Highcharts.SeriesOptionsType[] },
+      series: [{ type: 'column', name: 'Orders', colorByPoint: true, legendType: 'point', showInLegend: true, dataLabels: { enabled: true, format: '{point.y}' }, data: cco46.level1 }] as unknown as Highcharts.SeriesOptionsType[],
+      drilldown: { series: [...cco46.level2, ...cco46.level3] as unknown as Highcharts.SeriesOptionsType[] },
     }),
   ];
 }
@@ -4239,7 +4169,7 @@ export function CoDashboardView({
   myDash?: MyDashOverride;
   myDashEmbed?: MyDashEmbed;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { theme } = useTheme();
   const [dark, setDark] = useState(false);
   const orgTimezone = data.meta.timezone ?? 'UTC';
@@ -4444,7 +4374,7 @@ export function CoDashboardView({
               <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: themeTokens.dashboard.metaTitle }}>{contextTitle}</h3>
               <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: themeTokens.dashboard.metaSub }}>
                 {filteredCount.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
-                {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
+                {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {formatDashboardDateTime(data.meta.generated_at, lang, data.meta.timezone)}
                 {' · '}CO ACSR Dashboard
                 {hotelCount > 0 ? ` · ${hotelCount} hotels in scope` : ''}
               </p>
@@ -4661,7 +4591,7 @@ export function CoDashboardView({
           </p>
           <p className="font-mono" style={{ fontSize: '0.6rem', color: '#6B6560', marginTop: '3px', letterSpacing: '0.06em' }}>
             {t('dashboard_label_co', 'CO ACSR Dashboard')} · {data.meta.total_records.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')} ·
-            {t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleDateString()}
+            {t('dashboard_ui.generated_prefix', 'Generated')} {formatDashboardDate(data.meta.generated_at, lang, data.meta.timezone)}
           </p>
         </div>
 
@@ -4737,6 +4667,20 @@ export function CoDashboardView({
             </div>
           </section>
         )}
+
+        <section>
+          <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
+          <div className="mt-5">
+            <CorpCoDrilldownTable
+              chainCode={data.meta.chain_code ?? ''}
+              hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
+              hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
+              rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
+              filters={filters}
+              dark={dark}
+            />
+          </div>
+        </section>
 
         {isCorp && (
           <section>

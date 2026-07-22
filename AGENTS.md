@@ -9,10 +9,10 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 | Key | Value |
 |---|---|
-| Version | **v1.0.91** (released 2026-07-08) |
+| Version | **v1.1.21** (released 2026-07-22) |
 | Branch | `main` |
 | Local dev | `npm run dev` → `http://localhost:3010` |
-| Previous version | v1.0.90 |
+| Previous version | v1.1.20 |
 
 **Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
@@ -28,13 +28,15 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 ---
 
-## Section Structure: KPI / Simple Charts / Long Charts
+## Section Structure: KPI / Simple Charts / Long Charts (+ Scope-Specific Tables)
 
-All four modules (CO first, then JO/MO/IM) render dashboards in exactly three top-level sections, in this order — do not add others:
+All four modules (CO first, then JO/MO/IM) share these three base sections, in this order:
 
 1. **KPI** — `kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3`
 2. **Simple Charts** — `chart-grid mt-5 grid grid-cols-1 md:grid-cols-2 gap-4` (2 per row) — everything lives here by default
 3. **Long Charts** — `chart-grid-long mt-5 grid grid-cols-1 gap-4` (1 per row) — reserved for deep multi-level drilldowns; membership is opt-in per chart id, moved in only on explicit request
+
+Explicit scope-specific analytical sections may follow Long Charts. Corp IM has `Hotel → Department → Category → Incident → Detail`; Corp JO has `Hotel → Department → Category → Service Item → Detail`; Corp MO has `Hotel → Department → Category → Defect → Detail`; and Corp CO has `Hotel → Cleaning Type → Stay Status → Attendant → Detail`. Hotel variants omit the Hotel level. The corresponding live routes are `/api/dashboard/im-table`, `/api/dashboard/jo-table`, `/api/dashboard/mo-table`, and `/api/dashboard/co-table`. The first level renders inline, deeper levels use a document-level modal, and every level has an icon-only CSV export. Keep each table date/hotel-filter aware and module-independent.
 
 Each section is headed by a shared `SectionHead` component (label + horizontal rule). **`SectionHead` must include `mb-3`** on its wrapping div — this is the only thing separating the label from the cards below (grids use `mt-0`/`mt-5`, not a top margin). `CoDashboardView.tsx` and `DashboardClient.tsx` each keep their **own copy** of `SectionHead` — if you touch one, mirror the change in the other.
 
@@ -57,6 +59,9 @@ Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHA
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.21** | 2026-07-22 | Added live, filter-aware analytical Table sections for Corp and Hotel IM/JO/MO/CO. Each module has its own database route and drilldown hierarchy, renders the root summary inline, opens deeper levels in a modal, exports every level to CSV, and includes four-language labels. CO adds benchmark flag icons to cleaning-record details. |
+| **v1.1.20** | 2026-07-22 | Hotel IM `im-11` through `im-28` redesigned into the current multi-level drilldown pattern, ending in dual-axis combo leaves for incident count, average duration, repeat rate, and closing rate. The shared `im_dim_item_stats_map` pipeline now includes profile type, incident status, guest name, created by, and hotel-wide `all` dimensions; dashboard fetch and `im-scope` response generation must remain in lockstep. i18n was updated across all four languages and the full batch was verified through live drilldown clicks. |
+| **v1.1.19** | 2026-07-17 | Primary/secondary Neon failover support added through `NEON_DB_SLOT`, `DATABASE_URL_SECONDARY`, and `DATABASE_URL_UNPOOLED_SECONDARY`. Database selection is resolved centrally by `lib/db/supabaseCompat.ts` and `lib/supabase/server.ts`, allowing a Vercel customer deployment to switch Neon projects by environment configuration and redeploy without code changes. |
 | **v1.0.91** | 2026-07-08 | Default app UI theme changed from Vintage to **Chromatic Ink Wash** (`chromatic-ink`) — affects fresh sessions/browsers only (`components/layout/ThemeProvider.tsx` initial `useState`); users with a stored `fcs1-theme` localStorage preference are unaffected |
 | **v1.0.90** | 2026-07-08 | IM long-drilldown follow-up release: corp IM `cim-22`..`cim-26` and hotel IM `im-41`..`im-45` now resolve drilldown axis labels from the active level, use incident item names from database-backed summary maps instead of blank fallback buckets, and keep 24-hour-distribution charts aligned with the configured organization timezone; CO/IM fetch/meta plumbing updated so dashboard views receive timezone context consistently; i18n updated across all four languages |
 | **v1.0.89** | 2026-07-07 | JO/MO/IM restructured to the same KPI / Simple Charts / Long Charts section pattern CO already had (see "Section Structure" above); sub-headers ("Executive Charts", "Drilldown charts", "Chain Comparison", "Performance Gauges", "Corp Comparison Top 10", "Builder Charts", etc.) removed, charts flattened into one Simple Charts grid per scope; new `MO_LONG_CHART_IDS`/`JO_LONG_CHART_IDS`/`IM_LONG_CHART_IDS` sets (empty) + `splitLongCharts` helper in `DashboardClient.tsx`; every hardcoded chart-list cap (`topN`/`.slice(0, N)`) in JO/MO/IM builder code normalized to `N = 24`; fixed spacing bug where `DashboardClient.tsx`'s `SectionHead` was missing `mb-3` vs `CoDashboardView.tsx`'s copy; `AGENTS.md`/`CLAUDE.md` synced and repositioned for a Codex-primary workflow |

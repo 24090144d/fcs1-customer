@@ -12,8 +12,12 @@ import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { joBenchmarkFor, moBenchmarkFor } from '@/lib/kpi-benchmarks';
 import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
+import { CorpImDrilldownTable } from '@/components/dashboard/CorpImDrilldownTable';
+import { CorpJoDrilldownTable } from '@/components/dashboard/CorpJoDrilldownTable';
+import { CorpMoDrilldownTable } from '@/components/dashboard/CorpMoDrilldownTable';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
+import { formatDashboardDate, formatDashboardDateTime } from '@/lib/dashboard-date-format';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m => m.HcChart), { ssr: false });
 
@@ -4985,7 +4989,7 @@ function buildMaintenanceKpis(summary: HotelSummary, type: MaintenanceType): Kpi
 }
 
 function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed }: { data: MoDashboardJson | CoDashboardJson; chainEntries?: ChainEntry[]; myDash?: MyDashOverride; myDashEmbed?: MyDashEmbed }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { theme: selectedTheme } = useTheme();
   const [dark, setDark] = useState(false);
   const [worldMapData, setWorldMapData] = useState<Record<string, unknown> | null>(null);
@@ -5331,7 +5335,7 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
           <h3 className="font-serif font-semibold truncate leading-snug" style={{ fontSize: '1.125rem', color: metaTitle }}>{contextTitle}</h3>
           <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
             {((isCorp ? corpActiveSummary.total : scopedSummary.total) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
-            {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
+            {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {formatDashboardDateTime(data.meta.generated_at, lang, data.meta.timezone)}
             {isCo && <> {' · '}CO ACSR Dashboard</>}
             {!isCorp && isMo && <>{' · '}{t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')}</>}
             {isCorp && isMo && <> {' · '}Corp {t('dashboard_ui.dashboard_label_mo', 'MO Dashboard')} view</>}
@@ -5485,6 +5489,23 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
           </section>
         )}
 
+        {!isCo && isMo && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
+            <div className="mt-5">
+              <CorpMoDrilldownTable
+                chainCode={data.meta.chain_code}
+                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                rootLevel={isCorp ? 'hotels' : 'departments'}
+                from={filtered ? dateFrom : ''}
+                to={filtered ? dateTo : ''}
+                dark={dark}
+              />
+            </div>
+          </section>
+        )}
+
         {isCorp && (
           <section>
             <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
@@ -5518,7 +5539,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
   const isJo = data.meta.schema === 'jo-v1';
   const isCorp = String(data.meta.hotel_code ?? '').toUpperCase() === 'CORP';
   const isBuilder = data.meta.upload_job_id === 'builder-dashboard-im';
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const moduleLabel = isJo ? 'JO' : 'IM';
   const contextTitle = isBuilder
     ? `Dashboard · ${moduleLabel}`
@@ -6957,7 +6978,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           </h3>
           <p className="font-mono mt-0.5" style={{ fontSize: '0.6rem', letterSpacing: '0.05em', color: metaSub }}>
             {((isCorp ? corpActiveSummary.total : data.meta.total_records) ?? 0).toLocaleString()} {t('dashboard_ui.records_suffix', 'records')}
-            {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleString()}
+            {' · '}{t('dashboard_ui.generated_prefix', 'Generated')} {formatDashboardDateTime(data.meta.generated_at, lang, data.meta.timezone)}
             {hasChain && ` · ${activeChainEntries.length} hotels in chain`}
             {isCorp && ` · Corp comparison view`}
           </p>
@@ -7076,7 +7097,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           </p>
           <p className="font-mono" style={{ fontSize: '0.6rem', color: '#6B6560', marginTop: '3px', letterSpacing: '0.06em' }}>
             {isJo ? t('dashboard_ui.dashboard_label_jo', 'JO Dashboard') : t('dashboard_ui.dashboard_label_im', 'IM Dashboard')} · {data.meta.total_records.toLocaleString()} {t('dashboard_ui.records_suffix', 'records')} ·
-            {t('dashboard_ui.generated_prefix', 'Generated')} {new Date(data.meta.generated_at).toLocaleDateString()}
+            {t('dashboard_ui.generated_prefix', 'Generated')} {formatDashboardDate(data.meta.generated_at, lang, data.meta.timezone)}
           </p>
         </div>
 
@@ -7158,6 +7179,41 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
                 const { override, fullPeriod } = chartOpts(def);
                 return <HcChart key={def.id} def={def} dark={dark} overrideOptions={override} fullPeriod={fullPeriod} codeLabel={def.id} />;
               })}
+            </div>
+          </section>
+        )}
+
+        {/* ── Table ─────────────────────────────────────────────────────────── */}
+        {!isBuilder && !isJo && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
+            <div className="mt-5">
+              <CorpImDrilldownTable
+                chainCode={data.meta.chain_code}
+                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                rootLevel={isCorp ? 'hotels' : 'departments'}
+                from={filtered ? dateFrom : ''}
+                to={filtered ? dateTo : ''}
+                dark={dark}
+              />
+            </div>
+          </section>
+        )}
+
+        {!isBuilder && isJo && (
+          <section>
+            <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
+            <div className="mt-5">
+              <CorpJoDrilldownTable
+                chainCode={data.meta.chain_code}
+                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                rootLevel={isCorp ? 'hotels' : 'departments'}
+                from={filtered ? dateFrom : ''}
+                to={filtered ? dateTo : ''}
+                dark={dark}
+              />
             </div>
           </section>
         )}

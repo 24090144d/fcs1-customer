@@ -13,8 +13,6 @@ import { localHour } from '@/lib/timezone';
 import { CoIrDrilldownTable } from '@/components/dashboard/CoIrDrilldownTable';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then((module) => module.HcChart), { ssr: false });
-const PALETTE = ['#0F766E', '#C2410C', '#2563EB', '#7C3AED', '#65A30D', '#D97706', '#0891B2', '#BE123C'];
-
 type Props = { data: DashboardJson; rows: CoIrRow[]; chainEntries: ChainEntry[] };
 type KpiTone = 'good' | 'watch' | 'bad';
 type Kpi = { id: string; label: string; value: number; unit: string; decimals?: number; note: string; formula: string; tone: KpiTone; statusDetail: string; benchmark: string[] };
@@ -39,12 +37,6 @@ const kpiToneColors = (tone: KpiTone) => tone === 'good'
   : tone === 'watch'
     ? { border: '#d97706', badgeBg: 'rgba(217,119,6,0.12)', badgeText: '#d97706' }
     : { border: '#dc2626', badgeBg: 'rgba(220,38,38,0.12)', badgeText: '#dc2626' };
-const groupCount = (rows: CoIrRow[], key: (row: CoIrRow) => string) => {
-  const map: Record<string, number> = {};
-  for (const row of rows) map[key(row)] = (map[key(row)] ?? 0) + 1;
-  return map;
-};
-const sortedEntries = (map: Record<string, number>, cap = 24) => Object.entries(map).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, cap);
 const chart = (id: string, title: string, note: string, formula: string, options: Record<string, unknown>, height = 330): ChartDef => ({ id, title, note, formula, options, filterable: true, height });
 
 function SectionHead({ label, color, border }: { label: string; color: string; border: string }) {
@@ -330,6 +322,96 @@ function coIrPassRateDistBuckets(rows: CoIrRow[]): CoIrRowBucket[] {
   return order.map((name) => ({ name, rows: buckets.get(name)! })).filter((bucket) => bucket.rows.length > 0);
 }
 
+function buildHotelCoIrDimensionPersonDrilldown(
+  rows: CoIrRow[],
+  id: string,
+  title: string,
+  dimensionLabel: string,
+  dimensionOf: (row: CoIrRow) => string,
+  personLabel: string,
+  personOf: (row: CoIrRow) => string,
+  donut: boolean,
+  height = 420,
+): ChartDef {
+  const dates = coIrDateGroups(rows);
+  const idPart = (value: string) => encodeURIComponent(value);
+  const levelType = donut ? 'pie' : 'column';
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, CoIrPersonMetric[]> = {};
+  const series = (idValue: string, name: string, color: string, axisTitle: string, data: Array<{ name: string; y: number; drilldown: string }>) => ({
+    id: idValue,
+    type: levelType,
+    name,
+    color,
+    colorByPoint: donut,
+    innerSize: donut ? '55%' : undefined,
+    custom: { xAxisTitle: axisTitle },
+    dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+    data,
+  }) as Highcharts.SeriesOptionsType;
+
+  for (const [date, dateRows] of dates) {
+    const dateKey = idPart(date);
+    const dimensions = new Map<string, CoIrRow[]>();
+    for (const row of dateRows) {
+      const dimension = dimensionOf(row).trim() || 'Unknown';
+      dimensions.set(dimension, [...(dimensions.get(dimension) ?? []), row]);
+    }
+    const dimensionEntries = Array.from(dimensions.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    level2.push(series(
+      `${id}-date:${dateKey}`,
+      `${date} · ${dimensionLabel}`,
+      '#C2410C',
+      dimensionLabel,
+      dimensionEntries.map(([dimension, values]) => ({ name: dimension, y: values.length, drilldown: `${id}-person-dist:${dateKey}:${idPart(dimension)}` })),
+    ));
+
+    for (const [dimension, dimensionRows] of dimensionEntries) {
+      const dimensionKey = idPart(dimension);
+      const buckets = coIrPersonDistBuckets(dimensionRows, personOf);
+      level3.push(series(
+        `${id}-person-dist:${dateKey}:${dimensionKey}`,
+        `${date} · ${dimension} · ${personLabel} Dist`,
+        '#7C3AED',
+        `${personLabel} Dist`,
+        buckets.map((bucket) => ({ name: bucket.name, y: bucket.total, drilldown: `${id}-leaf:${dateKey}:${dimensionKey}:${idPart(bucket.name)}` })),
+      ));
+      for (const bucket of buckets) {
+        leafData[`${id}-leaf:${dateKey}:${dimensionKey}:${idPart(bucket.name)}`] = coIrPersonMetrics(bucket.people);
+      }
+    }
+  }
+
+  const options: Highcharts.Options = {
+    chart: { type: levelType, events: coIrComboDrilldownEvents(leafData, personLabel) },
+    xAxis: { type: 'category', title: { text: 'Date' } },
+    yAxis: [
+      { min: 0, title: { text: 'Inspections / Total Credit' } },
+      { min: 0, title: { text: 'Duration (min) / Pass Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: levelType,
+      name: 'Inspections',
+      colorByPoint: true,
+      innerSize: donut ? '55%' : undefined,
+      dataLabels: { enabled: true, format: '{point.name}: {point.y}' },
+      data: dates.map(([date, values]) => ({ name: date, y: values.length, drilldown: `${id}-date:${idPart(date)}` })),
+    } as Highcharts.SeriesOptionsType],
+    plotOptions: donut ? { pie: { dataLabels: { enabled: true } } } : { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  };
+  return chart(
+    id,
+    title,
+    `Drill from date and ${dimensionLabel.toLowerCase()} into ranked ${personLabel.toLowerCase()} ranges, then compare individual performance.`,
+    `Inspection count by Date → ${dimensionLabel} → ${personLabel} rank range; leaf = SUM(inspection_credit), AVG(inspection_duration_minutes), Pass / Total × 100`,
+    options as Record<string, unknown>,
+    height,
+  );
+}
+
 function buildCorpCoIrDateInspectorDrilldown(
   rows: CoIrRow[],
   id: string,
@@ -399,7 +481,7 @@ function buildCorpCoIrDateInspectorDrilldown(
   );
 }
 
-function buildCorpCoIrCleanedByInspectorDrilldown(rows: CoIrRow[], title: string): ChartDef {
+function buildHotelCoIrCleanedByInspectorDrilldown(rows: CoIrRow[], title: string): ChartDef {
   const id = 'coir-10';
   const dates = coIrDateGroups(rows);
   const idPart = (value: string) => encodeURIComponent(value);
@@ -465,6 +547,173 @@ function buildCorpCoIrCleanedByInspectorDrilldown(rows: CoIrRow[], title: string
   );
 }
 
+function buildCorpCoIrDateHotelInspectorDrilldown(
+  rows: CoIrRow[],
+  id: string,
+  title: string,
+  dimensionLabel: string,
+  dimensionBuckets: (hotelRows: CoIrRow[]) => CoIrRowBucket[],
+): ChartDef {
+  const dates = coIrDateGroups(rows);
+  const idPart = (value: string) => encodeURIComponent(value);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const level4: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, CoIrPersonMetric[]> = {};
+  const series = (idValue: string, name: string, color: string, axisTitle: string, data: Array<{ name: string; y: number; drilldown: string }>) => ({
+    id: idValue, type: 'column', name, color, custom: { xAxisTitle: axisTitle },
+    dataLabels: { enabled: true, format: '{point.y}' }, data,
+  }) as Highcharts.SeriesOptionsType;
+
+  for (const [date, dateRows] of dates) {
+    const dateKey = idPart(date);
+    const hotels = new Map<string, CoIrRow[]>();
+    for (const row of dateRows) {
+      const hotel = row.hotel_code?.trim() || 'Unknown Hotel';
+      hotels.set(hotel, [...(hotels.get(hotel) ?? []), row]);
+    }
+    const hotelEntries = Array.from(hotels.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    level2.push(series(
+      `${id}-date:${dateKey}`,
+      `${date} · Hotel`,
+      '#C2410C',
+      'Hotel',
+      hotelEntries.map(([hotel, values]) => ({ name: hotel, y: values.length, drilldown: `${id}-hotel:${dateKey}:${idPart(hotel)}` })),
+    ));
+
+    for (const [hotel, hotelRows] of hotelEntries) {
+      const hotelKey = idPart(hotel);
+      const dimensions = dimensionBuckets(hotelRows);
+      level3.push(series(
+        `${id}-hotel:${dateKey}:${hotelKey}`,
+        `${date} · ${hotel} · ${dimensionLabel}`,
+        '#7C3AED',
+        dimensionLabel,
+        dimensions.map((bucket) => ({ name: bucket.name, y: bucket.rows.length, drilldown: `${id}-inspector-dist:${dateKey}:${hotelKey}:${idPart(bucket.name)}` })),
+      ));
+      for (const dimension of dimensions) {
+        const dimensionKey = idPart(dimension.name);
+        const inspectorBuckets = coIrPersonDistBuckets(dimension.rows, (row) => row.inspector.trim() || 'Inspector');
+        level4.push(series(
+          `${id}-inspector-dist:${dateKey}:${hotelKey}:${dimensionKey}`,
+          `${date} · ${hotel} · ${dimension.name} · Inspector Dist`,
+          '#0891B2',
+          'Inspector Dist',
+          inspectorBuckets.map((bucket) => ({ name: bucket.name, y: bucket.total, drilldown: `${id}-leaf:${dateKey}:${hotelKey}:${dimensionKey}:${idPart(bucket.name)}` })),
+        ));
+        for (const bucket of inspectorBuckets) {
+          leafData[`${id}-leaf:${dateKey}:${hotelKey}:${dimensionKey}:${idPart(bucket.name)}`] = coIrPersonMetrics(bucket.people);
+        }
+      }
+    }
+  }
+
+  const options: Highcharts.Options = {
+    chart: { type: 'column', events: coIrComboDrilldownEvents(leafData, 'Inspector') },
+    xAxis: { type: 'category', title: { text: 'Date' } },
+    yAxis: [
+      { min: 0, title: { text: 'Inspections / Total Credit' } },
+      { min: 0, title: { text: 'Duration (min) / Pass Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Inspections', colorByPoint: true,
+      dataLabels: { enabled: true, format: '{point.y}' },
+      data: dates.map(([date, values]) => ({ name: date, y: values.length, drilldown: `${id}-date:${idPart(date)}` })),
+    } as Highcharts.SeriesOptionsType],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3, ...level4] },
+    tooltip: { shared: true },
+  };
+  return chart(
+    id,
+    title,
+    `Drill from date and hotel through ${dimensionLabel.toLowerCase()} and ranked inspector ranges, then compare inspector performance.`,
+    `Inspection count by Date → Hotel → ${dimensionLabel} → Inspector rank range; leaf = SUM(inspection_credit), AVG(inspection_duration_minutes), Pass / Total × 100`,
+    options as Record<string, unknown>,
+    420,
+  );
+}
+
+function buildCorpCoIrCleanedByInspectorDrilldown(rows: CoIrRow[], title: string): ChartDef {
+  const id = 'coir-10';
+  const dates = coIrDateGroups(rows);
+  const idPart = (value: string) => encodeURIComponent(value);
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const level4: Highcharts.SeriesOptionsType[] = [];
+  const level5: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, CoIrPersonMetric[]> = {};
+  const series = (idValue: string, name: string, color: string, axisTitle: string, data: Array<{ name: string; y: number; drilldown: string }>) => ({
+    id: idValue, type: 'column', name, color, custom: { xAxisTitle: axisTitle },
+    dataLabels: { enabled: true, format: '{point.y}' }, data,
+  }) as Highcharts.SeriesOptionsType;
+
+  for (const [date, dateRows] of dates) {
+    const dateKey = idPart(date);
+    const hotels = new Map<string, CoIrRow[]>();
+    for (const row of dateRows) {
+      const hotel = row.hotel_code?.trim() || 'Unknown Hotel';
+      hotels.set(hotel, [...(hotels.get(hotel) ?? []), row]);
+    }
+    const hotelEntries = Array.from(hotels.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    level2.push(series(
+      `${id}-date:${dateKey}`, `${date} · Hotel`, '#C2410C', 'Hotel',
+      hotelEntries.map(([hotel, values]) => ({ name: hotel, y: values.length, drilldown: `${id}-hotel:${dateKey}:${idPart(hotel)}` })),
+    ));
+    for (const [hotel, hotelRows] of hotelEntries) {
+      const hotelKey = idPart(hotel);
+      const cleanerBuckets = coIrPersonDistBuckets(hotelRows, (row) => row.cleaned_by?.trim() || 'Unknown Cleaner');
+      level3.push(series(
+        `${id}-hotel:${dateKey}:${hotelKey}`, `${date} · ${hotel} · Cleaned By Dist`, '#7C3AED', 'Cleaned By Dist',
+        cleanerBuckets.map((bucket) => ({ name: bucket.name, y: bucket.total, drilldown: `${id}-cleaner:${dateKey}:${hotelKey}:${idPart(bucket.name)}` })),
+      ));
+      for (const cleanerBucket of cleanerBuckets) {
+        const cleanerBucketKey = idPart(cleanerBucket.name);
+        level4.push(series(
+          `${id}-cleaner:${dateKey}:${hotelKey}:${cleanerBucketKey}`, `${date} · ${hotel} · ${cleanerBucket.name} · Cleaned By`, '#0891B2', 'Cleaned By',
+          cleanerBucket.people.map(([cleaner, values]) => ({ name: cleaner, y: values.length, drilldown: `${id}-inspector-dist:${dateKey}:${hotelKey}:${cleanerBucketKey}:${idPart(cleaner)}` })),
+        ));
+        for (const [cleaner, cleanerRows] of cleanerBucket.people) {
+          const cleanerKey = idPart(cleaner);
+          const inspectorBuckets = coIrPersonDistBuckets(cleanerRows, (row) => row.inspector.trim() || 'Inspector');
+          level5.push(series(
+            `${id}-inspector-dist:${dateKey}:${hotelKey}:${cleanerBucketKey}:${cleanerKey}`, `${date} · ${hotel} · ${cleaner} · Inspector Dist`, '#0F766E', 'Inspector Dist',
+            inspectorBuckets.map((bucket) => ({ name: bucket.name, y: bucket.total, drilldown: `${id}-leaf:${dateKey}:${hotelKey}:${cleanerBucketKey}:${cleanerKey}:${idPart(bucket.name)}` })),
+          ));
+          for (const inspectorBucket of inspectorBuckets) {
+            leafData[`${id}-leaf:${dateKey}:${hotelKey}:${cleanerBucketKey}:${cleanerKey}:${idPart(inspectorBucket.name)}`] = coIrPersonMetrics(inspectorBucket.people);
+          }
+        }
+      }
+    }
+  }
+
+  const options: Highcharts.Options = {
+    chart: { type: 'column', events: coIrComboDrilldownEvents(leafData, 'Inspector') },
+    xAxis: { type: 'category', title: { text: 'Date' } },
+    yAxis: [
+      { min: 0, title: { text: 'Inspections / Total Credit' } },
+      { min: 0, title: { text: 'Duration (min) / Pass Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Inspections', colorByPoint: true,
+      dataLabels: { enabled: true, format: '{point.y}' },
+      data: dates.map(([date, values]) => ({ name: date, y: values.length, drilldown: `${id}-date:${idPart(date)}` })),
+    } as Highcharts.SeriesOptionsType],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3, ...level4, ...level5] },
+    tooltip: { shared: true },
+  };
+  return chart(
+    id,
+    title,
+    'Drill from date and hotel into ranked cleaners, each cleaner, ranked inspectors, and individual inspector performance.',
+    'Inspection count by Date → Hotel → Cleaned By rank range → Cleaned By → Inspector rank range; leaf = SUM(inspection_credit), AVG(inspection_duration_minutes), Pass / Total × 100',
+    options as Record<string, unknown>,
+    420,
+  );
+}
+
 function buildCorpCoIrCharts(rows: CoIrRow[], t: Translate, timezone: string): ChartDef[] {
   const scoreOrder = ['<70', '70-79', '80-89', '90-94', '95-99', '100', 'Missing'];
   const durationOrder = ['<1m', '1-3m', '3-5m', '5-10m', '10-15m', '15-30m', '30m+', 'Missing'];
@@ -488,8 +737,36 @@ function buildCorpCoIrCharts(rows: CoIrRow[], t: Translate, timezone: string): C
       const duration = row.inspection_duration_minutes;
       return duration === null ? 'Missing' : duration < 1 ? '<1m' : duration < 3 ? '1-3m' : duration < 5 ? '3-5m' : duration < 10 ? '5-10m' : duration < 15 ? '10-15m' : duration < 30 ? '15-30m' : '30m+';
     })),
-    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-09', t('co_ir.chart_09', 'Location Dist → Inspector'), 'Location Dist', coIrLocationDistBuckets),
+    buildCorpCoIrDateHotelInspectorDrilldown(rows, 'coir-09', t('co_ir.chart_09', 'Location Dist → Inspector'), 'Location Dist', coIrLocationDistBuckets),
     buildCorpCoIrCleanedByInspectorDrilldown(rows, t('co_ir.chart_10', 'Cleaned By → Inspector')),
+  ];
+}
+
+function buildHotelCoIrCharts(rows: CoIrRow[], t: Translate, timezone: string): ChartDef[] {
+  const scoreOrder = ['<70', '70-79', '80-89', '90-94', '95-99', '100', 'Missing'];
+  const durationOrder = ['<1m', '1-3m', '3-5m', '5-10m', '10-15m', '15-30m', '30m+', 'Missing'];
+  return [
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-01', t('co_ir.chart_01', 'Room Status → Inspector'), 'Room Status', (row) => row.room_status, 'Inspector', (row) => row.inspector.trim() || 'Inspector', true),
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-02', t('co_ir.chart_02', 'Inspection Status → Inspector'), 'Inspection Status', (row) => row.inspection_result, 'Inspector', (row) => row.inspector.trim() || 'Inspector', true),
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-03', t('co_ir.chart_03', 'Room Status → Cleaned By'), 'Room Status', (row) => row.room_status, 'Cleaned By', (row) => row.cleaned_by?.trim() || 'Unknown Cleaner', false),
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-04', t('co_ir.chart_04', 'Inspection Status → Cleaned By'), 'Inspection Status', (row) => row.inspection_result, 'Cleaned By', (row) => row.cleaned_by?.trim() || 'Unknown Cleaner', false),
+    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-05', t('co_ir.chart_05', 'Score Dist → Inspector'), 'Inspection Score Dist', (dateRows) => coIrNamedBuckets(dateRows, scoreOrder, (row) => {
+      const score = row.inspection_score;
+      return score === null ? 'Missing' : score < 70 ? '<70' : score < 80 ? '70-79' : score < 90 ? '80-89' : score < 95 ? '90-94' : score < 100 ? '95-99' : '100';
+    })),
+    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-06', t('co_ir.chart_06', 'Pass Rate Dist → Inspector'), 'Inspection Pass Rate Dist', coIrPassRateDistBuckets),
+    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-07', t('co_ir.chart_07', '24 Hour Dist → Inspector'), '24 Hour Dist', (dateRows) => coIrNamedBuckets(dateRows, [...Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`), 'Unknown Hour'], (row) => {
+      const source = row.start_time ?? row.complete_time;
+      if (!source) return 'Unknown Hour';
+      const date = new Date(source);
+      return Number.isNaN(date.getTime()) ? 'Unknown Hour' : `${String(localHour(date, timezone)).padStart(2, '0')}:00`;
+    })),
+    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-08', t('co_ir.chart_08', 'Duration Dist → Inspector'), 'Inspection Duration Dist', (dateRows) => coIrNamedBuckets(dateRows, durationOrder, (row) => {
+      const duration = row.inspection_duration_minutes;
+      return duration === null ? 'Missing' : duration < 1 ? '<1m' : duration < 3 ? '1-3m' : duration < 5 ? '3-5m' : duration < 10 ? '5-10m' : duration < 15 ? '10-15m' : duration < 30 ? '15-30m' : '30m+';
+    })),
+    buildCorpCoIrDateInspectorDrilldown(rows, 'coir-09', t('co_ir.chart_09', 'Location Dist → Inspector'), 'Location Dist', coIrLocationDistBuckets),
+    buildHotelCoIrCleanedByInspectorDrilldown(rows, t('co_ir.chart_10', 'Cleaned By → Inspector')),
   ];
 }
 
@@ -500,79 +777,11 @@ function buildCorpCoIrLongCharts(rows: CoIrRow[], t: Translate): ChartDef[] {
   ];
 }
 
-function buildSimpleCharts(rows: CoIrRow[], timezone: string, t: Translate): ChartDef[] {
-  const daily = Object.entries(groupCount(rows, (row) => row.inspection_date ?? 'Unknown')).sort((a, b) => a[0].localeCompare(b[0]));
-  const result = sortedEntries(groupCount(rows, (row) => row.inspection_result));
-  const status = sortedEntries(groupCount(rows, (row) => row.room_status));
-  const statusDur: Record<string, number[]> = {};
-  const inspectorRows: Record<string, CoIrRow[]> = {};
-  const hours = Object.fromEntries(Array.from({ length: 24 }, (_, hour) => [String(hour).padStart(2, '0'), 0])) as Record<string, number>;
-  for (const row of rows) {
-    if (row.inspection_duration_minutes !== null) (statusDur[row.room_status] ??= []).push(row.inspection_duration_minutes);
-    (inspectorRows[row.inspector] ??= []).push(row);
-    const source = row.start_time ?? row.complete_time;
-    if (source) hours[String(localHour(new Date(source), timezone)).padStart(2, '0')]++;
-  }
-  const durationBuckets: Record<string, number> = { '<1m': 0, '1-3m': 0, '3-5m': 0, '5-10m': 0, '10-15m': 0, '15-30m': 0, '30m+': 0 };
-  const scoreBuckets: Record<string, number> = { '<70': 0, '70-79': 0, '80-89': 0, '90-94': 0, '95-99': 0, '100': 0, 'Missing': 0 };
-  for (const row of rows) {
-    const d = row.inspection_duration_minutes;
-    if (d !== null) durationBuckets[d < 1 ? '<1m' : d < 3 ? '1-3m' : d < 5 ? '3-5m' : d < 10 ? '5-10m' : d < 15 ? '10-15m' : d < 30 ? '15-30m' : '30m+']++;
-    const s = row.inspection_score;
-    scoreBuckets[s === null ? 'Missing' : s < 70 ? '<70' : s < 80 ? '70-79' : s < 90 ? '80-89' : s < 95 ? '90-94' : s < 100 ? '95-99' : '100']++;
-  }
-  const topInspectors = Object.entries(inspectorRows).sort((a, b) => b[1].length - a[1].length).slice(0, 15);
-  const inspectorPass = Object.entries(inspectorRows).map(([name, values]) => [name, percent(values.filter((row) => row.inspection_result === 'Pass').length, values.length)] as const).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  const inspectorCredits = Object.entries(inspectorRows).map(([name, values]) => [name, values.reduce((sum, row) => sum + (row.inspection_credit ?? 0), 0)] as const).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  const cats = (entries: Array<readonly [string, number]>) => entries.map(([name]) => name);
-  const vals = (entries: Array<readonly [string, number]>) => entries.map(([, value]) => Number(value.toFixed(2)));
+function buildHotelCoIrLongCharts(rows: CoIrRow[], t: Translate): ChartDef[] {
   return [
-    chart('coir-01', t('co_ir.chart_01', 'Daily Inspection Volume'), 'Shows inspection workload by CO date.', 'COUNT(*) BY inspection_date', { chart: { type: 'line' }, xAxis: { categories: cats(daily) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'line', data: vals(daily), color: PALETTE[0] }] }),
-    chart('coir-02', t('co_ir.chart_02', 'Pass / Conditional Pass / Fail'), 'Quality outcome mix for completed inspections.', 'COUNT(*) BY inspection_result', { chart: { type: 'pie' }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'pie', innerSize: '55%', data: result.map(([name, value], index) => ({ name, y: value, color: PALETTE[index] })) }] }),
-    chart('coir-03', t('co_ir.chart_03', 'Inspections by Room Status'), 'Identifies the room-status segments driving inspection demand.', 'COUNT(*) BY room_status', { chart: { type: 'column' }, xAxis: { categories: cats(status) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'column', data: vals(status), color: PALETTE[1] }] }),
-    chart('coir-04', t('co_ir.chart_04', 'Average Duration by Room Status'), 'Highlights room statuses that require longer inspection effort.', 'AVG(inspection_duration_minutes) BY room_status', { chart: { type: 'bar' }, xAxis: { categories: Object.keys(statusDur) }, yAxis: { title: { text: t('co_ir.minutes', 'Minutes') } }, series: [{ name: t('co_ir.minutes', 'Minutes'), type: 'bar', data: Object.values(statusDur).map((values) => Number(average(values).toFixed(1))), color: PALETTE[0] }] }),
-    chart('coir-05', t('co_ir.chart_05', 'Inspection Score Distribution'), 'Shows quality-score concentration and missing score capture.', 'COUNT(*) BY score_band', { chart: { type: 'column' }, xAxis: { categories: Object.keys(scoreBuckets) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'column', data: Object.values(scoreBuckets), color: PALETTE[2] }] }),
-    chart('coir-06', t('co_ir.chart_06', 'Top Inspectors by Inspection Volume'), 'Supports workload and staffing balance decisions.', 'TOP 15 COUNT(*) BY inspector', { chart: { type: 'bar' }, xAxis: { categories: topInspectors.map(([name]) => name) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'bar', data: topInspectors.map(([, values]) => values.length), color: PALETTE[0] }] }, 400),
-    chart('coir-07', t('co_ir.chart_07', 'Inspector Pass Rate'), 'Compares inspector quality outcomes while exposing coaching needs.', 'Pass inspections / total inspections BY inspector', { chart: { type: 'bar' }, xAxis: { categories: cats(inspectorPass) }, yAxis: { title: { text: t('co_ir.pass_rate', 'Pass %') }, max: 100 }, series: [{ name: t('co_ir.pass_rate', 'Pass %'), type: 'bar', data: vals(inspectorPass), color: PALETTE[4] }] }, 400),
-    chart('coir-08', t('co_ir.chart_08', 'Inspection Credits by Inspector'), 'Measures credited inspection contribution by inspector.', 'SUM(inspection_credit) BY inspector', { chart: { type: 'bar' }, xAxis: { categories: cats(inspectorCredits) }, yAxis: { title: { text: t('co_ir.credits', 'Credits') } }, series: [{ name: t('co_ir.credits', 'Credits'), type: 'bar', data: vals(inspectorCredits), color: PALETTE[5] }] }, 400),
-    chart('coir-09', t('co_ir.chart_09', '24-Hour Inspection Distribution'), 'Shows local-time demand peaks for roster planning.', 'COUNT(*) BY local hour(start_time)', { chart: { type: 'column' }, xAxis: { categories: Object.keys(hours).map((hour) => `${hour}:00`) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'column', data: Object.values(hours), color: PALETTE[6] }] }),
-    chart('coir-10', t('co_ir.chart_10', 'Inspection Duration Distribution'), 'Separates routine inspections from long-duration exceptions.', 'COUNT(*) BY inspection_duration_bucket', { chart: { type: 'column' }, xAxis: { categories: Object.keys(durationBuckets) }, yAxis: { title: { text: t('co_ir.inspections', 'Inspections') } }, series: [{ name: t('co_ir.inspections', 'Inspections'), type: 'column', data: Object.values(durationBuckets), color: PALETTE[3] }] }),
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-11', t('co_ir.chart_01', 'Room Status → Inspector'), 'Room Status', (row) => row.room_status, 'Inspector', (row) => row.inspector.trim() || 'Inspector', false, 500),
+    buildHotelCoIrDimensionPersonDrilldown(rows, 'coir-12', t('co_ir.chart_02', 'Inspection Status → Inspector'), 'Inspection Status', (row) => row.inspection_result, 'Inspector', (row) => row.inspector.trim() || 'Inspector', false, 500),
   ];
-}
-
-function drilldownChart(rows: CoIrRow[], isCorp: boolean, quality: boolean, t: Translate): ChartDef {
-  const path = quality
-    ? isCorp ? 'Hotel → Room Status → Inspector → Result' : 'Room Status → Inspector → Result'
-    : isCorp ? 'Hotel → Date → Room Status → Inspector' : 'Date → Room Status → Inspector';
-  const dimensions: Array<(row: CoIrRow) => string> = quality
-    ? isCorp
-      ? [(row) => row.hotel_code ?? 'Unknown Hotel', (row) => row.room_status, (row) => row.inspector, (row) => row.inspection_result]
-      : [(row) => row.room_status, (row) => row.inspector, (row) => row.inspection_result]
-    : isCorp
-      ? [(row) => row.hotel_code ?? 'Unknown Hotel', (row) => row.inspection_date ?? 'Unknown Date', (row) => row.room_status, (row) => row.inspector]
-      : [(row) => row.inspection_date ?? 'Unknown Date', (row) => row.room_status, (row) => row.inspector];
-  const series: Record<string, unknown>[] = [];
-  const buildLevel = (levelRows: CoIrRow[], level: number, parentId: string): Array<Record<string, unknown>> => {
-    const grouped: Record<string, CoIrRow[]> = {};
-    for (const row of levelRows) {
-      const name = dimensions[level](row) || 'Unknown';
-      (grouped[name] ??= []).push(row);
-    }
-    return Object.entries(grouped)
-      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
-      .slice(0, 50)
-      .map(([name, values], index) => {
-        if (level === dimensions.length - 1) return { name, y: values.length };
-        const id = `${parentId}-${level}-${index}`;
-        series.push({ id, name, type: 'column', data: buildLevel(values, level + 1, id) });
-        return { name, y: values.length, drilldown: id };
-      });
-  };
-  const rootData = rows.length ? buildLevel(rows, 0, `coir-${quality ? 'quality' : 'volume'}`) : [];
-  return chart(quality ? 'coir-12' : 'coir-11', t(`co_ir.chart_${quality ? '12' : '11'}`, path), `Deep inspection drilldown: ${path}.`, `COUNT(*) DRILLDOWN ${path}`, {
-    chart: { type: 'column' }, xAxis: { type: 'category', title: { text: path.split(' → ')[0] } }, yAxis: { title: { text: 'Inspections' } },
-    series: [{ name: 'Inspections', type: 'column', data: rootData, color: quality ? PALETTE[1] : PALETTE[0] }], drilldown: { series },
-  }, 460);
 }
 
 export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
@@ -642,12 +851,11 @@ export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
     { id: 'coir-kpi-10', label: t('co_ir.kpi_10', 'Inspections per Inspector'), value: inspectionsPerInspector, unit: 'avg', decimals: 1, note: 'Workload balance indicator across active inspectors.', formula: 'Total inspections / COUNT(DISTINCT inspector)', tone: workloadTone, statusDetail: workloadTone === 'good' ? 'Inspector workload is within the balanced range.' : 'Inspector workload may indicate under-utilization or overload.', benchmark: ['Good 20-40 inspections per inspector', 'Needs improvement 10-19.9 or 40.1-60', 'Bad < 10 or > 60'] },
   ];
   const simpleCharts = useMemo(() => {
-    const baseCharts = buildSimpleCharts(filtered, timezone, t);
-    return isCorp ? [...buildCorpCoIrCharts(filtered, t, timezone), ...baseCharts.slice(10)] : baseCharts;
+    return isCorp ? buildCorpCoIrCharts(filtered, t, timezone) : buildHotelCoIrCharts(filtered, t, timezone);
   }, [filtered, timezone, t, isCorp]);
   const longCharts = useMemo(() => isCorp
     ? buildCorpCoIrLongCharts(filtered, t)
-    : [drilldownChart(filtered, false, false, t), drilldownChart(filtered, false, true, t)], [filtered, isCorp, t]);
+    : buildHotelCoIrLongCharts(filtered, t), [filtered, isCorp, t]);
   const performance = useMemo(() => {
     const key = (row: CoIrRow) => row.hotel_code ?? data.meta.hotel_code ?? 'Unknown Hotel';
     const map: Record<string, CoIrRow[]> = {};

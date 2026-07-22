@@ -12,7 +12,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.1.24** (as of 2026-07-22) |
+| Version | **v1.1.25** (as of 2026-07-22) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` (`npm run dev`) |
@@ -354,6 +354,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.25** | 2026-07-22 | Redesigned Corp and Hotel CO-IR charts as date-first multi-level drilldowns with dynamic inspector/cleaner rank ranges and three-series performance leaves (total credit, average duration, pass rate); added Hotel COIR-11 and COIR-12 to the one-per-row Long Charts section for Room Status and Inspection Status analysis. |
 | **v1.1.24** | 2026-07-22 | Added independent CO Inspection Report (`CO-IR`) upload/storage/dashboard support, including hotel/corp routes, KPI benchmark cards, CCOIR multi-level simple/long charts, inspector drilldown tables, reset scopes, all-language labels, and an idempotent all-customer Neon schema migration. |
 | **v1.1.23** | 2026-07-22 | JO/MO/CO/IM detail tables use a compact, timezone-aware `DD/MM/YY HH:mm` date/time format and narrower minimum table widths. CO applies the compact format to both Start and Complete and uses hierarchy-specific widths for its Stay Status and Inspector detail tables. |
 | **v1.1.22** | 2026-07-22 | Corp and Hotel CO Table sections now include a second Inspector hierarchy alongside the existing Stay Status table. Corp drills Hotel → Cleaning Type → Inspector → Attendant → Detail; Hotel starts at Cleaning Type. The live `co_records` route supports inspector grouping/filtering, blank inspector values display as `Inspector`, every table level retains icon-only CSV export, and all four languages include the new table labels. |

@@ -3,9 +3,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getPool } from '@/lib/db/supabaseCompat';
 import { resolveLiveTimezone } from '@/lib/dashboard-fetch';
 
-type TableLevel = 'hotels' | 'cleaning_types' | 'stay_statuses' | 'attendants' | 'details';
+type TableLevel = 'hotels' | 'cleaning_types' | 'stay_statuses' | 'inspectors' | 'attendants' | 'details';
 
-const LEVELS = new Set<TableLevel>(['hotels', 'cleaning_types', 'stay_statuses', 'attendants', 'details']);
+const LEVELS = new Set<TableLevel>(['hotels', 'cleaning_types', 'stay_statuses', 'inspectors', 'attendants', 'details']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function clean(value: string | null, max = 200): string {
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const hotel = clean(url.searchParams.get('hotel'), 64).toUpperCase();
     const cleaningType = clean(url.searchParams.get('cleaning_type'));
     const stayStatus = clean(url.searchParams.get('stay_status'));
+    const inspector = clean(url.searchParams.get('inspector'));
     const attendant = clean(url.searchParams.get('attendant'));
     const from = clean(url.searchParams.get('from'), 10);
     const to = clean(url.searchParams.get('to'), 10);
@@ -37,11 +38,11 @@ export async function GET(req: NextRequest) {
     if (level !== 'hotels' && !hotel) {
       return NextResponse.json({ error: 'hotel is required for this level.' }, { status: 400 });
     }
-    if (['stay_statuses', 'attendants', 'details'].includes(level) && !cleaningType) {
+    if (['stay_statuses', 'inspectors', 'attendants', 'details'].includes(level) && !cleaningType) {
       return NextResponse.json({ error: 'cleaning_type is required for this level.' }, { status: 400 });
     }
-    if (['attendants', 'details'].includes(level) && !stayStatus) {
-      return NextResponse.json({ error: 'stay_status is required for this level.' }, { status: 400 });
+    if (['attendants', 'details'].includes(level) && !stayStatus && !inspector) {
+      return NextResponse.json({ error: 'stay_status or inspector is required for this level.' }, { status: 400 });
     }
     if (level === 'details' && !attendant) {
       return NextResponse.json({ error: 'attendant is required for details.' }, { status: 400 });
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
     if (hotel && hotel !== 'ALL') add(hotel, (i) => `hotel_code = $${i}`);
     if (cleaningType) add(cleaningType, (i) => `cleaning_type_key = $${i}`);
     if (stayStatus) add(stayStatus, (i) => `stay_status_key = $${i}`);
+    if (inspector) add(inspector, (i) => `inspector_key = $${i}`);
     if (attendant) add(attendant, (i) => `attendant_key = $${i}`);
     if (floorFilter && floorFilter !== 'ALL') add(floorFilter, (i) => `floor_key = $${i}`);
     if (attendantFilter && attendantFilter !== 'ALL') add(attendantFilter, (i) => `attendant_key = $${i}`);
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest) {
           COALESCE(NULLIF(BTRIM(cleaning_type), ''), NULLIF(BTRIM(task_type), ''), 'Unknown Cleaning Type') AS cleaning_type_key,
           COALESCE(NULLIF(BTRIM(stay_status), ''), 'Unknown Stay Status') AS stay_status_key,
           COALESCE(NULLIF(BTRIM(attendant), ''), 'Unknown Attendant') AS attendant_key,
+          COALESCE(NULLIF(BTRIM(supervisor), ''), 'Inspector') AS inspector_key,
           COALESCE(NULLIF(BTRIM(floor), ''), 'Unknown Floor') AS floor_key,
           COALESCE(NULLIF(BTRIM(room_type), ''), 'Unknown Room Type') AS room_type_key,
           COALESCE(created_date, completed_time, start_time) AS event_datetime,
@@ -133,6 +136,7 @@ export async function GET(req: NextRequest) {
           COUNT(*) FILTER (WHERE completed_flag)::int AS rooms_cleaned,
           COUNT(DISTINCT cleaning_type_key) FILTER (WHERE completed_flag)::int AS cleaning_types,
           COUNT(DISTINCT attendant_key) FILTER (WHERE completed_flag)::int AS attendants,
+          COUNT(DISTINCT inspector_key) FILTER (WHERE completed_flag)::int AS inspectors,
           ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits,
           ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes
         FROM base
@@ -144,6 +148,7 @@ export async function GET(req: NextRequest) {
           cleaning_type_key AS name,
           COUNT(*)::int AS cleaning_records,
           COUNT(DISTINCT attendant_key)::int AS attendants,
+          COUNT(DISTINCT inspector_key)::int AS inspectors,
           ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes,
           ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits
         FROM base
@@ -157,6 +162,7 @@ export async function GET(req: NextRequest) {
           stay_status_key AS name,
           COUNT(*)::int AS rooms,
           COUNT(DISTINCT attendant_key)::int AS attendants,
+          COUNT(DISTINCT inspector_key)::int AS inspectors,
           ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes,
           ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits,
           COUNT(*) FILTER (WHERE behind_flag)::int AS behind_target
@@ -165,12 +171,28 @@ export async function GET(req: NextRequest) {
       )
       SELECT *, ROUND(100.0 * rooms / NULLIF(SUM(rooms) OVER (), 0), 1)::float8 AS share
       FROM grouped ORDER BY rooms DESC, name ASC`;
+    } else if (level === 'inspectors') {
+      sql = `${base}, grouped AS (
+        SELECT
+          inspector_key AS name,
+          COUNT(*)::int AS rooms,
+          COUNT(DISTINCT attendant_key)::int AS attendants,
+          ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes,
+          ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS credits,
+          COUNT(*) FILTER (WHERE behind_flag)::int AS behind_target
+        FROM base
+        GROUP BY inspector_key
+      )
+      SELECT *, ROUND(100.0 * rooms / NULLIF(SUM(rooms) OVER (), 0), 1)::float8 AS share
+      FROM grouped ORDER BY rooms DESC, name ASC`;
     } else if (level === 'attendants') {
       sql = `${base}
         SELECT
           attendant_key AS name,
+          MIN(inspector_key) AS inspector,
           COUNT(*)::int AS rooms,
           COUNT(DISTINCT floor_key)::int AS floors,
+          COUNT(DISTINCT inspector_key)::int AS inspectors,
           ROUND(AVG(time_spent_minutes) FILTER (WHERE completed_flag AND ${validDuration}), 1)::float8 AS avg_time_minutes,
           ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0), 1)::float8 AS cleaning_credits,
           ROUND(COALESCE(SUM(cleaning_credit) FILTER (WHERE completed_flag), 0) / NULLIF(COUNT(*) FILTER (WHERE completed_flag), 0), 2)::float8 AS credits_per_room,
@@ -185,6 +207,7 @@ export async function GET(req: NextRequest) {
           COALESCE(NULLIF(BTRIM(room_no), ''), '—') AS room,
           floor_key AS floor,
           COALESCE(NULLIF(BTRIM(service_round), ''), '—') AS service_round,
+          inspector_key AS inspector,
           start_time,
           completed_time,
           CASE WHEN ${validDuration} THEN ROUND(time_spent_minutes, 1)::float8 END AS time_spent_minutes,

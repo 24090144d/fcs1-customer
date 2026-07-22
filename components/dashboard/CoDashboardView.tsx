@@ -4670,12 +4670,21 @@ export function CoDashboardView({
 
         <section>
           <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
-          <div className="mt-5">
+          <div className="mt-5 space-y-4">
             <CorpCoDrilldownTable
               chainCode={data.meta.chain_code ?? ''}
               hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
               hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
               rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
+              filters={filters}
+              dark={dark}
+            />
+            <CorpCoDrilldownTable
+              chainCode={data.meta.chain_code ?? ''}
+              hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
+              hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
+              rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
+              hierarchy="inspector"
               filters={filters}
               dark={dark}
             />

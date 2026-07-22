@@ -207,10 +207,10 @@ export function CorpMoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone,
-      year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    }).format(date);
+      year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(date).replace(',', '');
   };
 
   const formatDuration = (minutes: number | null) => minutes === null ? '—' : `${minutes.toFixed(1)} min`;
@@ -356,7 +356,7 @@ export function CorpMoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
                     <tbody>{(modalRows as ItemRow[]).map((row) => <tr key={row.name}><td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{row.name}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.total_jobs.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{formatQuantity(row.quantity)}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.delayed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completion_rate.toFixed(1)}%</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatAverageDuration(row.avg_duration_minutes)}</td><td className="px-3 py-2" style={tdStyle}><DrillButton name={row.name} onClick={() => drill(row.name)} /></td></tr>)}</tbody>
                   </table>
                 ) : (
-                  <table className="min-w-[1320px] w-full">
+                  <table className="min-w-[1200px] w-full">
                     <thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[t('dashboard_ui.mo_table_maintenance_order', 'Maintenance Order'), t('dashboard_ui.mo_table_created_time', 'Created Time'), t('dashboard_ui.mo_table_location', 'Location'), t('dashboard_ui.mo_table_status', 'Status'), t('dashboard_ui.mo_table_assigned_to', 'Assigned To'), t('dashboard_ui.mo_table_duration', 'Duration'), t('dashboard_ui.mo_table_delay', 'Delay'), t('dashboard_ui.mo_table_guest_name', 'Guest Name'), t('dashboard_ui.mo_table_completed_by', 'Completed By')].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}</tr></thead>
                     <tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.job_order}-${index}`}><td className="px-3 py-2 font-mono text-xs font-semibold whitespace-nowrap" style={tdStyle}>{row.job_order}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDate(row.created_datetime)}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.location}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.status}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.assigned_to}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.duration_minutes)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.delay_minutes)}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.guest_name}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.completed_by}</td></tr>)}</tbody>
                   </table>

@@ -261,10 +261,10 @@ export function CorpCoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone,
-      year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    }).format(date);
+      year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(date).replace(',', '');
   };
   const formatMinutes = (value: number | null) => value === null ? '—' : `${value.toFixed(1)} min`;
   const formatCount = (value: number) => Math.round(Number(value) || 0).toLocaleString();
@@ -333,7 +333,7 @@ export function CorpCoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
   );
 
   const DetailTable = ({ rows }: { rows: DetailRow[] }) => (
-    <table className="min-w-[1450px] w-full"><thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{headerCells([
+    <table className={`${hierarchy === 'inspector' ? 'min-w-[1160px]' : 'min-w-[1240px]'} w-full`}><thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{headerCells([
       t('dashboard_ui.co_table_room', 'Room'), t('dashboard_ui.co_table_floor', 'Floor'), ...(hierarchy === 'inspector' ? [] : [t('dashboard_ui.co_table_service_round', 'Service Round')]), t('dashboard_ui.co_table_inspector', 'Inspector'), t('dashboard_ui.co_table_start', 'Start'), t('dashboard_ui.co_table_complete', 'Complete'), t('dashboard_ui.co_table_time_spent', 'Time Spent'), t('dashboard_ui.co_table_standard', 'Standard'), t('dashboard_ui.co_table_ahead_behind', 'Ahead/Behind'), t('dashboard_ui.co_table_credit', 'Credit'), t('dashboard_ui.co_table_flags', 'Flags'),
     ])}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.cleaning_order_no}-${index}`}><td className="px-3 py-2 font-mono text-xs font-semibold whitespace-nowrap" style={tdStyle}>{row.room}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.floor}</td>{hierarchy === 'inspector' ? null : <td className="px-3 py-2 text-xs" style={tdStyle}>{row.service_round}</td>}<td className="px-3 py-2 text-xs" style={tdStyle}>{row.inspector}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDateTime(row.start_time)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDateTime(row.completed_time)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatMinutes(row.time_spent_minutes)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatMinutes(row.standard_minutes)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatVariance(row.variance_minutes)}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{formatCredit(row.credit, 2)}</td><td className="px-3 py-2" style={tdStyle}><FlagIcon flag={row.flag} /></td></tr>)}</tbody></table>
   );

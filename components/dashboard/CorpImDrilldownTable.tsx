@@ -201,10 +201,10 @@ export function CorpImDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     if (!value) return '—';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone,
-      year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
-    }).format(date);
+      year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(date).replace(',', '');
   };
 
   const thStyle = { color: tokens.dashboard.tableHeadText, borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` };
@@ -372,7 +372,7 @@ export function CorpImDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
                   </tr>)}</tbody>
                 </table>
               ) : (
-                <table className="min-w-[980px] w-full">
+                <table className="min-w-[900px] w-full">
                   <thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>
                     {[t('dashboard_ui.im_table_case_number', 'Case Number'), t('dashboard_ui.im_table_date_time', 'Date / Time'), t('dashboard_ui.im_table_room', 'Room'), t('dashboard_ui.im_table_guest', 'Guest'), t('dashboard_ui.im_table_status', 'Status'), t('dashboard_ui.im_table_severity', 'Severity'), t('dashboard_ui.im_table_complaint_source', 'Complaint Source')].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}
                   </tr></thead>

@@ -45,10 +45,9 @@ function parseFilename(fileName: string): { chainCode: string; hotelCode: string
   };
 }
 
-// Naive "DD Mon YYYY HH:mm[:ss]" CSV strings (e.g. "01 Jul 2026 10:24") carry
-// no timezone marker — they represent local wall-clock time in the org's
-// configured timezone (Configuration → System) and must be converted to a
-// true UTC instant for storage via `tz`, not the server's ambient timezone.
+// Source CSV timestamps are literal wall-clock values. parseCsvDate stores
+// their digits in a UTC-shaped ISO value so source-data queries and displays
+// can read the same digits without applying the organization timezone.
 function toIso(val: unknown, tz: string): string | null {
   const d = parseCsvDate(val, tz);
   return d ? d.toISOString() : null;

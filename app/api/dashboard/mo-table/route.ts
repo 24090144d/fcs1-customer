@@ -57,14 +57,8 @@ export async function GET(req: NextRequest) {
     if (department) add(department, (i) => `department = $${i}`);
     if (category) add(category, (i) => `category = $${i}`);
     if (item) add(item, (i) => `item = $${i}`);
-    if (from) {
-      params.push(timezone, from);
-      scopedWhere.push(`(created_datetime AT TIME ZONE $${params.length - 1})::date >= $${params.length}::date`);
-    }
-    if (to) {
-      params.push(timezone, to);
-      scopedWhere.push(`(created_datetime AT TIME ZONE $${params.length - 1})::date <= $${params.length}::date`);
-    }
+    if (from) add(from, (i) => `(created_datetime AT TIME ZONE 'UTC')::date >= $${i}::date`);
+    if (to) add(to, (i) => `(created_datetime AT TIME ZONE 'UTC')::date <= $${i}::date`);
 
     const base = `
       WITH source AS (

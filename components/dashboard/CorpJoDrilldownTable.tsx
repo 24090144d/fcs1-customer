@@ -36,6 +36,7 @@ type ItemRow = {
 type DetailRow = {
   job_order: string;
   created_datetime: string | null;
+  completed_datetime: string | null;
   location: string;
   quantity: number;
   status: string;
@@ -217,7 +218,7 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '—';
     return new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
+      timeZone: 'UTC',
       year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).format(date).replace(',', '');
   };
@@ -280,13 +281,14 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
     } else {
       headers = [
         t('dashboard_ui.jo_table_job_order', 'Job Order'), t('dashboard_ui.jo_table_created_time', 'Created Time'),
+        t('dashboard_ui.jo_table_completed_time', 'Completed Time'),
         t('dashboard_ui.jo_table_location', 'Location'), t('dashboard_ui.jo_table_qty', 'Qty'),
         t('dashboard_ui.jo_table_status', 'Status'), t('dashboard_ui.jo_table_assigned_to', 'Assigned To'),
         t('dashboard_ui.jo_table_completed_by', 'Completed By'),
         t('dashboard_ui.jo_table_duration', 'Duration'), t('dashboard_ui.jo_table_delay', 'Delay'),
         t('dashboard_ui.jo_table_guest_name', 'Guest Name'),
       ];
-      rows = (modalRows as DetailRow[]).map((row) => [row.job_order, formatDate(row.created_datetime), row.location, Math.round(Number(row.quantity) || 0), row.status, row.assigned_to, row.completed_by, formatDuration(row.duration_minutes), row.delay, row.guest_name]);
+      rows = (modalRows as DetailRow[]).map((row) => [row.job_order, formatDate(row.created_datetime), formatDate(row.completed_datetime), row.location, Math.round(Number(row.quantity) || 0), row.status, row.assigned_to, row.completed_by, formatDuration(row.duration_minutes), row.delay, row.guest_name]);
     }
     const scope = [chainCode, path?.hotel, path?.department, path?.category, path?.item, modalLevel].filter(Boolean).map((part) => csvSlug(String(part))).join('-');
     downloadCsvFile(`jo-${scope}.csv`, headers, rows);
@@ -354,7 +356,7 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
                 <button type="button" onClick={() => setModalLevel(null)} aria-label={t('dashboard_ui.jo_table_close', 'Close')} className="p-1.5 hover:opacity-70" style={{ color: tokens.textMuted }}><X size={18} /></button>
               </div>
             </div>
-            <div className="max-h-[72vh] overflow-auto">
+            <div className={`max-h-[72vh] overflow-y-auto ${modalLevel === 'details' ? 'overflow-x-hidden' : 'overflow-x-auto'}`}>
               {modalLoading ? <div className="p-10 flex items-center justify-center gap-2 font-mono text-xs" style={{ color: tokens.dashboard.tableMuted }}><LoaderCircle size={16} className="animate-spin" /> {t('dashboard_ui.jo_table_loading', 'Loading table data…')}</div>
                 : modalRows.length === 0 ? <EmptyState />
                 : modalLevel === 'departments' || modalLevel === 'categories' ? <SummaryTable rows={modalRows as SummaryRow[]} firstLabel={modalLevel === 'departments' ? t('dashboard_ui.jo_table_department', 'Department') : t('dashboard_ui.jo_table_category', 'Category')} distinctLabel={t('dashboard_ui.jo_table_service_items', 'Service Items')} />
@@ -364,9 +366,12 @@ export function CorpJoDrilldownTable({ chainCode, hotelFilter, hotelNames, rootL
                     <tbody>{(modalRows as ItemRow[]).map((row) => <tr key={row.name}><td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{row.name}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.total_jobs.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{formatQuantity(row.quantity)}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.delayed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completion_rate.toFixed(1)}%</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.avg_duration_minutes)}</td><td className="px-3 py-2" style={tdStyle}><DrillButton name={row.name} onClick={() => drill(row.name)} /></td></tr>)}</tbody>
                   </table>
                 ) : (
-                  <table className="min-w-[1280px] w-full">
-                    <thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[t('dashboard_ui.jo_table_job_order', 'Job Order'), t('dashboard_ui.jo_table_created_time', 'Created Time'), t('dashboard_ui.jo_table_location', 'Location'), t('dashboard_ui.jo_table_qty', 'Qty'), t('dashboard_ui.jo_table_status', 'Status'), t('dashboard_ui.jo_table_assigned_to', 'Assigned To'), t('dashboard_ui.jo_table_completed_by', 'Completed By'), t('dashboard_ui.jo_table_duration', 'Duration'), t('dashboard_ui.jo_table_delay', 'Delay'), t('dashboard_ui.jo_table_guest_name', 'Guest Name')].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}</tr></thead>
-                    <tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.job_order}-${index}`}><td className="px-3 py-2 font-mono text-xs font-semibold whitespace-nowrap" style={tdStyle}>{row.job_order}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDate(row.created_datetime)}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.location}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{formatQuantity(row.quantity)}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.status}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.assigned_to}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.completed_by}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.duration_minutes)}</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{row.delay}</td><td className="px-3 py-2 text-xs" style={tdStyle}>{row.guest_name}</td></tr>)}</tbody>
+                  <table className="w-full table-fixed">
+                    <colgroup>
+                      {[9, 10, 10, 9, 4, 7, 10, 10, 7, 7, 17].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}
+                    </colgroup>
+                    <thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[t('dashboard_ui.jo_table_job_order', 'Job Order'), t('dashboard_ui.jo_table_created_time', 'Created Time'), t('dashboard_ui.jo_table_completed_time', 'Completed Time'), t('dashboard_ui.jo_table_location', 'Location'), t('dashboard_ui.jo_table_qty', 'Qty'), t('dashboard_ui.jo_table_status', 'Status'), t('dashboard_ui.jo_table_assigned_to', 'Assigned To'), t('dashboard_ui.jo_table_completed_by', 'Completed By'), t('dashboard_ui.jo_table_duration', 'Duration'), t('dashboard_ui.jo_table_delay', 'Delay'), t('dashboard_ui.jo_table_guest_name', 'Guest Name')].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.48rem, 0.65vw, 0.6rem)', letterSpacing: '0.025em' }}>{label}</th>)}</tr></thead>
+                    <tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.job_order}-${index}`} style={{ fontSize: 'clamp(0.52rem, 0.72vw, 0.7rem)' }}><td className="px-1.5 py-2 font-mono font-semibold break-words" style={tdStyle}>{row.job_order}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDate(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDate(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.location}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatQuantity(row.quantity)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.assigned_to}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.completed_by}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDuration(row.duration_minutes)}</td><td className="px-1.5 py-2 font-mono leading-tight break-words" style={tdStyle}>{row.delay}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.guest_name}</td></tr>)}</tbody>
                   </table>
                 )}
             </div>

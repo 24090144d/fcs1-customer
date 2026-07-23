@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     const supabase = createAdminClient();
     const timezone = await resolveLiveTimezone(supabase, 'co_records', hotel ? [hotel] : [], chain);
-    const params: unknown[] = [chain, timezone];
+    const params: unknown[] = [chain];
     const scopedWhere: string[] = [];
     const add = (value: unknown, sql: (index: number) => string) => {
       params.push(value);
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
           COALESCE(NULLIF(BTRIM(floor), ''), 'Unknown Floor') AS floor_key,
           COALESCE(NULLIF(BTRIM(room_type), ''), 'Unknown Room Type') AS room_type_key,
           COALESCE(created_date, completed_time, start_time) AS event_datetime,
-          (COALESCE(created_date, completed_time, start_time) AT TIME ZONE $2)::date AS local_date,
+          (COALESCE(created_date, completed_time, start_time) AT TIME ZONE 'UTC')::date AS local_date,
           COALESCE(is_completed, false) OR completed_time IS NOT NULL AS completed_flag,
           (COALESCE(is_completed, false) OR completed_time IS NOT NULL) AND (
             NOT COALESCE(is_on_time, false)

@@ -15,7 +15,9 @@ import { CoDashboardView } from '@/components/dashboard/CoDashboardView';
 import { CoIrDashboardView } from '@/components/dashboard/CoIrDashboardView';
 import { CorpImDrilldownTable } from '@/components/dashboard/CorpImDrilldownTable';
 import { CorpJoDrilldownTable } from '@/components/dashboard/CorpJoDrilldownTable';
+import { JoDailyTrendDrilldownTable } from '@/components/dashboard/JoDailyTrendDrilldownTable';
 import { CorpMoDrilldownTable } from '@/components/dashboard/CorpMoDrilldownTable';
+import { ModuleDailyTrendDrilldownTable } from '@/components/dashboard/ModuleDailyTrendDrilldownTable';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashOverride, type MyDashEmbed } from '@/lib/my-dashboard-defs';
 import { formatDashboardDate, formatDashboardDateTime } from '@/lib/dashboard-date-format';
@@ -5303,19 +5305,37 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
           </section>
         )}
 
-        {!isCo && isMo && moDashConfig.tables[isCorp ? 'cmot-01' : 'mot-01'] !== false && (
+        {!isCo && isMo && (
+          moDashConfig.tables[isCorp ? 'cmot-01' : 'mot-01'] !== false
+          || moDashConfig.tables[isCorp ? 'cmot-02' : 'mot-02'] !== false
+        ) && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
-            <div className="mt-5">
-              <CorpMoDrilldownTable
-                chainCode={data.meta.chain_code}
-                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
-                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                rootLevel={isCorp ? 'hotels' : 'departments'}
-                from={filtered ? dateFrom : ''}
-                to={filtered ? dateTo : ''}
-                dark={dark}
-              />
+            <div className="mt-5 space-y-5">
+              {moDashConfig.tables[isCorp ? 'cmot-01' : 'mot-01'] !== false && (
+                <CorpMoDrilldownTable
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'departments'}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
+              {moDashConfig.tables[isCorp ? 'cmot-02' : 'mot-02'] !== false && (
+                <ModuleDailyTrendDrilldownTable
+                  module="mo"
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  maintenanceType={maintenanceType}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
             </div>
           </section>
         )}
@@ -6998,48 +7018,81 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         )}
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
-        {!isBuilder && !isJo && stdDashConfig.tables[isCorp ? 'cimt-01' : 'imt-01'] !== false && (
+        {!isBuilder && !isJo && (
+          stdDashConfig.tables[isCorp ? 'cimt-01' : 'imt-01'] !== false
+          || stdDashConfig.tables[isCorp ? 'cimt-02' : 'imt-02'] !== false
+        ) && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
-            <div className="mt-5">
-              <CorpImDrilldownTable
-                chainCode={data.meta.chain_code}
-                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
-                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                rootLevel={isCorp ? 'hotels' : 'departments'}
-                from={filtered ? dateFrom : ''}
-                to={filtered ? dateTo : ''}
-                dark={dark}
-              />
+            <div className="mt-5 space-y-5">
+              {stdDashConfig.tables[isCorp ? 'cimt-01' : 'imt-01'] !== false && (
+                <CorpImDrilldownTable
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'departments'}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
+              {stdDashConfig.tables[isCorp ? 'cimt-02' : 'imt-02'] !== false && (
+                <ModuleDailyTrendDrilldownTable
+                  module="im"
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
             </div>
           </section>
         )}
 
-        {!isBuilder && isJo && stdDashConfig.tables[isCorp ? 'cjot-01' : 'jot-01'] !== false && (
+        {!isBuilder && isJo && (
+          stdDashConfig.tables[isCorp ? 'cjot-01' : 'jot-01'] !== false
+          || stdDashConfig.tables[isCorp ? 'cjot-02' : 'jot-02'] !== false
+        ) && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
-            <div className="mt-5">
-              <CorpJoDrilldownTable
-                chainCode={data.meta.chain_code}
-                hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
-                hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                rootLevel={isCorp ? 'hotels' : 'departments'}
-                from={filtered ? dateFrom : ''}
-                to={filtered ? dateTo : ''}
-                dark={dark}
-              />
+            <div className="mt-5 space-y-5">
+              {stdDashConfig.tables[isCorp ? 'cjot-01' : 'jot-01'] !== false && (
+                <CorpJoDrilldownTable
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'departments'}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
+              {stdDashConfig.tables[isCorp ? 'cjot-02' : 'jot-02'] !== false && (
+                <JoDailyTrendDrilldownTable
+                  chainCode={data.meta.chain_code}
+                  hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
+                  hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
+                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  from={filtered ? dateFrom : ''}
+                  to={filtered ? dateTo : ''}
+                  dark={dark}
+                />
+              )}
             </div>
           </section>
         )}
 
-        {isCorp && !isJo && corpImTopCharts.length > 0 && stdDashConfig.tables['cimt-02'] !== false && (
+        {isCorp && !isJo && corpImTopCharts.length > 0 && stdDashConfig.tables['cimt-03'] !== false && (
           <section>
             <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
             <div className="mt-5">
               <CorpImPerformanceTable
                 entries={activeChainEntries}
                 dark={dark}
-                code="cimt-02"
+                code="cimt-03"
               />
             </div>
           </section>

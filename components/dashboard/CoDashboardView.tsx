@@ -9,6 +9,7 @@ import type { CoRow } from '@/types/csv';
 import { useI18n } from '@/components/layout/I18nProvider';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { CorpCoDrilldownTable } from '@/components/dashboard/CorpCoDrilldownTable';
+import { ModuleDailyTrendDrilldownTable } from '@/components/dashboard/ModuleDailyTrendDrilldownTable';
 import { formatDashboardDate, formatDashboardDateTime } from '@/lib/dashboard-date-format';
 import { getAppThemeTokens } from '@/lib/theme';
 import { loadModuleConfig, defaultModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
@@ -118,8 +119,8 @@ function parseDate(value: string): Date | null {
   return parseLocalDateKey(value);
 }
 
-// CO's created/completed date-time (post-ingestion-fix) is true UTC —
-// converted to the org's configured timezone for the local hour-of-day.
+// CO source date-times are literal uploaded wall-clock values. localHour reads
+// their stored digits without applying the configured timezone.
 function hourFromSource(source: string | null | undefined, timeZone: string): number | null {
   if (!source) return null;
   const date = new Date(source);
@@ -152,13 +153,9 @@ function bucketRowsByHour(rows: CoRow[], hourByRow: Map<CoRow, number | null>): 
   return buckets;
 }
 
-// Row date/time fields (created_date/completed_time/start_time) are stored
-// as true UTC instants (see hourFromSource above) — a bare "YYYY-MM-DD" is
-// already a calendar date and needs no conversion, but a full timestamp must
-// be converted to the org's configured timezone via localDateKey, not JS's
-// ambient local Date getters (formatLocalDateKey), or the daily trend charts
-// and date-range filter can bucket a row onto the wrong calendar day near
-// midnight in timezones ahead of UTC.
+// Row date/time fields preserve uploaded wall-clock digits. A bare date needs
+// no parsing; full timestamps use localDateKey, whose no-shift policy reads the
+// same UTC-shaped digits and keeps daily buckets aligned with the CSV.
 function toDateKey(value: string | null | undefined, timeZone: string): string {
   const text = normText(value);
   if (!text) return '';
@@ -4272,14 +4269,15 @@ export function CoDashboardView({
   const visibleKpis   = useMemo(() => applyMyDashFilter(localizedKpis,   myDash?.kpis,   (id) => dashConfig.kpis[id]   !== false), [localizedKpis,   dashConfig, myDash]);
   const visibleCharts = useMemo(() => applyMyDashFilter(localizedCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [localizedCharts, dashConfig, myDash]);
   const tableIds = isCorp
-    ? { stay: 'ccot-01', inspector: 'ccot-02', roomType: 'ccot-03' }
-    : { stay: 'cot-01', inspector: 'cot-02', roomType: 'cot-03' };
+    ? { stay: 'ccot-01', inspector: 'ccot-02', roomType: 'ccot-03', daily: 'ccot-04' }
+    : { stay: 'cot-01', inspector: 'cot-02', roomType: 'cot-03', daily: 'cot-04' };
   const visibleTables = {
     stay: dashConfig.tables[tableIds.stay] !== false,
     inspector: dashConfig.tables[tableIds.inspector] !== false,
     roomType: dashConfig.tables[tableIds.roomType] !== false,
+    daily: dashConfig.tables[tableIds.daily] !== false,
   };
-  const hasVisibleTables = visibleTables.stay || visibleTables.inspector || visibleTables.roomType;
+  const hasVisibleTables = visibleTables.stay || visibleTables.inspector || visibleTables.roomType || visibleTables.daily;
   // "Long Charts" — deep multi-level drilldowns that read better at full width, one per row.
   const simpleCharts = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => !LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
   const longCharts   = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
@@ -4704,6 +4702,17 @@ export function CoDashboardView({
               rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
               hierarchy="room-type"
               filters={filters}
+              dark={dark}
+            />}
+            {visibleTables.daily && <ModuleDailyTrendDrilldownTable
+              module="co"
+              chainCode={data.meta.chain_code ?? ''}
+              hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
+              hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
+              rootLevel={isCorp ? 'hotels' : 'dists'}
+              from={filters.dateFrom}
+              to={filters.dateTo}
+              coFilters={filters}
               dark={dark}
             />}
           </div>

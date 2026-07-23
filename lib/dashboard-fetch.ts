@@ -103,9 +103,8 @@ type JoHourSourceRow = {
 };
 
 /**
- * Recomputes every JO 24-hour-distribution map live, from raw jo_records.
- * created_datetime is true UTC (post-ingestion-fix) — converted to the org's
- * configured timezone (tz) for the local hour-of-day.
+ * Recomputes every JO 24-hour-distribution map live from raw jo_records.
+ * localHour intentionally reads the uploaded source digits without applying tz.
  */
 function computeJoHourMaps(rows: JoHourSourceRow[], tz: string): Partial<HotelSummary> {
   const hourCompleted: Record<string, number> = {};
@@ -250,8 +249,8 @@ type MoHourSourceRow = {
 };
 
 /**
- * MO's CSV source stores created date-time as local wall-clock time already
- * (not UTC) — the hour is read via getUTCHours() with no timezone conversion.
+ * MO source date-times are literal uploaded wall-clock values; localHour reads
+ * the stored digits without timezone conversion.
  */
 function computeMoHourMaps(rows: MoHourSourceRow[], tz: string): Partial<HotelSummary> {
   const hourMap: Record<string, number> = {};

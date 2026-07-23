@@ -11,6 +11,7 @@ import { useI18n } from '@/components/layout/I18nProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { localHour } from '@/lib/timezone';
 import { CoIrDrilldownTable } from '@/components/dashboard/CoIrDrilldownTable';
+import { ModuleDailyTrendDrilldownTable } from '@/components/dashboard/ModuleDailyTrendDrilldownTable';
 import { defaultModuleConfig, loadModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
 import { applyMyDashFilter, type MyDashEmbed, type MyDashOverride } from '@/lib/my-dashboard-defs';
 
@@ -888,6 +889,8 @@ export function CoIrDashboardView({ data, rows, chainEntries, myDash, myDashEmbe
   const visibleEmbedCharts = useMemo(() => applyMyDashFilter([...simpleCharts, ...longCharts], myDash?.charts, (id) => dashConfig.charts[id] !== false), [simpleCharts, longCharts, dashConfig, myDash]);
   const tableId = isCorp ? 'ccoirt-01' : 'coirt-01';
   const showTable = dashConfig.tables[tableId] !== false;
+  const dailyTableId = isCorp ? 'ccoirt-02' : 'coirt-02';
+  const showDailyTable = dashConfig.tables[dailyTableId] !== false;
   const performance = useMemo(() => {
     const key = (row: CoIrRow) => row.hotel_code ?? data.meta.hotel_code ?? 'Unknown Hotel';
     const map: Record<string, CoIrRow[]> = {};
@@ -925,7 +928,7 @@ export function CoIrDashboardView({ data, rows, chainEntries, myDash, myDashEmbe
       <section><SectionHead label="KPI" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">{visibleKpis.map((kpi) => <CoIrKpiCard key={kpi.id} kpi={kpi} dark={dark} />)}</div></section>
       <section><SectionHead label="Simple Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{visibleSimpleCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 1} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${item.id.slice(-2)}`} />)}</div></section>
       <section><SectionHead label="Long Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 gap-4">{visibleLongCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 11} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${item.id.slice(-2)}`} />)}</div></section>
-      {showTable && <section><SectionHead label="Table" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><CoIrDrilldownTable key={`${isCorp ? 'corp' : 'hotel'}:${data.meta.chain_code}:${data.meta.hotel_code}`} rows={filtered} isCorp={isCorp} hotelNames={hotelNames} dark={dark} timezone={timezone} /></section>}
+      {(showTable || showDailyTable) && <section><SectionHead label="Table" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="mt-5 space-y-4">{showTable && <CoIrDrilldownTable key={`${isCorp ? 'corp' : 'hotel'}:${data.meta.chain_code}:${data.meta.hotel_code}`} rows={filtered} isCorp={isCorp} hotelNames={hotelNames} dark={dark} timezone={timezone} />}{showDailyTable && <ModuleDailyTrendDrilldownTable module="co-ir" chainCode={data.meta.chain_code ?? ''} hotelFilter={isCorp ? 'ALL' : (data.meta.hotel_code ?? '')} hotelNames={hotelNames} rootLevel={isCorp ? 'hotels' : 'dists'} from={effectiveFrom} to={effectiveTo} dark={dark} />}</div></section>}
       <section><SectionHead label="Performance" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${tokens.card.border}`, background: tokens.card.bg }}><table className="min-w-[1250px] w-full"><thead style={{ background: tokens.dashboard.tableHeadBg }}><tr>{['Index', 'Hotel', 'Inspections', 'Rooms', 'Pass Rate', 'Failures', 'Avg Duration', 'P90 Duration', 'Avg Score', 'Score Capture', 'Credits'].map((label) => <th key={label} className="px-3 py-2 text-left font-mono text-[0.62rem] uppercase" style={{ color: tokens.dashboard.tableHeadText }}>{label}</th>)}</tr></thead><tbody>{performance.map((row, index) => <tr key={row.name}>{[String(index + 1).padStart(2, '0'), `${row.name} · ${hotelNames[row.name] ?? data.meta.hotel_name ?? row.name}`, row.inspections.toLocaleString(), row.rooms.toLocaleString(), `${row.passRate.toFixed(1)}%`, row.failures.toLocaleString(), `${row.avgDuration.toFixed(1)} min`, `${row.p90.toFixed(1)} min`, row.avgScore ? row.avgScore.toFixed(1) : '—', `${row.scoreCoverage.toFixed(1)}%`, row.credits.toFixed(1)].map((value, cell) => <td key={cell} className="px-3 py-2 text-xs" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>{value}</td>)}</tr>)}</tbody></table></div></section>
     </div>
   </div>;

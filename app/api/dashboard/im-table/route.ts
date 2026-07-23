@@ -56,14 +56,8 @@ export async function GET(req: NextRequest) {
     if (department) add(department, (i) => `COALESCE(NULLIF(BTRIM(department), ''), 'Unknown Department') = $${i}`);
     if (category) add(category, (i) => `COALESCE(NULLIF(BTRIM(incident_category), ''), 'Uncategorized') = $${i}`);
     if (incident) add(incident, (i) => `COALESCE(NULLIF(BTRIM(incident_item_name), ''), 'Unknown Incident') = $${i}`);
-    if (from) {
-      params.push(timezone, from);
-      where.push(`(COALESCE(created_date, incident_datetime) AT TIME ZONE $${params.length - 1})::date >= $${params.length}::date`);
-    }
-    if (to) {
-      params.push(timezone, to);
-      where.push(`(COALESCE(created_date, incident_datetime) AT TIME ZONE $${params.length - 1})::date <= $${params.length}::date`);
-    }
+    if (from) add(from, (i) => `(COALESCE(created_date, incident_datetime) AT TIME ZONE 'UTC')::date >= $${i}::date`);
+    if (to) add(to, (i) => `(COALESCE(created_date, incident_datetime) AT TIME ZONE 'UTC')::date <= $${i}::date`);
 
     const base = `
       WITH base AS (

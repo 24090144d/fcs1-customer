@@ -1193,7 +1193,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
         // profile/status/repeatbkt/month/day). counts/rooms/durations mirror the
         // cat-item-* structures above, just keyed by an extra "dim" level so one loop
         // can feed every chart instead of duplicating the row scan per dimension.
-        const DIM_KEYS = ['dept', 'vip', 'source', 'booking', 'severity', 'hour', 'durbkt', 'profile', 'status', 'repeatbkt', 'month', 'day', 'category'] as const;
+        const DIM_KEYS = ['dept', 'vip', 'source', 'booking', 'severity', 'hour', 'durbkt', 'profile', 'status', 'repeatbkt', 'month', 'day', 'category', 'all'] as const;
         type DimKey = typeof DIM_KEYS[number];
         const dimCounts: Record<DimKey, Record<string, Record<string, Record<string, number>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, number>>>>;
         const dimRooms: Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>> = Object.fromEntries(DIM_KEYS.map((k) => [k, {}])) as Record<DimKey, Record<string, Record<string, Record<string, Record<string, number>>>>>;
@@ -1340,6 +1340,7 @@ export async function fetchCorpDashboard(chainCode?: string, moduleCode?: string
           addDim('source', hotel, src, item, room, hours, isClosed);
           addDim('category', hotel, cat, item, room, hours, isClosed);
           addDim('booking', hotel, booking, item, room, hours, isClosed);
+          addDim('all', hotel, 'ALL', item, room, hours, isClosed);
           addDim('severity', hotel, severityLabel, item, room, hours);
           addDim('profile', hotel, profileLabel, item, room, hours);
           addDim('status', hotel, statusLabel, item, room, hours);

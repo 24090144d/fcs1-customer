@@ -53,6 +53,124 @@ function deepMerge(
   return out;
 }
 
+type DrillXAxisState = {
+  type: Highcharts.AxisTypeValue;
+  categories?: string[];
+  title?: string;
+  visible: boolean;
+};
+
+type DrillXAxisChart = Highcharts.Chart & {
+  fcsXAxisStateStack?: DrillXAxisState[];
+  fcsRootXAxisState?: DrillXAxisState;
+  fcsXAxisRestoreTimer?: ReturnType<typeof setTimeout>;
+};
+
+function captureDrillXAxisState(chart: Highcharts.Chart): DrillXAxisState | undefined {
+  const axis = chart.xAxis?.[0];
+  if (!axis) return undefined;
+  const runtimeAxis = axis as unknown as Highcharts.Axis & {
+    names?: Array<string | number>;
+    visible?: boolean;
+  };
+  const type = (axis.options.type ?? 'linear') as Highcharts.AxisTypeValue;
+  const explicitCategories = Array.isArray(axis.categories) ? axis.categories : undefined;
+  // Highcharts can keep a nominally linear axis while resolving named points
+  // through axis.names. Those names still need to be restored after a combo
+  // leaf replaces them with explicit categories.
+  const inferredCategories = Array.isArray(runtimeAxis.names) && runtimeAxis.names.length > 0
+    ? runtimeAxis.names
+    : undefined;
+  const namedSeries = chart.series.find((series) =>
+    series.visible
+    && series.points.length > 0
+    && series.points.every((point) => typeof point.name === 'string' && point.name.length > 0),
+  );
+  const pointCategories = namedSeries?.points.map((point) => point.name);
+  const categories = (explicitCategories ?? inferredCategories ?? pointCategories)
+    ?.map((label: string | number) => String(label));
+  const title = (axis as unknown as { axisTitle?: { textStr?: string } }).axisTitle?.textStr
+    ?? axis.options.title?.text;
+  return {
+    type,
+    ...(categories && categories.length > 0 ? { categories } : {}),
+    ...(title !== undefined ? { title: String(title) } : {}),
+    visible: runtimeAxis.visible ?? true,
+  };
+}
+
+function restoreDrillXAxisState(chart: DrillXAxisChart, state?: DrillXAxisState): void {
+  if (!state) return;
+  if (chart.fcsXAxisRestoreTimer) clearTimeout(chart.fcsXAxisRestoreTimer);
+  chart.fcsXAxisRestoreTimer = setTimeout(() => {
+    const axis = chart.xAxis?.[0];
+    if (!axis) return;
+    axis.update({
+      // Named-point axes may report the default "linear" type at runtime.
+      // Explicitly restore them as categories so their saved labels are used.
+      type: state.categories ? 'category' : state.type,
+      categories: state.categories ?? null,
+      visible: state.visible,
+      title: {
+        ...(axis.options.title ?? {}),
+        text: state.title,
+      },
+    } as Highcharts.XAxisOptions, false);
+    chart.redraw();
+  }, 0);
+}
+
+/**
+ * Highcharts restores series during drill-up, but it does not restore manual
+ * xAxis.update() calls made by combo-leaf handlers. Keep a per-level snapshot
+ * so category labels, axis type/title, and visibility always match the active
+ * drilldown level across every dashboard module.
+ */
+function withDrilldownXAxisRestore(options: Highcharts.Options): Highcharts.Options {
+  const chartOptions = options.chart ?? {};
+  const events = chartOptions.events ?? {};
+  const originalDrilldown = events.drilldown;
+  const originalDrillup = events.drillup;
+  const originalDrillupAll = events.drillupall;
+
+  return {
+    ...options,
+    chart: {
+      ...chartOptions,
+      events: {
+        ...events,
+        drilldown: function (this: Highcharts.Chart, event: Highcharts.DrilldownEventObject) {
+          const chart = this as DrillXAxisChart;
+          const state = captureDrillXAxisState(chart);
+          if (state) {
+            chart.fcsXAxisStateStack = [...(chart.fcsXAxisStateStack ?? []), state];
+            chart.fcsRootXAxisState ??= state;
+          }
+          return originalDrilldown?.call(this, event);
+        },
+        drillup: function (this: Highcharts.Chart, event: Highcharts.DrillupEventObject) {
+          const chart = this as DrillXAxisChart;
+          const result = originalDrillup?.call(this, event);
+          const stack = chart.fcsXAxisStateStack ?? [];
+          const previous = stack.pop() ?? chart.fcsRootXAxisState;
+          chart.fcsXAxisStateStack = stack;
+          restoreDrillXAxisState(chart, previous);
+          return result;
+        },
+        drillupall: function (this: Highcharts.Chart, event: Highcharts.DrillupAllEventObject) {
+          const chart = this as DrillXAxisChart;
+          const result = originalDrillupAll?.call(this, event);
+          const root = chart.fcsRootXAxisState;
+          chart.fcsXAxisStateStack = [];
+          restoreDrillXAxisState(chart, root);
+          chart.fcsRootXAxisState = undefined;
+          return result;
+        },
+      },
+    },
+  };
+}
+
 function applyLabelRules(raw: Highcharts.Options, textColor: string, pointPalette: string[]): Highcharts.Options {
   const opts = { ...raw };
   const series = (opts.series ?? []) as Highcharts.SeriesOptionsType[];
@@ -393,7 +511,8 @@ export function HcChart({ def, dark, overrideOptions, fullPeriod, index, codeLab
     merged.title = { ...((merged.title ?? {}) as Highcharts.TitleOptions), text: undefined };
     const withLabelRules = applyLabelRules(merged, tokens.chart.text, tokens.chart.palette);
     const forceDistinctIds = new Set(['im-06', 'im-22', 'im-26', 'im-28', 'im-29', 'im-33', 'im-37']);
-    return applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id, tokens.chart.palette);
+    const withPointColors = applyForcedDistinctPointColors(withLabelRules, forceDistinctIds, def.id, tokens.chart.palette);
+    return withDrilldownXAxisRestore(withPointColors);
   }, [theme, def.options, overrideOptions, tokens, def.id]);
 
   const constructorType = useMemo(() => {

@@ -80,6 +80,11 @@ function CoIrKpiCard({ kpi, dark }: { kpi: Kpi; dark: boolean }) {
 type Translate = (key: string, fallback?: string) => string;
 
 type CoIrPersonMetric = { name: string; credit: number; avgDuration: number; passRate: number };
+const CO_IR_LEAF_COLORS = {
+  credit: '#0F766E',
+  passRate: '#9B2335',
+  duration: '#C2410C',
+} as const;
 
 function coIrPersonDistBuckets(rows: CoIrRow[], personOf: (row: CoIrRow) => string): Array<{ name: string; total: number; people: Array<[string, CoIrRow[]]> }> {
   const people = new Map<string, CoIrRow[]>();
@@ -140,19 +145,19 @@ function coIrComboDrilldownEvents(leafData: Record<string, CoIrPersonMetric[]>, 
       };
       this.xAxis[0]?.update({ type: 'category', categories: metrics.map((metric) => metric.name), title: { text: personLabel } }, false);
       activeChart.addSingleSeriesAsDrilldown(event.point, {
-        id: `${leafId}-credit`, type: 'column', name: 'Total Credit', color: '#0F766E',
+        id: `${leafId}-credit`, type: 'column', name: 'Total Credit', color: CO_IR_LEAF_COLORS.credit,
         dataLabels: { enabled: true, format: '{point.y:.1f}' },
         data: metrics.map((metric) => ({ name: metric.name, y: metric.credit })),
       } as Highcharts.SeriesOptionsType);
       activeChart.addSingleSeriesAsDrilldown(event.point, {
-        id: `${leafId}-duration`, type: 'spline', name: 'Average Duration (min)', color: '#EA580C', yAxis: 1,
-        lineWidth: 3, marker: { enabled: true, radius: 4 }, dataLabels: { enabled: true, format: '{point.y:.1f}' },
-        data: metrics.map((metric) => ({ name: metric.name, y: metric.avgDuration })),
+        id: `${leafId}-pass`, type: 'column', name: 'Pass Rate (%)', color: CO_IR_LEAF_COLORS.passRate, yAxis: 1,
+        dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+        data: metrics.map((metric) => ({ name: metric.name, y: metric.passRate })),
       } as Highcharts.SeriesOptionsType);
       activeChart.addSingleSeriesAsDrilldown(event.point, {
-        id: `${leafId}-pass`, type: 'spline', name: 'Pass Rate (%)', color: '#2563EB', yAxis: 1,
-        lineWidth: 3, marker: { enabled: true, radius: 4 }, dataLabels: { enabled: true, format: '{point.y:.1f}%' },
-        data: metrics.map((metric) => ({ name: metric.name, y: metric.passRate })),
+        id: `${leafId}-duration`, type: 'spline', name: 'Average Duration (min)', color: CO_IR_LEAF_COLORS.duration, yAxis: 1,
+        lineWidth: 3, marker: { enabled: true, radius: 4 }, dataLabels: { enabled: true, format: '{point.y:.1f}' },
+        data: metrics.map((metric) => ({ name: metric.name, y: metric.avgDuration })),
       } as Highcharts.SeriesOptionsType);
       activeChart.applyDrilldown();
     },

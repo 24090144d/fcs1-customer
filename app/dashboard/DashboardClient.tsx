@@ -431,12 +431,56 @@ function imRankDistBuckets(entries: Array<[string, number]>): Array<{ name: stri
   return buckets;
 }
 
+type ImLeafMetric = {
+  name: string;
+  count: number;
+  repeatRate: number;
+  avgDur: number;
+  closingRate: number;
+};
+type ImLeafChart = Highcharts.Chart & {
+  addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+  applyDrilldown: () => void;
+};
+const IM_LEAF_COLORS = {
+  total: '#0F766E',
+  repeatRate: '#9B2335',
+  duration: '#C2410C',
+  closingRate: '#6B5B8A',
+} as const;
+
+function addImLeafMetricSeries(chart: ImLeafChart, point: Highcharts.Point, leafId: string | undefined, items: ImLeafMetric[]) {
+  if (!leafId) return;
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: IM_LEAF_COLORS.total,
+    dataLabels: { enabled: true, format: '{point.y:.0f}' },
+    data: items.map((item) => ({ name: item.name, y: item.count })),
+  } as Highcharts.SeriesOptionsType);
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-repeat`, type: 'column', name: 'Repeat Rate (%)', color: IM_LEAF_COLORS.repeatRate, yAxis: 1,
+    dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+    data: items.map((item) => ({ name: item.name, y: item.repeatRate })),
+  } as Highcharts.SeriesOptionsType);
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-duration`, type: 'spline', name: 'Average Duration (h)', color: IM_LEAF_COLORS.duration, yAxis: 1,
+    lineWidth: 3, marker: { enabled: true, radius: 4 },
+    dataLabels: { enabled: true, format: '{point.y:.1f}h' },
+    data: items.map((item) => ({ name: item.name, y: item.avgDur })),
+  } as Highcharts.SeriesOptionsType);
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: IM_LEAF_COLORS.closingRate, yAxis: 1,
+    lineWidth: 3, marker: { enabled: true, radius: 4 },
+    dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+    data: items.map((item) => ({ name: item.name, y: item.closingRate })),
+  } as Highcharts.SeriesOptionsType);
+}
+
 // cim-16..28: shared 4-level drilldown — Hotel → [dimension value] → Incident Dist
-// (rank-range bucket of items, via imRankDistBuckets) → Incident (leaf, 3-series
-// combo: Total Incident + Repeat Incident Rate columns, Average Duration spline on
-// a secondary axis). One generic builder feeds all 12 dimension charts, differing
+// (rank-range bucket of items, via imRankDistBuckets) → Incident (leaf, 4-series
+// combo: Total Incident + Repeat Rate columns, Average Duration + Closing Rate
+// splines on a secondary axis). One generic builder feeds all dimension charts, differing
 // only in which im_dim_item_stats_map slice they read and how Level 2 is ordered.
-// Leaf uses addSingleSeriesAsDrilldown x3 + one applyDrilldown() in a custom
+// Leaf uses addSingleSeriesAsDrilldown x4 + one applyDrilldown() in a custom
 // chart.events.drilldown handler (addSeriesAsDrilldown corrupts drilldown state on
 // the 2nd/3rd call per click) — same pattern as cim-15.
 function buildImDimIncidentDrilldown(
@@ -448,16 +492,16 @@ function buildImDimIncidentDrilldown(
   formatLabel?: (dv: string) => string,
 ): Highcharts.Options {
   const label = formatLabel ?? ((dv: string) => dv);
-  const ORANGE = '#C2410C', PURPLE = '#7C3AED', BLUE = '#0E7490', GREEN = '#0F766E', ROSE = '#BE123C';
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED';
   const idPart = (v: string) => encodeURIComponent(v);
   const level2: Highcharts.SeriesOptionsType[] = [];
   const level3: Highcharts.SeriesOptionsType[] = [];
-  const leafData: Record<string, Array<{ date: string; count: number; repeatRate: number; avgDur: number }>> = {};
+  const leafData: Record<string, ImLeafMetric[]> = {};
   const hotelTotals: Record<string, number> = {};
 
   for (const e of entries) {
     const hKey = idPart(e.hotel_code);
-    const dimMap = (e.summary.im_dim_item_stats_map?.[dimKey] ?? {}) as Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>;
+    const dimMap = (e.summary.im_dim_item_stats_map?.[dimKey] ?? {}) as Record<string, Record<string, ImDimStats>>;
     const dimCounts: Array<[string, number]> = Object.entries(dimMap)
       .map(([dv, items]): [string, number] => [dv, Object.values(items).reduce((s, v) => s + v.count, 0)])
       .filter(([, v]) => v > 0);
@@ -497,7 +541,8 @@ function buildImDimIncidentDrilldown(
             const s = itemStats[item];
             const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
             const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
-            return { date: item, count: s.count, repeatRate, avgDur };
+            const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+            return { name: item, count: s.count, repeatRate, avgDur, closingRate };
           })
           .sort((a, b) => b.count - a.count);
       }
@@ -513,26 +558,8 @@ function buildImDimIncidentDrilldown(
           const leafId = (e.point as unknown as { drilldown?: string }).drilldown;
           const items = leafId ? leafData[leafId] : undefined;
           if (!items) return;
-          const chart = this as unknown as Highcharts.Chart & {
-            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-            applyDrilldown: () => void;
-          };
-          chart.addSingleSeriesAsDrilldown(e.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.date, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(e.point, {
-            id: `${leafId}-repeat`, type: 'column', name: 'Repeat Incident Rate (%)', color: ROSE,
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.date, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(e.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.date, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
+          const chart = this as unknown as ImLeafChart;
+          addImLeafMetricSeries(chart, e.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -557,9 +584,9 @@ type ImDimStats = { count: number; repeat: number; avgDurationHours: number; clo
 
 // cim-01/02: Hotel → [dimension value] → Incident Dist (rank-range bucket via
 // imRankDistBuckets) → Incident — 4-level DONUT drilldown (levels 1-3 pie/donut).
-// The leaf is a 4-series dual-axis combo: Total Incident column on the primary
-// axis, Average Duration (h) + Repeat Rate (%) + Closing Rate (%) splines on a
-// secondary axis, via a custom chart.events.drilldown handler. Mirrors
+// The leaf is a 4-series dual-axis combo: Total Incident + Repeat Rate columns,
+// with Average Duration (h) + Closing Rate (%) splines on the secondary axis,
+// via a custom chart.events.drilldown handler. Mirrors
 // buildMoDonutDimDefectDrilldown's pie-rooted pattern, including its xAxis fix —
 // a chart that starts pure pie ignores a declared xAxis.type/categories until the
 // first cartesian series arrives via drilldown (Highcharts creates a default
@@ -642,29 +669,7 @@ function buildImDonutDimIncidentDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -757,7 +762,8 @@ function buildImHotelMetricsCombo(
 // per-hotel pie; drilling into a hotel adds a 4-series dual-axis combo directly
 // (Total Incident column + Average Duration (h)/Repeat Rate (%)/Closing Rate (%)
 // splines), one point per dimension value (department for cim-07, source of
-// complaint for cim-08), via the same custom chart.events.drilldown +
+// complaint for cim-08), with Total Incident + Repeat Rate columns and Average
+// Duration + Closing Rate splines via the same custom chart.events.drilldown +
 // addSingleSeriesAsDrilldown x4 + applyDrilldown() pattern used elsewhere.
 // drilldown.series is deliberately empty — with no registered series, every
 // point click falls through to the custom handler (there's nothing for the
@@ -817,29 +823,7 @@ function buildImHotelDimMetricsCombo(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -921,29 +905,7 @@ function buildImHotelCategoryDistDrilldown(entries: ChainEntry[], chartPrefix: s
             addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
             applyDrilldown: () => void;
           };
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -968,8 +930,8 @@ function buildImHotelCategoryDistDrilldown(entries: ChainEntry[], chartPrefix: s
 // via imRankDistBuckets) → Incident — 3-level drilldown (no outer "Hotel" level,
 // already hotel-scoped). Mirrors buildImDonutDimIncidentDrilldown one level
 // shallower and reads dimMap directly instead of per-hotel getDimMap, since
-// there's only one hotel. Same 4-series dual-axis combo leaf (Total Incident
-// column + Average Duration (h)/Repeat Rate (%)/Closing Rate (%) splines) and
+// there's only one hotel. Same 4-series dual-axis combo leaf (Total Incident +
+// Repeat Rate columns, Average Duration + Closing Rate splines) and
 // pie/column xAxis fix as the corp version.
 function buildImHotelScopedDimIncidentDrilldown(
   dimMap: Record<string, Record<string, ImDimStats>>,
@@ -1044,29 +1006,7 @@ function buildImHotelScopedDimIncidentDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1166,29 +1106,7 @@ function buildImHotelDeptDistIncidentDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1261,29 +1179,7 @@ function buildImHotelDistLeafDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1364,29 +1260,7 @@ function buildImHotelGuestDistIncidentDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1484,29 +1358,7 @@ function buildImHotelRepeatRateDistDrilldown(
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1533,8 +1385,8 @@ function buildImHotelRepeatRateDistDrilldown(
 // (rank-range bucket of departments within that month, via imRankDistBuckets) →
 // Department — 3-level vertical-bar drilldown. Leaf is per-department (no
 // per-item breakdown — im_month_dept_stats_map has no item level, unlike
-// im_dim_item_stats_map), 4-series dual-axis combo (Total Incident column +
-// Average Duration (h)/Repeat Rate (%)/Closing Rate (%) splines).
+// im_dim_item_stats_map), 4-series dual-axis combo (Total Incident + Repeat Rate
+// columns, Average Duration + Closing Rate splines).
 function buildImHotelMonthDeptDistDrilldown(
   monthDeptMap: Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number; closed: number }>>,
   chartPrefix: string,
@@ -1594,29 +1446,7 @@ function buildImHotelMonthDeptDistDrilldown(
             addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
             applyDrilldown: () => void;
           };
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart as unknown as ImLeafChart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1850,11 +1680,46 @@ function buildJoDelayRateDistDrilldown(entries: ChainEntry[], chartPrefix: strin
 }
 
 type MoDefectStats = { count: number; avgDurationHours: number; delayRate: number };
+type MoLeafMetric = { name: string; count: number; durationHours: number; delayRate: number };
+type MoLeafChart = Highcharts.Chart & {
+  addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+  applyDrilldown: () => void;
+};
+const MO_LEAF_COLORS = {
+  total: '#0F766E',
+  delayRate: '#9B2335',
+  completionDuration: '#B45309',
+} as const;
+
+function addMoLeafMetricSeries(
+  chart: MoLeafChart,
+  point: Highcharts.Point,
+  leafId: string | undefined,
+  items: MoLeafMetric[],
+) {
+  if (!leafId) return;
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-order`, type: 'column', name: 'Total Order', color: MO_LEAF_COLORS.total,
+    dataLabels: { enabled: true, format: '{point.y:.0f}' },
+    data: items.map((item) => ({ name: item.name, y: item.count })),
+  } as Highcharts.SeriesOptionsType);
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-delay`, type: 'column', name: 'Delay Rate (%)', color: MO_LEAF_COLORS.delayRate, yAxis: 1,
+    dataLabels: { enabled: true, format: '{point.y:.1f}%' },
+    data: items.map((item) => ({ name: item.name, y: item.delayRate })),
+  } as Highcharts.SeriesOptionsType);
+  chart.addSingleSeriesAsDrilldown(point, {
+    id: `${leafId}-dur`, type: 'spline', name: 'Completed Duration (h)', color: MO_LEAF_COLORS.completionDuration, yAxis: 1,
+    lineWidth: 3, marker: { enabled: true, radius: 4 },
+    dataLabels: { enabled: true, format: '{point.y:.1f}h' },
+    data: items.map((item) => ({ name: item.name, y: item.durationHours })),
+  } as Highcharts.SeriesOptionsType);
+}
 
 // cmo-14..22: shared 4-level drilldown — Hotel → [dimension value] → Defect Dist
 // (rank-range bucket of defects, via imRankDistBuckets) → Defect (leaf, 3-series
-// dual-axis combo: Total Order column on the primary axis, Completed Duration (h) +
-// Delay Rate (%) splines on the secondary axis). Mirrors buildJoDimItemDrilldown;
+// dual-axis combo: Total Order + Delay Rate columns, with Completed Duration (h)
+// as a spline on the secondary axis). Mirrors buildJoDimItemDrilldown;
 // differs only in series count/shape at the leaf and in reading mo_dim_defect_stats_map.
 function buildMoDimDefectDrilldown(
   entries: ChainEntry[],
@@ -1930,10 +1795,9 @@ function buildMoLeafChart(
   hotelTotals: Record<string, number>,
   level2: Highcharts.SeriesOptionsType[],
   level3: Highcharts.SeriesOptionsType[],
-  leafData: Record<string, Array<{ name: string; count: number; durationHours: number; delayRate: number }>>,
+  leafData: Record<string, MoLeafMetric[]>,
   extraDrilldownSeries: Highcharts.SeriesOptionsType[] = [],
 ): Highcharts.Options {
-  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C';
   const idPart = (v: string) => encodeURIComponent(v);
   return {
     chart: {
@@ -1944,27 +1808,8 @@ function buildMoLeafChart(
           const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
           const items = leafId ? leafData[leafId] : undefined;
           if (!items) return;
-          const chart = this as unknown as Highcharts.Chart & {
-            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-            applyDrilldown: () => void;
-          };
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Completed Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.durationHours })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-delay`, type: 'spline', name: 'Delay Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.delayRate })),
-          } as Highcharts.SeriesOptionsType);
+          const chart = this as unknown as MoLeafChart;
+          addMoLeafMetricSeries(chart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -1987,7 +1832,7 @@ function buildMoLeafChart(
 
 // cmo-01: Hotel → Department → Defect Dist → Defect (4-level donut drilldown). Levels
 // 1-3 are pie/donut; the leaf switches to the shared 3-series cartesian combo (Total
-// Order column, Completed Duration + Delay Rate splines on a secondary axis) via a
+// Order + Delay Rate columns, Completed Duration spline on a secondary axis) via a
 // custom chart.events.drilldown handler, mirroring cjo-01's pie-rooted pattern —
 // including its xAxis fix: a chart that starts pure pie (no cartesian axis at init)
 // silently ignores a declared xAxis.type/categories until the first cartesian series
@@ -2000,7 +1845,6 @@ function buildMoDonutDimDefectDrilldown(
   chartPrefix: string,
   getDimMap: (e: ChainEntry) => Record<string, Record<string, MoDefectStats>>,
 ): Highcharts.Options {
-  const GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C';
   const idPart = (v: string) => encodeURIComponent(v);
   const level2: Highcharts.SeriesOptionsType[] = [];
   const level3: Highcharts.SeriesOptionsType[] = [];
@@ -2050,30 +1894,11 @@ function buildMoDonutDimDefectDrilldown(
           const leafId = (ev.point as unknown as { drilldown?: string }).drilldown;
           const items = leafId ? leafData[leafId] : undefined;
           if (!items) return;
-          const chart = this as unknown as Highcharts.Chart & {
-            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-            applyDrilldown: () => void;
-          };
+          const chart = this as unknown as MoLeafChart;
           if (chart.xAxis[0]) {
             chart.xAxis[0].update({ type: 'category', categories: items.map((i) => i.name) }, false);
           }
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-order`, type: 'column', name: 'Total Order', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-dur`, type: 'spline', name: 'Completed Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((i) => ({ name: i.name, y: i.durationHours })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(ev.point, {
-            id: `${leafId}-delay`, type: 'spline', name: 'Delay Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((i) => ({ name: i.name, y: i.delayRate })),
-          } as Highcharts.SeriesOptionsType);
+          addMoLeafMetricSeries(chart, ev.point, leafId, items);
           chart.applyDrilldown();
         },
       },
@@ -2683,24 +2508,24 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     // lists the actual categories that fell into the selected Category Dist
     // range, so Incident Dist (and the leaf) are scoped to ONE category
     // instead of pooling items across every category in the range. Leaf =
-    // 3-series combo per incident item: Total Incident + Repeat Incident Rate
-    // columns, Average Duration spline (secondary axis) — registered via
-    // addSingleSeriesAsDrilldown x3 + one applyDrilldown() in a custom
+    // 4-series combo per incident item: Total Incident + Repeat Rate columns,
+    // Average Duration + Closing Rate splines (secondary axis) — registered via
+    // addSingleSeriesAsDrilldown x4 + one applyDrilldown() in a custom
     // chart.events.drilldown handler (addSeriesAsDrilldown corrupts drilldown
     // state on the 2nd/3rd call per click). Not wrapped in
     // withDrilldownXAxisTitles: that helper's own chart.events.drilldown
     // would silently overwrite this custom handler.
-    const ORANGE = '#C2410C', AMBER = '#B45309', PURPLE = '#7C3AED', BLUE = '#0E7490', GREEN = '#0F766E', ROSE = '#BE123C';
+    const ORANGE = '#C2410C', AMBER = '#B45309', PURPLE = '#7C3AED';
     const cim15IdPart = (value: string) => encodeURIComponent(value);
     const level2: Highcharts.SeriesOptionsType[] = [];
     const level3: Highcharts.SeriesOptionsType[] = [];
     const level4: Highcharts.SeriesOptionsType[] = [];
-    const leafData: Record<string, Array<{ date: string; count: number; repeatRate: number; avgDur: number }>> = {};
+    const leafData: Record<string, ImLeafMetric[]> = {};
     const hotelTotals: Record<string, number> = {};
 
     for (const e of entries) {
       const hKey = cim15IdPart(e.hotel_code);
-      const statsMap = (e.summary.im_cat_item_stats_map ?? {}) as Record<string, Record<string, { count: number; repeat: number; avgDurationHours: number }>>;
+      const statsMap = (e.summary.im_dim_item_stats_map?.category ?? {}) as Record<string, Record<string, ImDimStats>>;
       const catCounts: Array<[string, number]> = Object.entries(statsMap)
         .map(([cat, items]): [string, number] => [cat, Object.values(items).reduce((s, v) => s + v.count, 0)])
         .filter(([, v]) => v > 0);
@@ -2741,7 +2566,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
                 const s = itemStats[item];
                 const repeatRate = s.count > 0 ? Number(((s.repeat / s.count) * 100).toFixed(1)) : 0;
                 const avgDur = s.avgDurationHours > 0 ? Number(s.avgDurationHours.toFixed(1)) : 0;
-                return { date: item, count: s.count, repeatRate, avgDur };
+                const closingRate = s.count > 0 ? Number(((s.closed / s.count) * 100).toFixed(1)) : 0;
+                return { name: item, count: s.count, repeatRate, avgDur, closingRate };
               })
               .sort((a, b) => b.count - a.count);
           }
@@ -2758,26 +2584,8 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
             const leafId = (e.point as unknown as { drilldown?: string }).drilldown;
             const items = leafId ? leafData[leafId] : undefined;
             if (!items) return;
-            const chart = this as unknown as Highcharts.Chart & {
-              addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-              applyDrilldown: () => void;
-            };
-            chart.addSingleSeriesAsDrilldown(e.point, {
-              id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-              dataLabels: { enabled: true, format: '{point.y}' },
-              data: items.map((i) => ({ name: i.date, y: i.count })),
-            } as Highcharts.SeriesOptionsType);
-            chart.addSingleSeriesAsDrilldown(e.point, {
-              id: `${leafId}-repeat`, type: 'column', name: 'Repeat Incident Rate (%)', color: ROSE,
-              dataLabels: { enabled: true, format: '{point.y}%' },
-              data: items.map((i) => ({ name: i.date, y: i.repeatRate })),
-            } as Highcharts.SeriesOptionsType);
-            chart.addSingleSeriesAsDrilldown(e.point, {
-              id: `${leafId}-dur`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-              lineWidth: 3, marker: { enabled: true, radius: 4 },
-              dataLabels: { enabled: true, format: '{point.y}' },
-              data: items.map((i) => ({ name: i.date, y: i.avgDur })),
-            } as Highcharts.SeriesOptionsType);
+            const chart = this as unknown as ImLeafChart;
+            addImLeafMetricSeries(chart, e.point, leafId, items);
             chart.applyDrilldown();
           },
         },
@@ -2785,7 +2593,7 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
       xAxis: { type: 'category', title: { text: 'Hotel' } },
       yAxis: [
         { min: 0, title: { text: 'Incidents' } },
-        { title: { text: 'Average Duration (h)' }, opposite: true },
+        { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
       ],
       series: [{
         type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
@@ -7378,7 +7186,7 @@ function buildCorpImRepeatRateDistDrilldown(
   entries: ChainEntry[],
   chartPrefix: string,
 ): Highcharts.Options {
-  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED';
   const idPart = (value: string) => encodeURIComponent(value);
   const RATE_BUCKETS = ['0%', '1-10%', '11-25%', '26-50%', '51-75%', '76-100%'];
   const bucketLabel = (rate: number): string => {
@@ -7391,7 +7199,7 @@ function buildCorpImRepeatRateDistDrilldown(
   };
   const level2: Highcharts.SeriesOptionsType[] = [];
   const level3: Highcharts.SeriesOptionsType[] = [];
-  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+  const leafData: Record<string, ImLeafMetric[]> = {};
   const hotelTotals: Record<string, number> = {};
 
   for (const entry of entries) {
@@ -7465,34 +7273,9 @@ function buildCorpImRepeatRateDistDrilldown(
           const leafId = (event.point as unknown as { drilldown?: string }).drilldown;
           const items = leafId ? leafData[leafId] : undefined;
           if (!items) return;
-          const chart = this as unknown as Highcharts.Chart & {
-            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
-            applyDrilldown: () => void;
-          };
+          const chart = this as unknown as ImLeafChart;
           if (chart.xAxis[0]) chart.xAxis[0].update({ type: 'category', categories: items.map((item) => item.name) }, false);
-          chart.addSingleSeriesAsDrilldown(event.point, {
-            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((item) => ({ name: item.name, y: item.count })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(event.point, {
-            id: `${leafId}-duration`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}' },
-            data: items.map((item) => ({ name: item.name, y: item.avgDur })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(event.point, {
-            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((item) => ({ name: item.name, y: item.repeatRate })),
-          } as Highcharts.SeriesOptionsType);
-          chart.addSingleSeriesAsDrilldown(event.point, {
-            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
-            lineWidth: 3, marker: { enabled: true, radius: 4 },
-            dataLabels: { enabled: true, format: '{point.y}%' },
-            data: items.map((item) => ({ name: item.name, y: item.closingRate })),
-          } as Highcharts.SeriesOptionsType);
+          addImLeafMetricSeries(chart, event.point, leafId, items);
           chart.applyDrilldown();
         },
       },

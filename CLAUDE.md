@@ -12,7 +12,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.1.27** (as of 2026-07-23) |
+| Version | **v1.1.28** (as of 2026-07-23) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` (`npm run dev`) |
@@ -354,6 +354,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.28** | 2026-07-23 | Standardized CO-IR, IM, and MO terminal drilldown combinations across corp and hotel renderers. CO-IR now uses Total Credit and Pass Rate columns with an Average Duration spline; IM uses Total Incident and Repeat Rate columns with Average Duration and Closing Rate splines; MO uses Total Order and Delay Rate columns with a Completed Duration spline. Shared metric-leaf helpers enforce consistent deep-teal, brick-red, burnt/amber-orange, and muted-purple series colors plus visible unit-aware data labels. |
 | **v1.1.27** | 2026-07-23 | Fixed Corp IM `cim-21` no-data rendering by adding the missing live `all/ALL` incident-item aggregate. Added renderer-level Highcharts drilldown x-axis state snapshots and restoration, preserving labels, type, title, and visibility across JO/MO/CO/CO-IR/IM when returning from multi-series combo leaves. |
 | **v1.1.26** | 2026-07-23 | Refreshed Configuration and My Dashboard registries for JO/MO/CO-ACSR/CO-IR/IM, added independent KPI/chart/table visibility controls, improved reset-by-hotel labels, restored Corp IM `cim-21`, and assigned Hotel Performance Benchmark to `cimt-02`. |
 | **v1.1.25** | 2026-07-22 | Redesigned Corp and Hotel CO-IR charts as date-first multi-level drilldowns with dynamic inspector/cleaner rank ranges and three-series performance leaves (total credit, average duration, pass rate); added Hotel COIR-11 and COIR-12 to the one-per-row Long Charts section for Room Status and Inspection Status analysis. |

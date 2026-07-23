@@ -10,19 +10,26 @@ export interface ConfigItem {
   labelPath: string;
   notePath: string;
   formulaPath?: string;
+  label?: string;
+  note?: string;
+  formula?: string;
+  scope?: 'hotel' | 'corp' | 'both';
 }
 
 export interface ModuleDef {
   kpis: ConfigItem[];
   charts: ConfigItem[];
+  tables: ConfigItem[];
 }
 
 export interface ModuleConfig {
   kpis: Record<string, boolean>;
   charts: Record<string, boolean>;
+  tables: Record<string, boolean>;
 }
 
 export type ModuleConfigKey = 'jo' | 'mo' | 'co' | 'im';
+export type DashboardConfigKey = ModuleConfigKey | 'co-ir';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,7 +61,18 @@ function items(
 // Module definitions
 // ---------------------------------------------------------------------------
 
-export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
+const table = (id: string, label: string, note: string, scope: 'hotel' | 'corp'): ConfigItem => ({
+  id,
+  labelPath: `configuration_tables.${id}.label`,
+  notePath: `configuration_tables.${id}.note`,
+  formulaPath: `configuration_tables.${id}.value`,
+  label,
+  note,
+  formula: 'Live drilldown table with CSV export at every level.',
+  scope,
+});
+
+export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
   // ── Job Order ──────────────────────────────────────────────────────────
   jo: {
     kpis: items(seq('kpi_', 1, 10), 'kpi_labels_jo', 'kpi_notes_jo'),
@@ -65,6 +83,10 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(seq('jo-', 5, 28), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
       // Corp-level charts — actual dashboard IDs cjo-01..cjo-28
       ...items(seq('cjo-', 1, 30), 'chart_titles_jo', 'chart_notes_jo', 'chart_bv_jo'),
+    ],
+    tables: [
+      table('jot-01', 'Hotel JO Drilldown Table', 'Department → Category → Service Item → Detail', 'hotel'),
+      table('cjot-01', 'Corp JO Drilldown Table', 'Hotel → Department → Category → Service Item → Detail', 'corp'),
     ],
   },
 
@@ -90,6 +112,10 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       // Corp MO charts — actual dashboard IDs cmo-01..cmo-22
       ...items(seq('cmo-', 1, 22), 'chart_titles_mo', 'chart_notes_mo', 'chart_bv_mo'),
     ],
+    tables: [
+      table('mot-01', 'Hotel MO Drilldown Table', 'Department → Category → Defect → Detail', 'hotel'),
+      table('cmot-01', 'Corp MO Drilldown Table', 'Hotel → Department → Category → Defect → Detail', 'corp'),
+    ],
   },
 
   // ── Cleaning Order ──────────────────────────────────────────────────────
@@ -108,6 +134,57 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       ...items(seq('co-', 1, 42), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
       // Corp-level charts  cco-01 … cco-46
       ...items(seq('cco-', 1, 46), 'chart_titles_co', 'chart_notes_co', 'chart_bv_co'),
+    ],
+    tables: [
+      table('cot-01', 'Hotel Stay Status Table', 'Date → Cleaning Type → Stay Status → Attendant → Detail', 'hotel'),
+      table('cot-02', 'Hotel Inspector Table', 'Date → Cleaning Type → Inspector → Attendant → Detail', 'hotel'),
+      table('cot-03', 'Hotel Room Type Table', 'Date → Cleaning Type → Room Type → Attendant → Detail', 'hotel'),
+      table('ccot-01', 'Corp Stay Status Table', 'Date → Hotel → Cleaning Type → Stay Status → Attendant → Detail', 'corp'),
+      table('ccot-02', 'Corp Inspector Table', 'Date → Hotel → Cleaning Type → Inspector → Attendant → Detail', 'corp'),
+      table('ccot-03', 'Corp Room Type Table', 'Date → Hotel → Cleaning Type → Room Type → Attendant → Detail', 'corp'),
+    ],
+  },
+
+  // ── Cleaning Inspection Report ─────────────────────────────────────────
+  'co-ir': {
+    kpis: [
+      ['Total Inspections', 'COUNT(*)'],
+      ['Rooms Inspected', 'COUNT(DISTINCT location)'],
+      ['Pass Rate', 'Pass inspections / total inspections × 100'],
+      ['Failed Inspections', "COUNT(*) WHERE inspection_result = 'Fail'"],
+      ['Average Duration', 'AVG(complete_time - start_time; fallback turn_over_minutes)'],
+      ['Median Duration', 'P50(inspection_duration_minutes)'],
+      ['P90 Duration', 'P90(inspection_duration_minutes)'],
+      ['Average Inspection Score', 'AVG(inspection_score) WHERE score IS NOT NULL'],
+      ['Score Capture Rate', 'Scored inspections / total inspections × 100'],
+      ['Inspections per Inspector', 'Total inspections / COUNT(DISTINCT inspector)'],
+    ].map(([label, formula], index) => ({
+      id: `coir-kpi-${String(index + 1).padStart(2, '0')}`,
+      labelPath: `co_ir.kpi_${String(index + 1).padStart(2, '0')}`,
+      notePath: `co_ir.config_kpi_note_${String(index + 1).padStart(2, '0')}`,
+      label,
+      note: 'Current CO-IR inspection KPI used by both Hotel and Corp dashboards.',
+      formula,
+      scope: 'both' as const,
+    })),
+    charts: [
+      'Room Status → Inspector', 'Inspection Status → Inspector', 'Room Status → Cleaned By',
+      'Inspection Status → Cleaned By', 'Score Dist → Inspector', 'Pass Rate Dist → Inspector',
+      '24 Hour Dist → Inspector', 'Duration Dist → Inspector', 'Location Dist → Inspector',
+      'Cleaned By → Inspector', 'Room Status → Inspector', 'Inspection Status → Inspector',
+    ].map((label, index) => ({
+      id: `coir-${String(index + 1).padStart(2, '0')}`,
+      labelPath: `co_ir.config_chart_${String(index + 1).padStart(2, '0')}`,
+      notePath: `co_ir.config_chart_note_${String(index + 1).padStart(2, '0')}`,
+      formulaPath: `co_ir.config_chart_value_${String(index + 1).padStart(2, '0')}`,
+      label,
+      note: index < 10 ? 'Date-first multi-level performance drilldown.' : 'Full-width long-chart drilldown.',
+      formula: 'Final level compares Total Credit, Average Duration, and Pass Rate.',
+      scope: 'both' as const,
+    })),
+    tables: [
+      table('coirt-01', 'Inspector Table for Hotel', 'Date → Room Status → Inspector → Detail', 'hotel'),
+      table('ccoirt-01', 'Inspector Table for Corp', 'Date → Hotel → Room Status → Inspector → Detail', 'corp'),
     ],
   },
 
@@ -134,16 +211,18 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
       })),
     ],
     charts: [
-      // EAC charts — actual dashboard IDs im-40..im-45
-      ...items(['im-40', 'im-41', 'im-42', 'im-43', 'im-44', 'im-45'], 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
-      // Basic hotel IM charts — actual dashboard IDs im-46..im-69
-      ...items(seq('im-', 46, 69), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
-      // im-scope-builder charts — actual dashboard IDs im-01..im-39
-      ...items(seq('im-', 1, 39), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
-      // Corp IM charts — actual dashboard IDs cim-01..cim-20
-      ...items(seq('cim-', 1, 20), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
-      // Corp IM Long Charts — actual dashboard IDs cim-22..cim-28 (cim-21 does not exist)
-      ...items(['cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26', 'cim-27', 'cim-28'], 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // Current Hotel IM charts — actual dashboard IDs im-01..im-28
+      ...items(seq('im-', 1, 28), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+      // Corp IM charts — actual dashboard IDs cim-01..cim-28.
+      ...items(seq('cim-', 1, 28), 'chart_titles_im', 'chart_notes_im', 'chart_bv_im'),
+    ],
+    tables: [
+      table('imt-01', 'Hotel IM Drilldown Table', 'Department → Category → Incident → Detail', 'hotel'),
+      table('cimt-01', 'Corp IM Drilldown Table', 'Hotel → Department → Category → Incident → Detail', 'corp'),
+      {
+        ...table('cimt-02', 'Hotel Performance Benchmark', 'Executive hotel-level IM performance and risk ranking table', 'corp'),
+        formula: 'Risk Rank = critical % × 1.2 + VIP % × 0.7 + pending % × 0.8 + SLA breach % + repeat % × 0.6 + severity factor + volume factor',
+      },
     ],
   },
 };
@@ -152,19 +231,20 @@ export const MODULE_DEFS: Record<ModuleConfigKey, ModuleDef> = {
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
-export function getStorageKey(mod: ModuleConfigKey): string {
+export function getStorageKey(mod: DashboardConfigKey): string {
   return `fcs1_dash_config_${mod}`;
 }
 
-export function defaultModuleConfig(mod: ModuleConfigKey): ModuleConfig {
+export function defaultModuleConfig(mod: DashboardConfigKey): ModuleConfig {
   const def = MODULE_DEFS[mod];
   return {
     kpis: Object.fromEntries(def.kpis.map((k) => [k.id, true])),
     charts: Object.fromEntries(def.charts.map((c) => [c.id, true])),
+    tables: Object.fromEntries(def.tables.map((tableItem) => [tableItem.id, true])),
   };
 }
 
-export function loadModuleConfig(mod: ModuleConfigKey): ModuleConfig {
+export function loadModuleConfig(mod: DashboardConfigKey): ModuleConfig {
   const defaults = defaultModuleConfig(mod);
   try {
     const raw = localStorage.getItem(getStorageKey(mod));
@@ -173,13 +253,14 @@ export function loadModuleConfig(mod: ModuleConfigKey): ModuleConfig {
     return {
       kpis: { ...defaults.kpis, ...(parsed.kpis ?? {}) },
       charts: { ...defaults.charts, ...(parsed.charts ?? {}) },
+      tables: { ...defaults.tables, ...(parsed.tables ?? {}) },
     };
   } catch {
     return defaults;
   }
 }
 
-export function persistModuleConfig(mod: ModuleConfigKey, config: ModuleConfig): void {
+export function persistModuleConfig(mod: DashboardConfigKey, config: ModuleConfig): void {
   try {
     const key = getStorageKey(mod);
     localStorage.setItem(key, JSON.stringify(config));

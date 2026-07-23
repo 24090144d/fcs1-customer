@@ -1,14 +1,14 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardHeaderActions } from '@/components/layout/DashboardHeaderActions';
-import { fetchDashboard, fetchCorpDashboard, fetchChainEntries, fetchCoRows } from '@/lib/dashboard-fetch';
+import { fetchDashboard, fetchCorpDashboard, fetchChainEntries, fetchCoIrRows, fetchCoRows } from '@/lib/dashboard-fetch';
 import type { DashboardJson, ChainEntry } from '@/types/dashboard';
-import type { CoRow } from '@/types/csv';
+import type { CoIrRow, CoRow } from '@/types/csv';
 import { MyDashboardClient, type MyDashModuleData } from './MyDashboardClient';
 
 export const dynamic = 'force-dynamic';
 export const generateStaticParams = async () => [];
 
-const MODULES = ['jo', 'mo', 'co', 'im'] as const;
+const MODULES = ['jo', 'mo', 'co', 'co-ir', 'im'] as const;
 
 export default async function MyDashboardPage({
   searchParams,
@@ -28,7 +28,8 @@ export default async function MyDashboardPage({
       for (const mod of MODULES) {
         const { data, chainEntries } = await fetchCorpDashboard(chain, mod);
         const coRows: CoRow[] = mod === 'co' && data ? await fetchCoRows('CORP', chain) : [];
-        modules[mod] = { data, chainEntries, coRows };
+        const coIrRows: CoIrRow[] = mod === 'co-ir' ? await fetchCoIrRows('CORP', chain) : [];
+        modules[mod] = { data, chainEntries, coRows, coIrRows };
       }
     } else {
       // Hotel scope — derive the chain's hotel list, then fetch each module
@@ -69,7 +70,8 @@ export default async function MyDashboardPage({
         // CO is not hotel-scoped on My Hotel — CO uploads use their own
         // sub-property codes (e.g. WMET/WMWT), so always use the chain's rows.
         const coRows: CoRow[] = mod === 'co' ? await fetchCoRows('CORP', chain) : [];
-        modules[mod] = { data, chainEntries: entriesByModule[mod] ?? [], coRows };
+        const coIrRows: CoIrRow[] = mod === 'co-ir' && hotel ? await fetchCoIrRows(hotel, chain) : [];
+        modules[mod] = { data, chainEntries: entriesByModule[mod] ?? [], coRows, coIrRows };
       }
     }
   }

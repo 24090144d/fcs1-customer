@@ -2,7 +2,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // My Dashboard renderer — composes the user-selected KPIs and charts from the
-// JO/MO/CO/IM dashboards (Configuration → My Dashboard) into one page.
+// JO/MO/CO-ACSR/CO-IR/IM dashboards (Configuration → My Dashboard) into one page.
 //
 // My Hotel: one shared date-range bar (with quick patterns) drives all
 // modules; all selected KPIs render in a single pooled grid, all selected
@@ -20,8 +20,7 @@ import { DashboardClient } from '@/app/dashboard/DashboardClient';
 import { useTheme } from '@/components/layout/ThemeProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import type { DashboardJson, ChainEntry } from '@/types/dashboard';
-import type { CoRow } from '@/types/csv';
-import type { ModuleConfigKey } from '@/lib/dash-config-defs';
+import type { CoIrRow, CoRow } from '@/types/csv';
 import {
   type MyDashScope,
   type MyDashboardConfig,
@@ -29,19 +28,22 @@ import {
   groupByModule,
   parseItemKey,
   MYDASH_MODULES,
+  MYDASH_MODULE_LABELS,
+  type MyDashModuleKey,
 } from '@/lib/my-dashboard-defs';
 
 export interface MyDashModuleData {
   data: DashboardJson | null;
   chainEntries: ChainEntry[];
   coRows: CoRow[];
+  coIrRows: CoIrRow[];
 }
 
 const QUICK_RANGES = ['RESET', '1D', '1W', '2W', '1M', '2M', '3M', '6M', '1Y'] as const;
 
 /** Modules in the order they first appear in the user's selection list. */
-function moduleOrder(list: string[]): ModuleConfigKey[] {
-  const seen: ModuleConfigKey[] = [];
+function moduleOrder(list: string[]): MyDashModuleKey[] {
+  const seen: MyDashModuleKey[] = [];
   for (const key of list) {
     const p = parseItemKey(key);
     if (p && !seen.includes(p.mod)) seen.push(p.mod);
@@ -181,7 +183,7 @@ export function MyDashboardClient({
   // Sections to render: configured modules, that have at least one selected item.
   const sections = MYDASH_MODULES
     .map((mod) => ({ mod, override: overrides[mod], payload: modules[mod] }))
-    .filter((s): s is { mod: ModuleConfigKey; override: NonNullable<typeof s.override>; payload: MyDashModuleData } =>
+    .filter((s): s is { mod: MyDashModuleKey; override: NonNullable<typeof s.override>; payload: MyDashModuleData } =>
       Boolean(s.override && (s.override.kpis.length > 0 || s.override.charts.length > 0)));
 
   const configured = cfg !== null && (cfg.kpis.length > 0 || cfg.charts.length > 0) && cfg.chain.trim() !== '';
@@ -189,8 +191,12 @@ export function MyDashboardClient({
 
   // Pooled grids (hotel scope): modules ordered by first occurrence in the
   // user's selection lists; modules without data are skipped.
-  const hasModuleData = (mod: ModuleConfigKey) =>
-    mod === 'co' ? (modules[mod]?.coRows?.length ?? 0) > 0 : Boolean(modules[mod]?.data);
+  const hasModuleData = (mod: MyDashModuleKey) =>
+    mod === 'co'
+      ? (modules[mod]?.coRows?.length ?? 0) > 0
+      : mod === 'co-ir'
+        ? (modules[mod]?.coIrRows?.length ?? 0) > 0
+        : Boolean(modules[mod]?.data);
 
   const kpiModules = cfg
     ? moduleOrder(cfg.kpis).filter((mod) => overrides[mod] && hasModuleData(mod))
@@ -211,8 +217,8 @@ export function MyDashboardClient({
           </h1>
           <p className="mt-1 font-mono" style={{ color: muted, fontSize: '0.68rem', letterSpacing: '0.05em' }}>
             {scope === 'hotel'
-              ? 'Custom hotel dashboard — selected KPIs and charts from JO / MO / CO / IM.'
-              : 'Custom corp dashboard — selected chain-level KPIs and charts from JO / MO / CO / IM.'}
+              ? 'Custom hotel dashboard — selected KPIs and charts from JO / MO / CO-ACSR / CO-IR / IM.'
+              : 'Custom corp dashboard — selected chain-level KPIs and charts from JO / MO / CO-ACSR / CO-IR / IM.'}
           </p>
         </div>
 
@@ -320,6 +326,7 @@ export function MyDashboardClient({
                       data={modules[mod].data ?? null}
                       chainEntries={modules[mod].chainEntries}
                       coRows={modules[mod].coRows}
+                      coIrRows={modules[mod].coIrRows}
                       myDash={overrides[mod]}
                       myDashEmbed={{ part: 'kpis', range: applied }}
                     />
@@ -341,6 +348,7 @@ export function MyDashboardClient({
                       data={modules[mod].data ?? null}
                       chainEntries={modules[mod].chainEntries}
                       coRows={modules[mod].coRows}
+                      coIrRows={modules[mod].coIrRows}
                       myDash={overrides[mod]}
                       myDashEmbed={{ part: 'charts', range: applied }}
                     />
@@ -351,7 +359,7 @@ export function MyDashboardClient({
 
             {missingModules.length > 0 && (
               <p className="font-mono" style={{ fontSize: '0.64rem', color: muted }}>
-                No data for {missingModules.map((m) => m.toUpperCase()).join(', ')}{' '}
+                No data for {missingModules.map((m) => MYDASH_MODULE_LABELS[m]).join(', ')}{' '}
                 {scope === 'hotel'
                   ? `at ${hotel || 'this hotel'}`
                   : `for chain ${chain} (corp view needs at least 2 hotels with data)`}

@@ -4,11 +4,13 @@
 // Two dashboards can be composed per browser profile:
 //   - My Hotel  (hotel-level KPIs/charts only)
 //   - My Corp   (corp-level KPIs/charts only)
-// Items are picked from the existing JO/MO/CO/IM configuration lists
+// Items are picked from the existing JO/MO/CO-ACSR/CO-IR/IM configuration lists
 // (lib/dash-config-defs.ts) and stored as ordered "mod:id" keys.
 // ---------------------------------------------------------------------------
 
-import { MODULE_DEFS, type ModuleConfigKey, type ConfigItem } from './dash-config-defs';
+import { MODULE_DEFS, type DashboardConfigKey, type ConfigItem } from './dash-config-defs';
+
+export type MyDashModuleKey = DashboardConfigKey;
 
 export type MyDashScope = 'hotel' | 'corp';
 
@@ -23,20 +25,28 @@ export interface MyDashboardConfig {
 export const MAX_MYDASH_KPIS = 10;
 export const MAX_MYDASH_CHARTS = 20;
 
-export const MYDASH_MODULES: ModuleConfigKey[] = ['jo', 'mo', 'co', 'im'];
+export const MYDASH_MODULES: MyDashModuleKey[] = ['jo', 'mo', 'co', 'co-ir', 'im'];
+
+export const MYDASH_MODULE_LABELS: Record<MyDashModuleKey, string> = {
+  jo: 'JO',
+  mo: 'MO',
+  co: 'CO-ACSR',
+  'co-ir': 'CO-IR',
+  im: 'IM',
+};
 
 // ---------------------------------------------------------------------------
 // Item keys
 // ---------------------------------------------------------------------------
 
-export function itemKey(mod: ModuleConfigKey, id: string): string {
+export function itemKey(mod: MyDashModuleKey, id: string): string {
   return `${mod}:${id}`;
 }
 
-export function parseItemKey(key: string): { mod: ModuleConfigKey; id: string } | null {
+export function parseItemKey(key: string): { mod: MyDashModuleKey; id: string } | null {
   const idx = key.indexOf(':');
   if (idx <= 0) return null;
-  const mod = key.slice(0, idx) as ModuleConfigKey;
+  const mod = key.slice(0, idx) as MyDashModuleKey;
   if (!MYDASH_MODULES.includes(mod)) return null;
   return { mod, id: key.slice(idx + 1) };
 }
@@ -52,11 +62,12 @@ export function parseItemKey(key: string): { mod: ModuleConfigKey; id: string } 
 // ---------------------------------------------------------------------------
 
 const KPI_ALIAS_MAPS = (() => {
-  const toAlias: Record<ModuleConfigKey, Record<string, string>> = { jo: {}, mo: {}, co: {}, im: {} };
-  const fromAlias: Record<ModuleConfigKey, Record<string, string>> = { jo: {}, mo: {}, co: {}, im: {} };
-  for (const mod of ['jo', 'mo', 'co', 'im'] as ModuleConfigKey[]) {
+  const toAlias = Object.fromEntries(MYDASH_MODULES.map((mod) => [mod, {}])) as Record<MyDashModuleKey, Record<string, string>>;
+  const fromAlias = Object.fromEntries(MYDASH_MODULES.map((mod) => [mod, {}])) as Record<MyDashModuleKey, Record<string, string>>;
+  for (const mod of MYDASH_MODULES) {
     MODULE_DEFS[mod].kpis.forEach((k, i) => {
-      const alias = `${mod}_kpi_${String(i + 1).padStart(2, '0')}`;
+      const prefix = mod === 'co-ir' ? 'coir' : mod;
+      const alias = `${prefix}_kpi_${String(i + 1).padStart(2, '0')}`;
       toAlias[mod][k.id] = alias;
       fromAlias[mod][alias] = k.id;
     });
@@ -65,30 +76,32 @@ const KPI_ALIAS_MAPS = (() => {
 })();
 
 /** Uniform My Dashboard code for a native KPI id, e.g. ('mo','mo_total_orders') → 'mo_kpi_01'. */
-export function kpiAlias(mod: ModuleConfigKey, nativeId: string): string {
+export function kpiAlias(mod: MyDashModuleKey, nativeId: string): string {
   return KPI_ALIAS_MAPS.toAlias[mod][nativeId] ?? nativeId;
 }
 
 /** Native KPI id for a uniform code, e.g. ('mo','mo_kpi_01') → 'mo_total_orders'. */
-export function kpiIdFromAlias(mod: ModuleConfigKey, alias: string): string {
-  return KPI_ALIAS_MAPS.fromAlias[mod][alias] ?? alias;
+export function kpiIdFromAlias(mod: MyDashModuleKey, alias: string): string {
+  const normalizedAlias = mod === 'co-ir' ? alias.replace(/^co-ir_kpi_/, 'coir_kpi_') : alias;
+  return KPI_ALIAS_MAPS.fromAlias[mod][normalizedAlias] ?? alias;
 }
 
-function isKpiAlias(mod: ModuleConfigKey, id: string): boolean {
+function isKpiAlias(mod: MyDashModuleKey, id: string): boolean {
   return id in KPI_ALIAS_MAPS.fromAlias[mod];
 }
 
 // Corp-scoped KPI display codes: c{mod}_kpi_01..NN — re-numbered from 01
 // counting only the KPIs that are visible in corp scope (level === 'corp' | 'both').
 const CORP_KPI_DISPLAY = (() => {
-  const maps: Record<ModuleConfigKey, Record<string, string>> = { jo: {}, mo: {}, co: {}, im: {} };
-  for (const mod of ['jo', 'mo', 'co', 'im'] as ModuleConfigKey[]) {
+  const maps = Object.fromEntries(MYDASH_MODULES.map((mod) => [mod, {}])) as Record<MyDashModuleKey, Record<string, string>>;
+  for (const mod of MYDASH_MODULES) {
     let n = 0;
     MODULE_DEFS[mod].kpis.forEach((k) => {
       const lv = kpiLevel(mod, k.id);
       if (lv === 'corp' || lv === 'both') {
         n++;
-        maps[mod][k.id] = `c${mod}_kpi_${String(n).padStart(2, '0')}`;
+        const prefix = mod === 'co-ir' ? 'ccoir' : `c${mod}`;
+        maps[mod][k.id] = `${prefix}_kpi_${String(n).padStart(2, '0')}`;
       }
     });
   }
@@ -100,13 +113,14 @@ const CORP_KPI_DISPLAY = (() => {
  * Hotel scope → `{mod}_kpi_01` (regular alias).
  * Corp scope  → `c{mod}_kpi_01` (re-numbered from 01 across corp-visible KPIs).
  */
-export function kpiDisplayCode(mod: ModuleConfigKey, nativeId: string, scope: MyDashScope): string {
+export function kpiDisplayCode(mod: MyDashModuleKey, nativeId: string, scope: MyDashScope): string {
   if (scope === 'corp') return CORP_KPI_DISPLAY[mod][nativeId] ?? kpiAlias(mod, nativeId);
   return kpiAlias(mod, nativeId);
 }
 
 /** Display code for a chart — normalises hyphens to underscores: `cjo-01` → `cjo_01`. */
-export function chartDisplayCode(rawId: string): string {
+export function chartDisplayCode(rawId: string, mod?: MyDashModuleKey, scope?: MyDashScope): string {
+  if (mod === 'co-ir' && scope === 'corp') return rawId.replace(/^coir-/, 'ccoir_');
   return rawId.replace(/-/g, '_');
 }
 
@@ -127,14 +141,16 @@ export function isCorpLevelChart(id: string): boolean {
  *  - mo: cmo_kpi_* corp, mo_* hotel
  *  - jo/co: same KPI set renders on both hotel and corp dashboards
  */
-export function kpiLevel(mod: ModuleConfigKey, id: string): 'hotel' | 'corp' | 'both' {
+export function kpiLevel(mod: MyDashModuleKey, id: string): 'hotel' | 'corp' | 'both' {
+  const explicit = MODULE_DEFS[mod].kpis.find((item) => item.id === id)?.scope;
+  if (explicit) return explicit;
   if (mod === 'im') return id.startsWith('corp_') ? 'corp' : 'hotel';
   if (mod === 'mo') return id.startsWith('cmo_kpi_') ? 'corp' : 'hotel';
   return 'both';
 }
 
 export interface MyDashModuleItems {
-  mod: ModuleConfigKey;
+  mod: MyDashModuleKey;
   kpis: ConfigItem[];
   charts: ConfigItem[];
 }
@@ -160,7 +176,10 @@ export function getMyDashItems(scope: MyDashScope): MyDashModuleItems[] {
       const lvl = kpiLevel(mod, k.id);
       return lvl === 'both' || lvl === scope;
     });
-    let charts = def.charts.filter((c) => (scope === 'corp') === isCorpLevelChart(c.id));
+    let charts = def.charts.filter((c) => {
+      if (c.scope) return c.scope === 'both' || c.scope === scope;
+      return (scope === 'corp') === isCorpLevelChart(c.id);
+    });
     if (mod === 'im') {
       if (scope === 'hotel') {
         kpis = kpis.filter((k) => IM_HOTEL_KPI_IDS.has(k.id));
@@ -187,6 +206,9 @@ export function defaultMyDashConfig(): MyDashboardConfig {
 function normalizeKpiKey(key: string): string {
   const parsed = parseItemKey(key);
   if (!parsed) return key;
+  if (parsed.mod === 'co-ir' && parsed.id.startsWith('co-ir_kpi_')) {
+    return itemKey(parsed.mod, parsed.id.replace(/^co-ir_kpi_/, 'coir_kpi_'));
+  }
   if (isKpiAlias(parsed.mod, parsed.id)) return key;
   return itemKey(parsed.mod, kpiAlias(parsed.mod, parsed.id));
 }
@@ -277,9 +299,9 @@ export function applyMyDashFilter<T extends { id: string }>(
  * IM corp KPI ids are stored as corp_kpi_NN in config defs but render with
  * ids kpi_NN on the corp dashboard — strip the corp_ prefix here.
  */
-export function groupByModule(config: MyDashboardConfig): Partial<Record<ModuleConfigKey, MyDashOverride>> {
-  const out: Partial<Record<ModuleConfigKey, MyDashOverride>> = {};
-  const ensure = (mod: ModuleConfigKey): MyDashOverride => {
+export function groupByModule(config: MyDashboardConfig): Partial<Record<MyDashModuleKey, MyDashOverride>> {
+  const out: Partial<Record<MyDashModuleKey, MyDashOverride>> = {};
+  const ensure = (mod: MyDashModuleKey): MyDashOverride => {
     if (!out[mod]) out[mod] = { kpis: [], charts: [] };
     return out[mod]!;
   };

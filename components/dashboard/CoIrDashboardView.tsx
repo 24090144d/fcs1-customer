@@ -11,9 +11,17 @@ import { useI18n } from '@/components/layout/I18nProvider';
 import { getAppThemeTokens } from '@/lib/theme';
 import { localHour } from '@/lib/timezone';
 import { CoIrDrilldownTable } from '@/components/dashboard/CoIrDrilldownTable';
+import { defaultModuleConfig, loadModuleConfig, type ModuleConfig } from '@/lib/dash-config-defs';
+import { applyMyDashFilter, type MyDashEmbed, type MyDashOverride } from '@/lib/my-dashboard-defs';
 
 const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then((module) => module.HcChart), { ssr: false });
-type Props = { data: DashboardJson; rows: CoIrRow[]; chainEntries: ChainEntry[] };
+type Props = {
+  data: DashboardJson;
+  rows: CoIrRow[];
+  chainEntries: ChainEntry[];
+  myDash?: MyDashOverride;
+  myDashEmbed?: MyDashEmbed;
+};
 type KpiTone = 'good' | 'watch' | 'bad';
 type Kpi = { id: string; label: string; value: number; unit: string; decimals?: number; note: string; formula: string; tone: KpiTone; statusDetail: string; benchmark: string[] };
 
@@ -784,16 +792,27 @@ function buildHotelCoIrLongCharts(rows: CoIrRow[], t: Translate): ChartDef[] {
   ];
 }
 
-export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
+export function CoIrDashboardView({ data, rows, chainEntries, myDash, myDashEmbed }: Props) {
   const { t } = useI18n();
   const { theme } = useTheme();
   const [dark, setDark] = useState(false);
+  const [dashConfig, setDashConfig] = useState<ModuleConfig>(() => defaultModuleConfig('co-ir'));
   useEffect(() => {
     const html = document.documentElement;
     setDark(html.classList.contains('dark'));
     const observer = new MutationObserver(() => setDark(html.classList.contains('dark')));
     observer.observe(html, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const reload = () => setDashConfig(loadModuleConfig('co-ir'));
+    reload();
+    window.addEventListener('storage', reload);
+    window.addEventListener('fcs1:dash-config-changed', reload);
+    return () => {
+      window.removeEventListener('storage', reload);
+      window.removeEventListener('fcs1:dash-config-changed', reload);
+    };
   }, []);
   const tokens = getAppThemeTokens(theme, dark);
   const isCorp = String(data.meta.hotel_code).toLowerCase() === 'corp';
@@ -822,7 +841,9 @@ export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
     setDateTo(maxDate);
     setHotel('ALL');
   };
-  const filtered = useMemo(() => rows.filter((row) => (!dateFrom || String(row.inspection_date) >= dateFrom) && (!dateTo || String(row.inspection_date) <= dateTo) && (hotel === 'ALL' || row.hotel_code === hotel)), [rows, dateFrom, dateTo, hotel]);
+  const effectiveFrom = myDashEmbed?.range?.from ?? dateFrom;
+  const effectiveTo = myDashEmbed?.range?.to ?? dateTo;
+  const filtered = useMemo(() => rows.filter((row) => (!effectiveFrom || String(row.inspection_date) >= effectiveFrom) && (!effectiveTo || String(row.inspection_date) <= effectiveTo) && (hotel === 'ALL' || row.hotel_code === hotel)), [rows, effectiveFrom, effectiveTo, hotel]);
   const passed = filtered.filter((row) => row.inspection_result === 'Pass').length;
   const failed = filtered.filter((row) => row.inspection_result === 'Fail').length;
   const scores = filtered.map((row) => row.inspection_score);
@@ -856,12 +877,27 @@ export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
   const longCharts = useMemo(() => isCorp
     ? buildCorpCoIrLongCharts(filtered, t)
     : buildHotelCoIrLongCharts(filtered, t), [filtered, isCorp, t]);
+  const visibleKpis = useMemo(() => applyMyDashFilter(kpis, myDash?.kpis, (id) => dashConfig.kpis[id] !== false), [kpis, dashConfig, myDash]);
+  const visibleSimpleCharts = useMemo(() => applyMyDashFilter(simpleCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [simpleCharts, dashConfig, myDash]);
+  const visibleLongCharts = useMemo(() => applyMyDashFilter(longCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [longCharts, dashConfig, myDash]);
+  const visibleEmbedCharts = useMemo(() => applyMyDashFilter([...simpleCharts, ...longCharts], myDash?.charts, (id) => dashConfig.charts[id] !== false), [simpleCharts, longCharts, dashConfig, myDash]);
+  const tableId = isCorp ? 'ccoirt-01' : 'coirt-01';
+  const showTable = dashConfig.tables[tableId] !== false;
   const performance = useMemo(() => {
     const key = (row: CoIrRow) => row.hotel_code ?? data.meta.hotel_code ?? 'Unknown Hotel';
     const map: Record<string, CoIrRow[]> = {};
     for (const row of filtered) (map[key(row)] ??= []).push(row);
     return Object.entries(map).map(([name, values]) => ({ name, inspections: values.length, rooms: new Set(values.map((row) => row.location)).size, passRate: percent(values.filter((row) => row.inspection_result === 'Pass').length, values.length), failures: values.filter((row) => row.inspection_result === 'Fail').length, avgDuration: average(values.map((row) => row.inspection_duration_minutes)), p90: percentile(values.map((row) => row.inspection_duration_minutes), .9), avgScore: average(values.map((row) => row.inspection_score)), scoreCoverage: percent(validNumbers(values.map((row) => row.inspection_score)).length, values.length), credits: values.reduce((sum, row) => sum + (row.inspection_credit ?? 0), 0) })).sort((a, b) => b.passRate - a.passRate || a.avgDuration - b.avgDuration);
   }, [filtered, data.meta.hotel_code]);
+
+  if (myDashEmbed) {
+    if (myDashEmbed.part === 'kpis') {
+      return <>{visibleKpis.map((kpi) => <CoIrKpiCard key={kpi.id} kpi={kpi} dark={dark} />)}</>;
+    }
+    return <>{visibleEmbedCharts.map((item, index) => (
+      <HcChart key={item.id} def={item} dark={dark} index={index + 1} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${item.id.slice(-2)}`} />
+    ))}</>;
+  }
 
   return <div className="min-h-screen" style={{ background: tokens.dashboard.bg, color: tokens.text }}>
     <div className="sticky top-0 z-20 px-6 py-4 space-y-3" style={{ background: tokens.dashboard.toolbarBg, borderBottom: `1px solid ${tokens.dashboard.toolbarBorder}` }}>
@@ -881,10 +917,10 @@ export function CoIrDashboardView({ data, rows, chainEntries }: Props) {
       </div>
     </div>
     <div className="px-6 py-5 space-y-7 max-w-screen-2xl mx-auto">
-      <section><SectionHead label="KPI" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">{kpis.map((kpi) => <CoIrKpiCard key={kpi.id} kpi={kpi} dark={dark} />)}</div></section>
-      <section><SectionHead label="Simple Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{simpleCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 1} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${String(index + 1).padStart(2, '0')}`} />)}</div></section>
-      <section><SectionHead label="Long Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 gap-4">{longCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 11} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${String(index + 11).padStart(2, '0')}`} />)}</div></section>
-      <section><SectionHead label="Table" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><CoIrDrilldownTable key={`${isCorp ? 'corp' : 'hotel'}:${data.meta.chain_code}:${data.meta.hotel_code}`} rows={filtered} isCorp={isCorp} hotelNames={hotelNames} dark={dark} timezone={timezone} /></section>
+      <section><SectionHead label="KPI" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="kpi-grid mt-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">{visibleKpis.map((kpi) => <CoIrKpiCard key={kpi.id} kpi={kpi} dark={dark} />)}</div></section>
+      <section><SectionHead label="Simple Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{visibleSimpleCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 1} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${item.id.slice(-2)}`} />)}</div></section>
+      <section><SectionHead label="Long Charts" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="grid grid-cols-1 gap-4">{visibleLongCharts.map((item, index) => <HcChart key={item.id} def={item} dark={dark} index={index + 11} codeLabel={`${isCorp ? 'CCOIR' : 'COIR'}-${item.id.slice(-2)}`} />)}</div></section>
+      {showTable && <section><SectionHead label="Table" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><CoIrDrilldownTable key={`${isCorp ? 'corp' : 'hotel'}:${data.meta.chain_code}:${data.meta.hotel_code}`} rows={filtered} isCorp={isCorp} hotelNames={hotelNames} dark={dark} timezone={timezone} /></section>}
       <section><SectionHead label="Performance" color={tokens.dashboard.metaSub} border={tokens.dashboard.sectionRule} /><div className="overflow-x-auto rounded-xl" style={{ border: `1px solid ${tokens.card.border}`, background: tokens.card.bg }}><table className="min-w-[1250px] w-full"><thead style={{ background: tokens.dashboard.tableHeadBg }}><tr>{['Index', 'Hotel', 'Inspections', 'Rooms', 'Pass Rate', 'Failures', 'Avg Duration', 'P90 Duration', 'Avg Score', 'Score Capture', 'Credits'].map((label) => <th key={label} className="px-3 py-2 text-left font-mono text-[0.62rem] uppercase" style={{ color: tokens.dashboard.tableHeadText }}>{label}</th>)}</tr></thead><tbody>{performance.map((row, index) => <tr key={row.name}>{[String(index + 1).padStart(2, '0'), `${row.name} · ${hotelNames[row.name] ?? data.meta.hotel_name ?? row.name}`, row.inspections.toLocaleString(), row.rooms.toLocaleString(), `${row.passRate.toFixed(1)}%`, row.failures.toLocaleString(), `${row.avgDuration.toFixed(1)} min`, `${row.p90.toFixed(1)} min`, row.avgScore ? row.avgScore.toFixed(1) : '—', `${row.scoreCoverage.toFixed(1)}%`, row.credits.toFixed(1)].map((value, cell) => <td key={cell} className="px-3 py-2 text-xs" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>{value}</td>)}</tr>)}</tbody></table></div></section>
     </div>
   </div>;

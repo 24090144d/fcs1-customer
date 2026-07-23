@@ -27,7 +27,7 @@ const HcChart = dynamic(() => import('@/components/dashboard/HcChart').then(m =>
 const CHAIN_CHARTS = new Set(['im-57', 'im-58', 'im-59', 'im-60', 'im-61', 'im-62', 'im-63', 'im-65']);
 const GAUGE_CHARTS = new Set(['im-67', 'im-68', 'im-69']);
 const CORP_IM_TOP_IDS = new Set(['cim-01', 'cim-02', 'cim-03', 'cim-04', 'cim-05', 'cim-06', 'cim-07', 'cim-08', 'cim-09', 'cim-10', 'cim-11', 'cim-12', 'cim-13', 'cim-14']);
-const CORP_IM_LONG_IDS = new Set(['cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20', 'cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26', 'cim-27', 'cim-28']);
+const CORP_IM_LONG_IDS = new Set(['cim-15', 'cim-16', 'cim-17', 'cim-18', 'cim-19', 'cim-20', 'cim-21', 'cim-22', 'cim-23', 'cim-24', 'cim-25', 'cim-26', 'cim-27', 'cim-28']);
 const JO_EAC_ORDER = ['jo-01', 'jo-02', 'jo-03', 'jo-04'];
 const JO_CHART_ORDER = ['jo-05', 'jo-06', 'jo-07', 'jo-08', 'jo-09', 'jo-10', 'jo-11', 'jo-12', 'jo-13', 'jo-14', 'jo-15', 'jo-16', 'jo-17', 'jo-18', 'jo-19', 'jo-20', 'jo-21', 'jo-22', 'jo-23', 'jo-24', 'jo-25', 'jo-26', 'jo-27', 'jo-28'];
 const HOTEL_MO_CHART_DISPLAY_ORDER = ['mo-01', 'mo-02', 'mo-03', 'mo-04', 'mo-05', 'mo-06', 'mo-07', 'mo-08', 'mo-09', 'mo-10', 'mo-11', 'mo-12', 'mo-13', 'mo-14', 'mo-15', 'mo-16', 'mo-17', 'mo-18'];
@@ -74,6 +74,7 @@ const CORP_IM_LONG_MAP: Array<{ code: string; id: string; title: string; note: s
   { code: 'cim-18', id: 'cim-18', title: '🟢 Hotel → Source of Complaint → Incident Dist → Incident', note: 'Drills from hotel into source of complaint, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY source_of_complaint per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
   { code: 'cim-19', id: 'cim-19', title: '🟢 Hotel → Booking Source → Incident Dist → Incident', note: 'Drills from hotel into booking source, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY booking_source per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
   { code: 'cim-20', id: 'cim-20', title: '🟢 Hotel → Severity → Incident Dist → Incident', note: 'Drills from hotel into incident severity, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY severity per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
+  { code: 'cim-21', id: 'cim-21', title: '🟣 Hotel → Repeat Rate Dist → Incident Dist → Incident', note: 'Drills from hotel into repeat-rate ranges, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Average Duration, Repeat Rate, and Closing Rate together. Benchmark: Good when repeat rate <= 15% and closing rate >= 95%; Bad when repeat rate > 30% or closing rate < 80%.', formula: 'Level 2 = incident items grouped by their repeat rate (repeat incidents / total incidents); Incident Dist = rank-ranges of incident items within the selected repeat-rate range; leaf = Total Incident, AVG(resolution_hours), Repeat Rate, and Closing Rate per incident item' },
   { code: 'cim-22', id: 'cim-22', title: '⏰ Hotel → 24 Hour Distribution → Incident Dist → Incident', note: 'Drills from hotel into hour of day, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY hour-of-day (org timezone) per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
   { code: 'cim-23', id: 'cim-23', title: '🟢 Hotel → Duration Distribution → Incident Dist → Incident', note: 'Drills from hotel into resolution duration buckets, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY resolution_duration_bucket (<1h/1-2h/2-4h/4-8h/8-24h/24h+) per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
   { code: 'cim-24', id: 'cim-24', title: '🟢 Hotel → Profile Type → Incident Dist → Incident', note: 'Drills from hotel into guest profile type, then a rank-grouped incident-item range, down to individual incidents, showing Total Incident, Repeat Incident Rate, and Average Duration together. Benchmark: Good when repeat rate <= 15% and average duration <= 24h; Bad when repeat rate > 30% or average duration > 72h.', formula: 'Level 2 = COUNT(incidents) GROUP BY profile_type per hotel; Incident Dist = rank-ranges of COUNT(incidents) by item (width = 50 if distinct count > 500, 20 if > 200, else 10); leaf = COUNT(incidents), Repeat Rate = repeat incidents / COUNT, Average Duration = AVG(resolution_hours) per incident item' },
@@ -2817,6 +2818,10 @@ function buildCorpImOptions(id: string, entries: ChainEntry[], worldMapData?: Re
     return buildImDimIncidentDrilldown(entries, 'cim20', 'severity', 'Severity', 'count-desc');
   }
 
+  if (id === 'cim-21') {
+    return buildCorpImRepeatRateDistDrilldown(entries, 'cim21');
+  }
+
   const topMap = (map: Record<string, number>, limit = 50) => Object.entries(map ?? {})
     .sort(([, a], [, b]) => Number(b) - Number(a))
     .slice(0, limit);
@@ -4691,11 +4696,11 @@ function CorpMoPerformanceTable({
 function CorpImPerformanceTable({
   entries,
   dark,
-  index,
+  code,
 }: {
   entries: ChainEntry[];
   dark: boolean;
-  index: number;
+  code: string;
 }) {
   const { theme } = useTheme();
   const tokens = getAppThemeTokens(theme, dark);
@@ -4762,7 +4767,7 @@ function CorpImPerformanceTable({
       <div className="flex items-center justify-between px-4 pt-4 pb-2 gap-3 shrink-0">
         <h3 className="font-serif font-semibold leading-snug flex items-center gap-2" style={{ fontSize: '0.9rem', color: titleText }}>
           <span className="font-mono shrink-0" style={{ fontSize: '0.62rem', letterSpacing: '0.04em', fontWeight: 700, color: accent, background: codeBg, border: `1px solid ${accent}40`, padding: '1px 5px', lineHeight: 1.4 }}>
-            {String(index).padStart(2, '0')}
+            {code}
           </span>
           Hotel Performance Benchmark
         </h3>
@@ -5490,7 +5495,7 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
           </section>
         )}
 
-        {!isCo && isMo && (
+        {!isCo && isMo && moDashConfig.tables[isCorp ? 'cmot-01' : 'mot-01'] !== false && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
             <div className="mt-5">
@@ -6950,7 +6955,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
       return <>{stdVisKpis(localizedKpis).map(k => <KpiCard key={k.id} kpi={k} dark={dark} />)}</>;
     }
     const embedDefs = isCorp
-      ? (isJo ? corpJoCharts : corpImTopCharts)
+      ? (isJo ? corpJoCharts : [...corpImTopCharts, ...corpImLongCharts])
       : isJo
         ? [...reorderedEac, ...reorderedOperational]
         : [...imHotelExecutiveCharts, ...imHotelOverTimeCharts, ...imHotelDrilldownCharts, ...imHotelOperationAnalysisCharts].filter((c) => !IM_LONG_CHART_IDS.has(c.id));
@@ -7185,7 +7190,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
         )}
 
         {/* ── Table ─────────────────────────────────────────────────────────── */}
-        {!isBuilder && !isJo && (
+        {!isBuilder && !isJo && stdDashConfig.tables[isCorp ? 'cimt-01' : 'imt-01'] !== false && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
             <div className="mt-5">
@@ -7202,7 +7207,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           </section>
         )}
 
-        {!isBuilder && isJo && (
+        {!isBuilder && isJo && stdDashConfig.tables[isCorp ? 'cjot-01' : 'jot-01'] !== false && (
           <section>
             <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
             <div className="mt-5">
@@ -7219,14 +7224,14 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
           </section>
         )}
 
-        {isCorp && !isJo && corpImTopCharts.length > 0 && (
+        {isCorp && !isJo && corpImTopCharts.length > 0 && stdDashConfig.tables['cimt-02'] !== false && (
           <section>
             <SectionHead label={t('dashboard_ui.section_performance', 'Performance')} dark={dark} />
             <div className="mt-5">
               <CorpImPerformanceTable
                 entries={activeChainEntries}
                 dark={dark}
-                index={corpImTopCharts.length + 1}
+                code="cimt-02"
               />
             </div>
           </section>
@@ -7306,6 +7311,24 @@ export function DashboardClient({ data, chainEntries = [], coRows = [], coIrRows
   // CO: data may be null when no co_dashboard_json exists but co_records rows do.
   // Build a minimal meta shell so CoDashboardView can compute KPIs/charts from rows.
   if (!data) {
+    if (coIrRows.length > 0) {
+      const dates = coIrRows.map((row) => row.inspection_date).filter((value): value is string => Boolean(value)).sort();
+      const shell: DashboardJson = {
+        meta: {
+          schema: 'co-ir-v1',
+          upload_job_id: '', source_name: '',
+          hotel_code: coIrRows[0]?.hotel_code ?? '',
+          hotel_name: coIrRows[0]?.hotel_code ?? '',
+          chain_code: coIrRows[0]?.chain_code ?? '',
+          country_code: '',
+          total_records: coIrRows.length,
+          date_range: { min: dates[0] ?? null, max: dates[dates.length - 1] ?? null },
+          generated_at: new Date().toISOString(),
+        },
+        kpis: [], eac: [], charts: [], raw_daily: [], summary: {} as HotelSummary,
+      };
+      return <CoIrDashboardView data={shell} rows={coIrRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
+    }
     if (coRows.length > 0) {
       // created_date may deserialize as a Date object — normalize to ISO day.
       const toDay = (v: unknown): string | null => {
@@ -7340,10 +7363,156 @@ export function DashboardClient({ data, chainEntries = [], coRows = [], coIrRows
     return <CoDashboardView data={data as CoDashboardJson} rows={coRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
   }
   if (isCoIr) {
-    return <CoIrDashboardView data={data} rows={coIrRows} chainEntries={chainEntries} />;
+    return <CoIrDashboardView data={data} rows={coIrRows} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
   }
   if (isMo) {
     return <MaintenanceDashboardView data={data as MoDashboardJson} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
   }
   return <StandardDashboardClient data={data as ImDashboardJson} chainEntries={chainEntries} myDash={myDash} myDashEmbed={myDashEmbed} />;
+}
+
+// cim-21 (corp scope): Hotel → Repeat Rate Dist → Incident Dist → Incident.
+// Uses the same database-backed item statistics as hotel im-21, with Hotel as
+// the additional root level and a four-series dual-axis leaf.
+function buildCorpImRepeatRateDistDrilldown(
+  entries: ChainEntry[],
+  chartPrefix: string,
+): Highcharts.Options {
+  const ORANGE = '#C2410C', PURPLE = '#7C3AED', GREEN = '#0F766E', BLUE = '#0E7490', ROSE = '#BE123C', AMBER = '#B45309';
+  const idPart = (value: string) => encodeURIComponent(value);
+  const RATE_BUCKETS = ['0%', '1-10%', '11-25%', '26-50%', '51-75%', '76-100%'];
+  const bucketLabel = (rate: number): string => {
+    if (rate <= 0) return '0%';
+    if (rate <= 10) return '1-10%';
+    if (rate <= 25) return '11-25%';
+    if (rate <= 50) return '26-50%';
+    if (rate <= 75) return '51-75%';
+    return '76-100%';
+  };
+  const level2: Highcharts.SeriesOptionsType[] = [];
+  const level3: Highcharts.SeriesOptionsType[] = [];
+  const leafData: Record<string, Array<{ name: string; count: number; avgDur: number; repeatRate: number; closingRate: number }>> = {};
+  const hotelTotals: Record<string, number> = {};
+
+  for (const entry of entries) {
+    const hotelKey = idPart(entry.hotel_code);
+    const itemMap = entry.summary.im_dim_item_stats_map?.all?.ALL ?? {};
+    const bucketed: Record<string, Array<[string, number]>> = {};
+    hotelTotals[entry.hotel_code] = Object.values(itemMap).reduce((sum, stats) => sum + stats.count, 0);
+
+    for (const [item, stats] of Object.entries(itemMap)) {
+      if (stats.count <= 0) continue;
+      const bucket = bucketLabel((stats.repeat / stats.count) * 100);
+      if (!bucketed[bucket]) bucketed[bucket] = [];
+      bucketed[bucket].push([item, stats.count]);
+    }
+
+    level2.push({
+      id: `${chartPrefix}-rate:${hotelKey}`,
+      type: 'column',
+      name: `${entry.hotel_code} Repeat Rate Dist`,
+      color: ORANGE,
+      dataLabels: { enabled: true },
+      data: RATE_BUCKETS.filter((bucket) => (bucketed[bucket] ?? []).length > 0).map((bucket) => ({
+        name: bucket,
+        y: (bucketed[bucket] ?? []).reduce((sum, [, count]) => sum + count, 0),
+        drilldown: `${chartPrefix}-item:${hotelKey}:${idPart(bucket)}`,
+      })),
+    } as Highcharts.SeriesOptionsType);
+
+    for (const bucket of RATE_BUCKETS) {
+      const itemCounts = bucketed[bucket];
+      if (!itemCounts || itemCounts.length === 0) continue;
+      const bucketKey = idPart(bucket);
+      const itemBuckets = imRankDistBuckets(itemCounts);
+      level3.push({
+        id: `${chartPrefix}-item:${hotelKey}:${bucketKey}`,
+        type: 'column',
+        name: `${entry.hotel_code} — Repeat Rate ${bucket} — Incident Dist`,
+        color: PURPLE,
+        dataLabels: { enabled: true },
+        data: itemBuckets.map((itemBucket) => ({
+          name: itemBucket.name,
+          y: itemBucket.total,
+          drilldown: `${chartPrefix}-leaf:${hotelKey}:${bucketKey}:${idPart(itemBucket.name)}`,
+        })),
+      } as Highcharts.SeriesOptionsType);
+
+      for (const itemBucket of itemBuckets) {
+        const leafId = `${chartPrefix}-leaf:${hotelKey}:${bucketKey}:${idPart(itemBucket.name)}`;
+        leafData[leafId] = itemBucket.keys
+          .map((item) => {
+            const stats = itemMap[item];
+            return {
+              name: item,
+              count: stats.count,
+              avgDur: stats.avgDurationHours > 0 ? Number(stats.avgDurationHours.toFixed(1)) : 0,
+              repeatRate: stats.count > 0 ? Number(((stats.repeat / stats.count) * 100).toFixed(1)) : 0,
+              closingRate: stats.count > 0 ? Number(((stats.closed / stats.count) * 100).toFixed(1)) : 0,
+            };
+          })
+          .sort((a, b) => b.count - a.count);
+      }
+    }
+  }
+
+  return hcOpts({
+    chart: {
+      type: 'column',
+      events: {
+        drilldown: function (this: Highcharts.Chart, event: Highcharts.DrilldownEventObject) {
+          if (event.seriesOptions) return;
+          const leafId = (event.point as unknown as { drilldown?: string }).drilldown;
+          const items = leafId ? leafData[leafId] : undefined;
+          if (!items) return;
+          const chart = this as unknown as Highcharts.Chart & {
+            addSingleSeriesAsDrilldown: (point: Highcharts.Point, options: Highcharts.SeriesOptionsType) => void;
+            applyDrilldown: () => void;
+          };
+          if (chart.xAxis[0]) chart.xAxis[0].update({ type: 'category', categories: items.map((item) => item.name) }, false);
+          chart.addSingleSeriesAsDrilldown(event.point, {
+            id: `${leafId}-count`, type: 'column', name: 'Total Incident', color: GREEN,
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((item) => ({ name: item.name, y: item.count })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(event.point, {
+            id: `${leafId}-duration`, type: 'spline', name: 'Average Duration (h)', color: BLUE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}' },
+            data: items.map((item) => ({ name: item.name, y: item.avgDur })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(event.point, {
+            id: `${leafId}-repeat`, type: 'spline', name: 'Repeat Rate (%)', color: ROSE, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((item) => ({ name: item.name, y: item.repeatRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.addSingleSeriesAsDrilldown(event.point, {
+            id: `${leafId}-closing`, type: 'spline', name: 'Closing Rate (%)', color: AMBER, yAxis: 1,
+            lineWidth: 3, marker: { enabled: true, radius: 4 },
+            dataLabels: { enabled: true, format: '{point.y}%' },
+            data: items.map((item) => ({ name: item.name, y: item.closingRate })),
+          } as Highcharts.SeriesOptionsType);
+          chart.applyDrilldown();
+        },
+      },
+    },
+    xAxis: { type: 'category', title: { text: 'Hotel' } },
+    yAxis: [
+      { min: 0, title: { text: 'Total Incident' } },
+      { title: { text: 'Average Duration (h) / Rate (%)' }, opposite: true },
+    ],
+    series: [{
+      type: 'column', name: 'Total Incident', colorByPoint: true, legendType: 'point', showInLegend: true,
+      data: entries.map((entry) => ({
+        name: entry.hotel_code,
+        y: hotelTotals[entry.hotel_code] ?? 0,
+        drilldown: `${chartPrefix}-rate:${idPart(entry.hotel_code)}`,
+      })),
+      dataLabels: { enabled: true },
+    }] as unknown as Highcharts.SeriesOptionsType[],
+    plotOptions: { column: { dataLabels: { enabled: true } } },
+    drilldown: { series: [...level2, ...level3] },
+    tooltip: { shared: true },
+  });
 }

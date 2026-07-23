@@ -4,19 +4,21 @@
 // My Dashboard configuration panel (Configuration → My Dashboard tab)
 //
 // Lets the user compose "My Hotel" / "My Corp" dashboards from the existing
-// JO/MO/CO/IM KPI and chart lists: max 10 KPIs + 20 charts, drag-n-drop
+// JO/MO/CO-ACSR/CO-IR/IM KPI and chart lists: max 10 KPIs + 20 charts, drag-n-drop
 // re-order, bound to one chain, published to the sidebar.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, GripVertical, Plus, X, Globe, Building2 } from 'lucide-react';
-import { MODULE_DEFS, type ModuleConfigKey, type ConfigItem } from '@/lib/dash-config-defs';
+import { MODULE_DEFS, type ConfigItem } from '@/lib/dash-config-defs';
 import {
   type MyDashScope,
   type MyDashboardConfig,
   MAX_MYDASH_KPIS,
   MAX_MYDASH_CHARTS,
   MYDASH_MODULES,
+  MYDASH_MODULE_LABELS,
+  type MyDashModuleKey,
   itemKey,
   parseItemKey,
   getMyDashItems,
@@ -48,14 +50,15 @@ interface MyDashboardPanelProps {
   t: (path: string, fallback?: string) => string;
 }
 
-const MODULE_COLORS: Record<ModuleConfigKey, string> = {
+const MODULE_COLORS: Record<MyDashModuleKey, string> = {
   jo: '#2563EB',
   mo: '#059669',
   co: '#7C3AED',
+  'co-ir': '#0891B2',
   im: '#B45309',
 };
 
-function itemLabel(key: string, t: (p: string, f?: string) => string): { mod: ModuleConfigKey; id: string; label: string } | null {
+function itemLabel(key: string, t: (p: string, f?: string) => string): { mod: MyDashModuleKey; id: string; label: string } | null {
   const parsed = parseItemKey(key);
   if (!parsed) return null;
   const def = MODULE_DEFS[parsed.mod];
@@ -64,7 +67,7 @@ function itemLabel(key: string, t: (p: string, f?: string) => string): { mod: Mo
   const nativeKpiId = kpiIdFromAlias(parsed.mod, parsed.id);
   const item: ConfigItem | undefined =
     def.charts.find((c) => c.id === parsed.id) ?? def.kpis.find((k) => k.id === nativeKpiId);
-  const label = item ? t(item.labelPath, parsed.id).replace(/^[🟣🟢]\s*/u, '') : parsed.id;
+  const label = item ? t(item.labelPath, item.label ?? parsed.id).replace(/^[🟣🟢]\s*/u, '') : parsed.id;
   return { ...parsed, label };
 }
 
@@ -102,7 +105,7 @@ function SelectedList({
         const nativeKpiId = kpiIdFromAlias(info.mod, info.id);
         const displayId = nativeKpiId !== info.id
           ? kpiDisplayCode(info.mod, nativeKpiId, scope)
-          : chartDisplayCode(info.id);
+          : chartDisplayCode(info.id, info.mod, scope);
         return (
           <div
             key={key}
@@ -129,7 +132,7 @@ function SelectedList({
               className="font-mono font-bold shrink-0 px-1 rounded"
               style={{ fontSize: '0.56rem', letterSpacing: '0.06em', color, background: `${color}18`, border: `1px solid ${color}44` }}
             >
-              {info.mod.toUpperCase()}
+              {MYDASH_MODULE_LABELS[info.mod]}
             </span>
             <span className="font-mono shrink-0" style={{ fontSize: '0.6rem', color: pal.accent }}>
               {displayId}
@@ -159,7 +162,7 @@ function AvailableList({
   items, mod, selected, atLimit, onAdd, pal, t, codeOf, displayCodeOf,
 }: {
   items: ConfigItem[];
-  mod: ModuleConfigKey;
+  mod: MyDashModuleKey;
   selected: string[];
   atLimit: boolean;
   onAdd: (key: string) => void;
@@ -195,7 +198,7 @@ function AvailableList({
               {displayCode}
             </span>
             <span className="flex-1 truncate" style={{ fontSize: '0.7rem', color: isSelected ? pal.muted : pal.text }}>
-              {t(item.labelPath, item.id).replace(/^[🟣🟢]\s*/u, '')}
+              {t(item.labelPath, item.label ?? item.id).replace(/^[🟣🟢]\s*/u, '')}
             </span>
             {isSelected && (
               <CheckCircle2 size={11} style={{ color: pal.accent, flexShrink: 0 }} />
@@ -215,7 +218,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
   const [saved, setSaved] = useState<MyDashboardConfig | null>(null);
   const [chains, setChains] = useState<string[]>([]);
   const [chainHotels, setChainHotels] = useState<Record<string, { regular: string[]; co: string[] }>>({});
-  const [pickerModule, setPickerModule] = useState<ModuleConfigKey>('jo');
+  const [pickerModule, setPickerModule] = useState<MyDashModuleKey>('jo');
   const [status, setStatus] = useState<'idle' | 'saved' | 'published'>('idle');
   const [hotelDropOpen, setHotelDropOpen] = useState(false);
   const hotelDropRef = useRef<HTMLDivElement>(null);
@@ -350,7 +353,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
       {/* Intro */}
       <p className="mb-4 font-mono" style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.04em' }}>
         Compose your own dashboard from existing{' '}
-        <span style={{ color: pal.accent }}>JO / MO / CO / IM</span>{' '}
+        <span style={{ color: pal.accent }}>JO / MO / CO-ACSR / CO-IR / IM</span>{' '}
         KPIs and charts — max {MAX_MYDASH_KPIS} KPIs and {MAX_MYDASH_CHARTS} charts.
         Published dashboards appear in the sidebar under <span style={{ color: pal.accent }}>My Dashboard</span>.
       </p>
@@ -624,7 +627,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
                 fontWeight: active ? 700 : 400,
               }}
             >
-              {m.toUpperCase()}
+              {MYDASH_MODULE_LABELS[m]}
             </button>
           );
         })}
@@ -636,7 +639,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
       {/* KPI row: available | selected */}
       <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
         <div style={{ border: `1px solid ${pal.panelBorder}`, borderRadius: 5, overflow: 'hidden', background: pal.panelBg }}>
-          {sectionHeader(`Available KPIs — ${pickerModule.toUpperCase()}`, cfg.kpis.length, MAX_MYDASH_KPIS)}
+          {sectionHeader(`Available KPIs — ${MYDASH_MODULE_LABELS[pickerModule]}`, cfg.kpis.length, MAX_MYDASH_KPIS)}
           <div className="overflow-y-auto" style={{ maxHeight: 260 }}>
             <AvailableList
               items={activeItems.kpis}
@@ -670,7 +673,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
       {/* Chart row: available | selected */}
       <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)' }}>
         <div style={{ border: `1px solid ${pal.panelBorder}`, borderRadius: 5, overflow: 'hidden', background: pal.panelBg }}>
-          {sectionHeader(`Available Charts — ${pickerModule.toUpperCase()}`, cfg.charts.length, MAX_MYDASH_CHARTS)}
+          {sectionHeader(`Available Charts — ${MYDASH_MODULE_LABELS[pickerModule]}`, cfg.charts.length, MAX_MYDASH_CHARTS)}
           <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
             <AvailableList
               items={activeItems.charts}
@@ -680,7 +683,7 @@ export function MyDashboardPanel({ pal, t }: MyDashboardPanelProps) {
               onAdd={(key) => addItem('charts', key)}
               pal={pal}
               t={t}
-              displayCodeOf={(item) => chartDisplayCode(item.id)}
+              displayCodeOf={(item) => chartDisplayCode(item.id, activeItems.mod, scope)}
             />
           </div>
         </div>

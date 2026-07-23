@@ -33,6 +33,7 @@ import { APP_VERSION } from '@/lib/version';
 import {
   MODULE_DEFS,
   type ModuleConfigKey,
+  type DashboardConfigKey,
   type ModuleConfig,
   type ConfigItem,
   defaultModuleConfig,
@@ -45,7 +46,7 @@ import { kpiLevel } from '@/lib/my-dashboard-defs';
 // Types & constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Tab = 'system' | ModuleConfigKey | 'mydash' | 'builder';
+type Tab = 'system' | DashboardConfigKey | 'mydash' | 'builder';
 
 interface TabDef {
   key: Tab;
@@ -57,13 +58,14 @@ const TABS: TabDef[] = [
   { key: 'system',  label: 'System',   Icon: Settings },
   { key: 'jo',      label: 'JO',       Icon: BarChart2 },
   { key: 'mo',      label: 'MO',       Icon: Wrench },
-  { key: 'co',      label: 'CO',       Icon: Sparkles },
+  { key: 'co',      label: 'CO-ACSR',  Icon: Sparkles },
+  { key: 'co-ir',   label: 'CO-IR',    Icon: Sparkles },
   { key: 'im',      label: 'IM',       Icon: LineChart },
   { key: 'mydash',  label: 'My Dashboard', Icon: LayoutDashboard },
   { key: 'builder', label: 'Builder',  Icon: MessageSquare },
 ];
 
-const MODULE_TABS: ModuleConfigKey[] = ['jo', 'mo', 'co', 'im'];
+const MODULE_TABS: DashboardConfigKey[] = ['jo', 'mo', 'co', 'co-ir', 'im'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Palette helper – keeps child components pure (no theme hook calls)
@@ -237,9 +239,9 @@ function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLab
             {items.map((item, i) => {
               const isOn = checked[item.id] !== false;
               const displayCode = displayCodeOf ? displayCodeOf(item, i) : item.id;
-              const label    = t(item.labelPath, item.id);
-              const note     = t(item.notePath, '—');
-              const formula  = item.formulaPath ? t(item.formulaPath, '—') : '—';
+              const label    = t(item.labelPath, item.label ?? item.id);
+              const note     = t(item.notePath, item.note ?? '—');
+              const formula  = item.formulaPath ? t(item.formulaPath, item.formula ?? '—') : (item.formula ?? '—');
               const rowBg    = i % 2 === 0 ? pal.rowEven : pal.rowOdd;
 
               return (
@@ -371,7 +373,7 @@ function GroupPanel({ title, items, checked, onToggle, onAll, pal, t, formulaLab
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ModuleConfigPanelProps {
-  mod: ModuleConfigKey;
+  mod: DashboardConfigKey;
   pal: Palette;
   t: (path: string, fallback?: string) => string;
 }
@@ -387,14 +389,22 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 
 function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
   const def = MODULE_DEFS[mod];
+  const itemScope = (item: ConfigItem, kind: 'kpi' | 'chart' | 'table') => {
+    if (item.scope) return item.scope;
+    if (kind === 'kpi') return kpiLevel(mod as ModuleConfigKey, item.id);
+    if (kind === 'table') return item.id.startsWith('c') ? 'corp' : 'hotel';
+    return isCorpChart(item.id) ? 'corp' : 'hotel';
+  };
 
   // Split KPIs into hotel-level and corp-level groups
-  const hotelKpis = useMemo(() => def.kpis.filter((k) => kpiLevel(mod, k.id) !== 'corp'),  [def.kpis, mod]);
-  const corpKpis  = useMemo(() => def.kpis.filter((k) => kpiLevel(mod, k.id) !== 'hotel'), [def.kpis, mod]);
+  const hotelKpis = useMemo(() => def.kpis.filter((k) => itemScope(k, 'kpi') !== 'corp'), [def.kpis, mod]);
+  const corpKpis = useMemo(() => def.kpis.filter((k) => itemScope(k, 'kpi') !== 'hotel'), [def.kpis, mod]);
 
   // Split charts into hotel and corp groups
-  const hotelCharts = useMemo(() => def.charts.filter((c) => !isCorpChart(c.id)), [def.charts]);
-  const corpCharts  = useMemo(() => def.charts.filter((c) =>  isCorpChart(c.id)), [def.charts]);
+  const hotelCharts = useMemo(() => def.charts.filter((c) => itemScope(c, 'chart') !== 'corp'), [def.charts, mod]);
+  const corpCharts = useMemo(() => def.charts.filter((c) => itemScope(c, 'chart') !== 'hotel'), [def.charts, mod]);
+  const hotelTables = useMemo(() => def.tables.filter((item) => itemScope(item, 'table') !== 'corp'), [def.tables, mod]);
+  const corpTables = useMemo(() => def.tables.filter((item) => itemScope(item, 'table') !== 'hotel'), [def.tables, mod]);
 
   const [draft, setDraft]     = useState<ModuleConfig>(() => defaultModuleConfig(mod));
   const [saved, setSaved]     = useState<ModuleConfig | null>(null);
@@ -407,7 +417,7 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
     setSaved(loaded);
   }, [mod]);
 
-  const toggle = useCallback((group: 'kpis' | 'charts', id: string) => {
+  const toggle = useCallback((group: 'kpis' | 'charts' | 'tables', id: string) => {
     setDraft((prev) => ({
       ...prev,
       [group]: { ...prev[group], [id]: !(prev[group][id] !== false) },
@@ -415,7 +425,7 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
   }, []);
 
   /** Toggle all items in a subset of a group (e.g. only hotel charts). */
-  const setSubset = useCallback((group: 'kpis' | 'charts', items: ConfigItem[], value: boolean) => {
+  const setSubset = useCallback((group: 'kpis' | 'charts' | 'tables', items: ConfigItem[], value: boolean) => {
     const ids = items.map((item) => item.id);
     setDraft((prev) => ({
       ...prev,
@@ -449,7 +459,7 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
           pal={pal}
           t={t}
           defaultOpen={false}
-          displayCodeOf={(_item, i) => `${mod}_kpi_${pad2(i + 1)}`}
+          displayCodeOf={(_item, i) => `${mod === 'co-ir' ? 'coir' : mod}_kpi_${pad2(i + 1)}`}
         />
       )}
 
@@ -481,7 +491,7 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
           pal={pal}
           t={t}
           defaultOpen={false}
-          displayCodeOf={(_item, i) => `c${mod}_kpi_${pad2(i + 1)}`}
+          displayCodeOf={(_item, i) => `${mod === 'co-ir' ? 'ccoir' : `c${mod}`}_kpi_${pad2(i + 1)}`}
         />
       )}
 
@@ -498,7 +508,35 @@ function ModuleConfigPanel({ mod, pal, t }: ModuleConfigPanelProps) {
           formulaLabel="Business Value"
           defaultOpen={true}
           scrollHeight={420}
-          displayCodeOf={(item) => item.id.replace(/-/g, '_')}
+          displayCodeOf={(item) => mod === 'co-ir' ? item.id.replace(/^coir-/, 'ccoir_') : item.id.replace(/-/g, '_')}
+        />
+      )}
+
+      {hotelTables.length > 0 && (
+        <GroupPanel
+          title="Hotel Tables Group"
+          items={hotelTables}
+          checked={draft.tables}
+          onToggle={(id) => toggle('tables', id)}
+          onAll={(value) => setSubset('tables', hotelTables, value)}
+          pal={pal}
+          t={t}
+          formulaLabel="Business Value"
+          defaultOpen={false}
+        />
+      )}
+
+      {corpTables.length > 0 && (
+        <GroupPanel
+          title="Corp Tables Group"
+          items={corpTables}
+          checked={draft.tables}
+          onToggle={(id) => toggle('tables', id)}
+          onAll={(value) => setSubset('tables', corpTables, value)}
+          pal={pal}
+          t={t}
+          formulaLabel="Business Value"
+          defaultOpen={false}
         />
       )}
 
@@ -1574,8 +1612,11 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
         setErrorMsg(body.error ?? 'Failed to load hotels — check password.');
         setStep('idle'); return;
       }
-      setHotels(body.hotels ?? []);
-      if ((body.hotels ?? []).length > 0) setSelected(body.hotels![0].hotel_code);
+      const loadedHotels = [...(body.hotels ?? [])].sort((a, b) =>
+        (a.hotel_name?.trim() || a.hotel_code).localeCompare(b.hotel_name?.trim() || b.hotel_code),
+      );
+      setHotels(loadedHotels);
+      if (loadedHotels.length > 0) setSelected(loadedHotels[0].hotel_code);
       setStep('ready');
     } catch (e) { setErrorMsg(e instanceof Error ? e.message : 'Load failed.'); setStep('idle'); }
   }
@@ -1720,7 +1761,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
                 >
                   {hotels.map((h) => (
                     <option key={h.hotel_code} value={h.hotel_code}>
-                      {h.hotel_code}{h.hotel_name ? ` — ${h.hotel_name}` : ''}
+                      {h.hotel_code}{h.hotel_name?.trim() ? ` - ${h.hotel_name.trim()}` : ''}
                     </option>
                   ))}
                 </select>
@@ -1783,7 +1824,7 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
       {(step === 'preview' || step === 'executing') && (
         <div className="mt-5">
           <p className="mb-2 font-mono uppercase" style={{ fontSize: '0.62rem', letterSpacing: '0.09em', color: selectedModMeta.color }}>
-            Step 3 — upload history ({selectedEntry?.hotel_code}{selectedEntry?.hotel_name ? ` · ${selectedEntry.hotel_name}` : ''} · {module})
+            Step 3 — upload history ({selectedEntry?.hotel_code ?? '—'}{selectedEntry?.hotel_name?.trim() ? ` - ${selectedEntry.hotel_name.trim()}` : ''} · {module})
           </p>
 
           {/* Upload jobs history table */}
@@ -1810,9 +1851,9 @@ function ResetByHotelPanel({ pal, t: _t }: ResetPanelProps) {
                       <td className="px-3 py-1.5 font-mono font-bold whitespace-nowrap"
                         style={{ fontSize: '0.68rem', color: selectedModMeta.color }}>
                         {job.hotel_code ?? selectedEntry?.hotel_code ?? '—'}
-                        {job.hotel_name && (
+                        {(job.hotel_name?.trim() || selectedEntry?.hotel_name?.trim()) && (
                           <span className="ml-1 font-normal" style={{ color: pal.muted, fontSize: '0.58rem' }}>
-                            {job.hotel_name}
+                            - {job.hotel_name?.trim() || selectedEntry?.hotel_name?.trim()}
                           </span>
                         )}
                       </td>
@@ -2041,7 +2082,7 @@ export default function ConfigurationPage() {
                     className="mb-5 font-mono"
                     style={{ color: pal.muted, fontSize: '0.68rem', letterSpacing: '0.04em' }}
                   >
-                    Configure which KPIs and charts are visible on the{' '}
+                    Configure which KPIs, charts, and tables are visible on the{' '}
                     <span style={{ color: pal.accent }}>
                       {TABS.find((tb) => tb.key === activeTab)?.label}
                     </span>{' '}
@@ -2049,7 +2090,7 @@ export default function ConfigurationPage() {
                   </p>
                   <ModuleConfigPanel
                     key={activeTab}
-                    mod={activeTab as ModuleConfigKey}
+                    mod={activeTab as DashboardConfigKey}
                     pal={pal}
                     t={t}
                   />

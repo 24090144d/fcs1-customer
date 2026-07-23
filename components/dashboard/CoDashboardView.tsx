@@ -4271,6 +4271,15 @@ export function CoDashboardView({
   }, []);
   const visibleKpis   = useMemo(() => applyMyDashFilter(localizedKpis,   myDash?.kpis,   (id) => dashConfig.kpis[id]   !== false), [localizedKpis,   dashConfig, myDash]);
   const visibleCharts = useMemo(() => applyMyDashFilter(localizedCharts, myDash?.charts, (id) => dashConfig.charts[id] !== false), [localizedCharts, dashConfig, myDash]);
+  const tableIds = isCorp
+    ? { stay: 'ccot-01', inspector: 'ccot-02', roomType: 'ccot-03' }
+    : { stay: 'cot-01', inspector: 'cot-02', roomType: 'cot-03' };
+  const visibleTables = {
+    stay: dashConfig.tables[tableIds.stay] !== false,
+    inspector: dashConfig.tables[tableIds.inspector] !== false,
+    roomType: dashConfig.tables[tableIds.roomType] !== false,
+  };
+  const hasVisibleTables = visibleTables.stay || visibleTables.inspector || visibleTables.roomType;
   // "Long Charts" — deep multi-level drilldowns that read better at full width, one per row.
   const simpleCharts = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => !LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
   const longCharts   = useMemo(() => visibleCharts.map((c, i) => ({ chart: c, index: i })).filter(({ chart }) => LONG_CHART_IDS.has(chart.id)), [visibleCharts]);
@@ -4668,18 +4677,18 @@ export function CoDashboardView({
           </section>
         )}
 
-        <section>
+        {hasVisibleTables && <section>
           <SectionHead label={t('dashboard_ui.section_table', 'Table')} dark={dark} />
           <div className="mt-5 space-y-4">
-            <CorpCoDrilldownTable
+            {visibleTables.stay && <CorpCoDrilldownTable
               chainCode={data.meta.chain_code ?? ''}
               hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
               hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
               rootLevel={isCorp ? 'hotels' : 'cleaning_types'}
               filters={filters}
               dark={dark}
-            />
-            <CorpCoDrilldownTable
+            />}
+            {visibleTables.inspector && <CorpCoDrilldownTable
               chainCode={data.meta.chain_code ?? ''}
               hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
               hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
@@ -4687,8 +4696,8 @@ export function CoDashboardView({
               hierarchy="inspector"
               filters={filters}
               dark={dark}
-            />
-            <CorpCoDrilldownTable
+            />}
+            {visibleTables.roomType && <CorpCoDrilldownTable
               chainCode={data.meta.chain_code ?? ''}
               hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
               hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
@@ -4696,9 +4705,9 @@ export function CoDashboardView({
               hierarchy="room-type"
               filters={filters}
               dark={dark}
-            />
+            />}
           </div>
-        </section>
+        </section>}
 
         {isCorp && (
           <section>

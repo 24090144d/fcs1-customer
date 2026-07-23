@@ -9,10 +9,10 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 | Key | Value |
 |---|---|
-| Version | **v1.1.25** (released 2026-07-22) |
+| Version | **v1.1.26** (released 2026-07-23) |
 | Branch | `main` |
 | Local dev | `npm run dev` → `http://localhost:3010` |
-| Previous version | v1.1.24 |
+| Previous version | v1.1.25 |
 
 **Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
@@ -59,6 +59,7 @@ Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHA
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.26** | 2026-07-23 | Refreshed Configuration and My Dashboard registries for JO/MO/CO-ACSR/CO-IR/IM, added independent KPI/chart/table visibility controls, improved reset-by-hotel labels, and restored Corp IM `cim-21` as the Hotel → Repeat Rate Dist → Incident Dist drilldown while assigning Hotel Performance Benchmark to `cimt-02`. |
 | **v1.1.25** | 2026-07-22 | Redesigned Corp and Hotel CO-IR charts as date-first multi-level drilldowns with dynamic inspector/cleaner rank ranges and three-series performance leaves (total credit, average duration, pass rate); added Hotel COIR-11 and COIR-12 to the one-per-row Long Charts section for Room Status and Inspection Status analysis. |
 | **v1.1.24** | 2026-07-22 | Added the independent CO Inspection Report (`CO-IR`) upload and dashboard pipeline, hotel/corp navigation, KPI benchmarks, multi-level charts, long charts, draggable inspector drilldown tables, reset scopes, four-language labels, and the idempotent `co_ir_records` Neon schema migration. |
 | **v1.1.23** | 2026-07-22 | JO, MO, CO, and IM detail-table date/time columns now use the compact, timezone-aware `DD/MM/YY HH:mm` format. Detail-table minimum widths were reduced to match the shorter values, including separate CO widths for Stay Status and Inspector hierarchies. |

@@ -86,7 +86,7 @@ export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
     ],
     tables: [
       table('jot-01', 'Hotel JO Drilldown Table', 'Department → Category → Service Item → Detail', 'hotel'),
-      table('jot-02', 'Daily Trend by Service Item', 'Service Item Dist → Service Item → Date (Daily) → Detail', 'hotel'),
+      table('jot-02', 'Daily Trend by Service Item', 'Department → Service Item Dist → Service Item → Date (Daily) → Detail', 'hotel'),
       table('cjot-01', 'Corp JO Drilldown Table', 'Hotel → Department → Category → Service Item → Detail', 'corp'),
       table('cjot-02', 'Daily Trend by Service Item', 'Hotel → Service Item Dist → Service Item → Date (Daily) → Detail', 'corp'),
     ],
@@ -116,7 +116,7 @@ export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
     ],
     tables: [
       table('mot-01', 'Hotel MO Drilldown Table', 'Department → Category → Defect → Detail', 'hotel'),
-      table('mot-02', 'Daily Trend by Defects', 'Defects Dist → Defects → Date (Daily) → Detail', 'hotel'),
+      table('mot-02', 'Daily Trend by Defects', 'Department → Defects Dist → Defects → Date (Daily) → Detail', 'hotel'),
       table('cmot-01', 'Corp MO Drilldown Table', 'Hotel → Department → Category → Defect → Detail', 'corp'),
       table('cmot-02', 'Daily Trend by Defects', 'Hotel → Defects Dist → Defects → Date (Daily) → Detail', 'corp'),
     ],
@@ -143,7 +143,7 @@ export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
       table('cot-01', 'Hotel Stay Status Table', 'Date → Cleaning Type → Stay Status → Attendant → Detail', 'hotel'),
       table('cot-02', 'Hotel Inspector Table', 'Date → Cleaning Type → Inspector → Attendant → Detail', 'hotel'),
       table('cot-03', 'Hotel Room Type Table', 'Date → Cleaning Type → Room Type → Attendant → Detail', 'hotel'),
-      table('cot-04', 'Daily Trend by Attendant', 'Attendant Dist → Attendant → Date (Daily) → Detail', 'hotel'),
+      table('cot-04', 'Daily Trend by Attendant', 'Cleaning Type → Attendant Dist → Attendant → Date (Daily) → Detail', 'hotel'),
       table('ccot-01', 'Corp Stay Status Table', 'Date → Hotel → Cleaning Type → Stay Status → Attendant → Detail', 'corp'),
       table('ccot-02', 'Corp Inspector Table', 'Date → Hotel → Cleaning Type → Inspector → Attendant → Detail', 'corp'),
       table('ccot-03', 'Corp Room Type Table', 'Date → Hotel → Cleaning Type → Room Type → Attendant → Detail', 'corp'),
@@ -190,7 +190,7 @@ export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
     })),
     tables: [
       table('coirt-01', 'Inspector Table for Hotel', 'Date → Room Status → Inspector → Detail', 'hotel'),
-      table('coirt-02', 'Daily Trend by Inspector', 'Inspector Dist → Inspector → Date (Daily) → Detail', 'hotel'),
+      table('coirt-02', 'Daily Trend by Inspector', 'Inspection Status → Inspector Dist → Inspector → Date (Daily) → Detail', 'hotel'),
       table('ccoirt-01', 'Inspector Table for Corp', 'Date → Hotel → Room Status → Inspector → Detail', 'corp'),
       table('ccoirt-02', 'Daily Trend by Inspector', 'Hotel → Inspector Dist → Inspector → Date (Daily) → Detail', 'corp'),
     ],
@@ -226,7 +226,7 @@ export const MODULE_DEFS: Record<DashboardConfigKey, ModuleDef> = {
     ],
     tables: [
       table('imt-01', 'Hotel IM Drilldown Table', 'Department → Category → Incident → Detail', 'hotel'),
-      table('imt-02', 'Daily Trend by Incident', 'Incident Dist → Incident → Date (Daily) → Detail', 'hotel'),
+      table('imt-02', 'Daily Trend by Incident', 'Department → Incident Dist → Incident → Date (Daily) → Detail', 'hotel'),
       table('cimt-01', 'Corp IM Drilldown Table', 'Hotel → Department → Category → Incident → Detail', 'corp'),
       table('cimt-02', 'Daily Trend by Incident', 'Hotel → Incident Dist → Incident → Date (Daily) → Detail', 'corp'),
       {

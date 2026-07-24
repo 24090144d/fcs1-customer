@@ -75,6 +75,7 @@ type TableResponse = { rows?: TableRow[]; timezone?: string; error?: string };
 
 type DrillPath = {
   hotel: string;
+  group?: string;
   distName?: string;
   distStart?: number;
   distEnd?: number;
@@ -86,7 +87,7 @@ type Props = {
   chainCode: string;
   hotelFilter: string;
   hotelNames: Record<string, string>;
-  rootLevel?: 'hotels' | 'dists';
+  rootLevel?: 'hotels' | 'groups';
   from?: string;
   to?: string;
   dark: boolean;
@@ -115,10 +116,11 @@ export function JoDailyTrendDrilldownTable({
   const [modalLoading, setModalLoading] = useState(false);
   const [timezone, setTimezone] = useState('Asia/Hong_Kong');
 
-  const queryUrl = useCallback((level: 'hotels' | ModalLevel, drillPath?: DrillPath) => {
+  const queryUrl = useCallback((level: 'hotels' | 'groups' | ModalLevel, drillPath?: DrillPath) => {
     const query = new URLSearchParams({ level, chain: chainCode });
     const selectedHotel = drillPath?.hotel || (hotelFilter !== 'ALL' ? hotelFilter : '');
     if (selectedHotel) query.set('hotel', selectedHotel);
+    if (drillPath?.group) query.set('group', drillPath.group);
     if (drillPath?.distStart) query.set('dist_start', String(drillPath.distStart));
     if (drillPath?.distEnd) query.set('dist_end', String(drillPath.distEnd));
     if (drillPath?.item) query.set('item', drillPath.item);
@@ -201,9 +203,8 @@ export function JoDailyTrendDrilldownTable({
       setPath({ hotel: row.name });
       setModalLevel('dists');
     } else {
-      const dist = row as DistRow;
-      setPath({ hotel: hotelFilter, distName: dist.name, distStart: dist.range_start, distEnd: dist.range_end });
-      setModalLevel('items');
+      setPath({ hotel: hotelFilter, group: row.name });
+      setModalLevel('dists');
     }
   };
 
@@ -233,10 +234,8 @@ export function JoDailyTrendDrilldownTable({
     beginTransition();
     if (modalLevel === 'details') setModalLevel('dates');
     else if (modalLevel === 'dates') setModalLevel('items');
-    else if (modalLevel === 'items') {
-      if (rootLevel === 'dists') setModalLevel(null);
-      else setModalLevel('dists');
-    } else setModalLevel(null);
+    else if (modalLevel === 'items') setModalLevel('dists');
+    else setModalLevel(null);
   };
 
   const modalTitle = useMemo(() => {
@@ -250,7 +249,7 @@ export function JoDailyTrendDrilldownTable({
     if (!path) return [];
     const parts = rootLevel === 'hotels'
       ? [hotelLabel(path.hotel), path.distName, path.item, path.date]
-      : [path.distName, path.item, path.date];
+      : [path.group, path.distName, path.item, path.date];
     return parts.filter(Boolean) as string[];
   }, [path, hotelLabel, rootLevel]);
 
@@ -282,12 +281,15 @@ export function JoDailyTrendDrilldownTable({
     <button type="button" onClick={onClick} title={`${actionLabel}: ${name}`} aria-label={`${actionLabel}: ${name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-105 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2" style={{ color: tokens.accent, border: `1px solid ${tokens.accent}55`, background: tokens.accentTint }}><CircleChevronRight size={17} aria-hidden="true" /></button>
   );
 
-  const exportRows = (level: 'hotels' | ModalLevel, rows: TableRow[]) => {
+  const exportRows = (level: 'hotels' | 'groups' | ModalLevel, rows: TableRow[]) => {
     let headers: string[] = [];
     let values: CsvValue[][] = [];
     if (level === 'hotels') {
       headers = [t('dashboard_ui.jo_table_hotel', 'Hotel'), t('dashboard_ui.jo_table_total_jobs', 'Total Jobs'), t('dashboard_ui.jo_table_service_items', 'Service Items'), t('dashboard_ui.jo_daily_active_days', 'Active Days'), t('dashboard_ui.jo_table_completed', 'Completed'), t('dashboard_ui.jo_table_delayed', 'Delayed'), t('dashboard_ui.jo_table_completion_rate', 'Completion Rate'), t('dashboard_ui.jo_table_average_duration', 'Average Duration')];
       values = (rows as HotelRow[]).map((row) => [hotelLabel(row.name), row.total_jobs, row.distinct_count, row.active_days, row.completed, row.delayed, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration_minutes)]);
+    } else if (level === 'groups') {
+      headers = [t('dashboard_ui.jo_table_department', 'Department'), t('dashboard_ui.jo_table_total_jobs', 'Total Jobs'), t('dashboard_ui.jo_table_service_items', 'Service Items'), t('dashboard_ui.jo_daily_active_days', 'Active Days'), t('dashboard_ui.jo_table_completed', 'Completed'), t('dashboard_ui.jo_table_delayed', 'Delayed'), t('dashboard_ui.jo_table_completion_rate', 'Completion Rate'), t('dashboard_ui.jo_table_average_duration', 'Average Duration')];
+      values = (rows as HotelRow[]).map((row) => [row.name, row.total_jobs, row.distinct_count, row.active_days, row.completed, row.delayed, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration_minutes)]);
     } else if (level === 'dists') {
       headers = [t('dashboard_ui.jo_daily_item_dist', 'Service Item Dist'), t('dashboard_ui.jo_table_service_items', 'Service Items'), t('dashboard_ui.jo_table_total_jobs', 'Total Jobs'), t('dashboard_ui.jo_table_completed', 'Completed'), t('dashboard_ui.jo_table_delayed', 'Delayed'), t('dashboard_ui.jo_table_completion_rate', 'Completion Rate'), t('dashboard_ui.jo_table_average_duration', 'Average Duration')];
       values = (rows as DistRow[]).map((row) => [row.name, row.distinct_count, row.total_jobs, row.completed, row.delayed, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration_minutes)]);
@@ -301,12 +303,12 @@ export function JoDailyTrendDrilldownTable({
       headers = [t('dashboard_ui.jo_table_job_order', 'Job Order'), t('dashboard_ui.jo_table_created_time', 'Created Time'), t('dashboard_ui.jo_table_completed_time', 'Completed Time'), t('dashboard_ui.jo_table_location', 'Location'), t('dashboard_ui.jo_table_qty', 'Qty'), t('dashboard_ui.jo_table_status', 'Status'), t('dashboard_ui.jo_table_assigned_to', 'Assigned To'), t('dashboard_ui.jo_table_completed_by', 'Completed By'), t('dashboard_ui.jo_table_duration', 'Duration'), t('dashboard_ui.jo_table_delay', 'Delay'), t('dashboard_ui.jo_table_guest_name', 'Guest Name')];
       values = (rows as DetailRow[]).map((row) => [row.job_order, formatDateTime(row.created_datetime), formatDateTime(row.completed_datetime), row.location, row.quantity, row.status, row.assigned_to, row.completed_by, formatDuration(row.duration_minutes), row.delay, row.guest_name]);
     }
-    const scope = [chainCode, path?.hotel, path?.distName, path?.item, path?.date, level].filter(Boolean).map((part) => csvSlug(String(part))).join('-');
+    const scope = [chainCode, path?.hotel, path?.group, path?.distName, path?.item, path?.date, level].filter(Boolean).map((part) => csvSlug(String(part))).join('-');
     downloadCsvFile(`jo-daily-${scope}.csv`, headers, values);
   };
 
-  const HotelTable = ({ rows, root = false }: { rows: HotelRow[]; root?: boolean }) => (
-    <table className="min-w-[1100px] w-full"><thead style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[t('dashboard_ui.jo_table_hotel', 'Hotel'), t('dashboard_ui.jo_table_total_jobs', 'Total Jobs'), t('dashboard_ui.jo_table_service_items', 'Service Items'), t('dashboard_ui.jo_daily_active_days', 'Active Days'), t('dashboard_ui.jo_table_completed', 'Completed'), t('dashboard_ui.jo_table_delayed', 'Delayed'), t('dashboard_ui.jo_table_completion_rate', 'Completion Rate'), t('dashboard_ui.jo_table_average_duration', 'Average Duration'), t('dashboard_ui.jo_table_action', 'Action')].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.name}><td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{hotelLabel(row.name)}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.total_jobs.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.distinct_count.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.active_days.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.delayed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completion_rate.toFixed(1)}%</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.avg_duration_minutes)}</td><td className="px-3 py-2" style={tdStyle}><DrillButton name={row.name} onClick={() => root && openRootRow(row)} /></td></tr>)}</tbody></table>
+  const HotelTable = ({ rows, root = false, grouped = false }: { rows: HotelRow[]; root?: boolean; grouped?: boolean }) => (
+    <table className="min-w-[1100px] w-full"><thead style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[grouped ? t('dashboard_ui.jo_table_department', 'Department') : t('dashboard_ui.jo_table_hotel', 'Hotel'), t('dashboard_ui.jo_table_total_jobs', 'Total Jobs'), t('dashboard_ui.jo_table_service_items', 'Service Items'), t('dashboard_ui.jo_daily_active_days', 'Active Days'), t('dashboard_ui.jo_table_completed', 'Completed'), t('dashboard_ui.jo_table_delayed', 'Delayed'), t('dashboard_ui.jo_table_completion_rate', 'Completion Rate'), t('dashboard_ui.jo_table_average_duration', 'Average Duration'), t('dashboard_ui.jo_table_action', 'Action')].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.name}><td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{grouped ? row.name : hotelLabel(row.name)}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.total_jobs.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.distinct_count.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.active_days.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.delayed.toLocaleString()}</td><td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.completion_rate.toFixed(1)}%</td><td className="px-3 py-2 font-mono text-xs whitespace-nowrap" style={tdStyle}>{formatDuration(row.avg_duration_minutes)}</td><td className="px-3 py-2" style={tdStyle}><DrillButton name={row.name} onClick={() => root && openRootRow(row)} /></td></tr>)}</tbody></table>
   );
 
   const DistTable = ({ rows, root = false }: { rows: DistRow[]; root?: boolean }) => (
@@ -319,10 +321,10 @@ export function JoDailyTrendDrilldownTable({
     <>
       <div className="overflow-hidden" style={{ background: tokens.card.bg, border: `1px solid ${tokens.card.border}`, borderLeft: `4px solid ${tokens.accent}`, borderRadius: '12px' }}>
         <div className="flex items-start justify-between gap-3 px-4 py-3" style={{ borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` }}>
-          <div><TableCodeTitle code={tableCode} title={t('dashboard_ui.jo_daily_title', 'Daily Trend by Service Item')} titleColor={tokens.text} codeColor={tokens.accent} background={tokens.chart.codeBg} /><p className="mt-1 font-mono text-[0.62rem]" style={{ color: tokens.dashboard.tableMuted }}>{rootLevel === 'hotels' ? t('dashboard_ui.jo_daily_corp_hierarchy', 'Hotel → Service Item Dist → Service Item → Date (Daily) → Detail') : t('dashboard_ui.jo_daily_hotel_hierarchy', 'Service Item Dist → Service Item → Date (Daily) → Detail')}</p></div>
+          <div><TableCodeTitle code={tableCode} title={t('dashboard_ui.jo_daily_title', 'Daily Trend by Service Item')} titleColor={tokens.text} codeColor={tokens.accent} background={tokens.chart.codeBg} /><p className="mt-1 font-mono text-[0.62rem]" style={{ color: tokens.dashboard.tableMuted }}>{rootLevel === 'hotels' ? t('dashboard_ui.jo_daily_corp_hierarchy', 'Hotel → Service Item Dist → Service Item → Date (Daily) → Detail') : t('dashboard_ui.jo_daily_hotel_hierarchy', 'Department → Service Item Dist → Service Item → Date (Daily) → Detail')}</p></div>
           <ExportButton onClick={() => exportRows(rootLevel, rootRows)} disabled={rootLoading || rootRows.length === 0} />
         </div>
-        <div className="overflow-x-auto">{rootLoading ? <div className="p-8 flex items-center justify-center gap-2 font-mono text-xs" style={{ color: tokens.dashboard.tableMuted }}><LoaderCircle size={16} className="animate-spin" /> {t('dashboard_ui.jo_table_loading', 'Loading table data…')}</div> : rootRows.length === 0 ? <EmptyState /> : rootLevel === 'hotels' ? <HotelTable rows={rootRows as HotelRow[]} root /> : <DistTable rows={rootRows as DistRow[]} root />}</div>
+        <div className="overflow-x-auto">{rootLoading ? <div className="p-8 flex items-center justify-center gap-2 font-mono text-xs" style={{ color: tokens.dashboard.tableMuted }}><LoaderCircle size={16} className="animate-spin" /> {t('dashboard_ui.jo_table_loading', 'Loading table data…')}</div> : rootRows.length === 0 ? <EmptyState /> : <HotelTable rows={rootRows as HotelRow[]} root grouped={rootLevel === 'groups'} />}</div>
       </div>
 
       {modalLevel && path && typeof document !== 'undefined' && createPortal((

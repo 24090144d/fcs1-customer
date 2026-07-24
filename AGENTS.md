@@ -9,10 +9,10 @@ Read this before writing any code. See `CLAUDE.md` for deep technical patterns (
 
 | Key | Value |
 |---|---|
-| Version | **v1.1.30** (released 2026-07-24) |
+| Version | **v1.1.31** (released 2026-07-24) |
 | Branch | `main` |
 | Local dev | `npm run dev` → `http://localhost:3010` |
-| Previous version | v1.1.29 |
+| Previous version | v1.1.30 |
 
 **Local-only testing rule:** only test against localhost (`npm run dev`, port 3010). Never push, deploy, or commit unless the user explicitly asks in that turn — a past approval is not standing permission.
 
@@ -59,6 +59,7 @@ Long-Charts membership lives in per-module `Set<string>` constants (`MO_LONG_CHA
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.31** | 2026-07-24 | Extended Hotel daily drilldown tables with a business grouping before each rank distribution: JO starts at Department, MO at Department, IM at Department, CO-ACSR at Cleaning Type, and CO-IR at Inspection Status. Group filters now persist through item, daily, detail, breadcrumb, and CSV export levels while Corp hierarchies remain hotel-first. |
 | **v1.1.30** | 2026-07-24 | Removed the CO-IR `Duration Source` column from Corp and Hotel daily-inspector detail tables and CSV exports. Hardened the shared terminal detail renderer against PostgreSQL numeric values returned as strings, preventing client-side exceptions when formatting inspection score, credit, duration, standard, and variance. |
 | **v1.1.29** | 2026-07-23 | Added live database-backed daily drilldown tables across Corp and Hotel JO, MO, IM, CO-ACSR, and CO-IR. New table routes provide rank distributions, named item/attendant/inspector drilldowns, ascending daily summaries, compact source-record details, CSV export, active dashboard filters, and literal source timestamp preservation without requiring CSV re-upload. |
 | **v1.1.28** | 2026-07-23 | Standardized CO-IR, IM, and MO terminal drilldown combinations across corp and hotel renderers. CO-IR now uses Total Credit and Pass Rate columns with an Average Duration spline; IM uses Total Incident and Repeat Rate columns with Average Duration and Closing Rate splines; MO uses Total Order and Delay Rate columns with a Completed Duration spline. Shared metric-leaf helpers enforce consistent deep-teal, brick-red, burnt/amber-orange, and muted-purple series colors plus visible unit-aware data labels. |

@@ -75,6 +75,7 @@ type TableResponse = { rows?: TableRow[]; timezone?: string; error?: string };
 
 type DrillPath = {
   hotel: string;
+  group?: string;
   distName?: string;
   distStart?: number;
   distEnd?: number;
@@ -87,7 +88,7 @@ type Props = {
   chainCode: string;
   hotelFilter: string;
   hotelNames: Record<string, string>;
-  rootLevel?: 'hotels' | 'dists';
+  rootLevel?: 'hotels' | 'groups';
   maintenanceType?: 'MO' | 'PM';
   from?: string;
   to?: string;
@@ -148,12 +149,19 @@ export function ModuleDailyTrendDrilldownTable({
             ? t('dashboard_ui.co_daily_corp_hierarchy', 'Hotel → Attendant Dist → Attendant → Date (Daily) → Detail')
             : t('dashboard_ui.co_ir_daily_corp_hierarchy', 'Hotel → Inspector Dist → Inspector → Date (Daily) → Detail'))
       : (isMo
-        ? t('dashboard_ui.mo_daily_hotel_hierarchy', 'Defects Dist → Defects → Date (Daily) → Detail')
+        ? t('dashboard_ui.mo_daily_hotel_hierarchy', 'Department → Defects Dist → Defects → Date (Daily) → Detail')
         : isIm
-          ? t('dashboard_ui.im_daily_hotel_hierarchy', 'Incident Dist → Incident → Date (Daily) → Detail')
+          ? t('dashboard_ui.im_daily_hotel_hierarchy', 'Department → Incident Dist → Incident → Date (Daily) → Detail')
           : isCo
-            ? t('dashboard_ui.co_daily_hotel_hierarchy', 'Attendant Dist → Attendant → Date (Daily) → Detail')
-            : t('dashboard_ui.co_ir_daily_hotel_hierarchy', 'Inspector Dist → Inspector → Date (Daily) → Detail')),
+            ? t('dashboard_ui.co_daily_hotel_hierarchy', 'Cleaning Type → Attendant Dist → Attendant → Date (Daily) → Detail')
+            : t('dashboard_ui.co_ir_daily_hotel_hierarchy', 'Inspection Status → Inspector Dist → Inspector → Date (Daily) → Detail')),
+    group: isMo
+      ? t('dashboard_ui.mo_table_department', 'Department')
+      : isIm
+        ? t('dashboard_ui.im_table_department', 'Department')
+        : isCo
+          ? t('dashboard_ui.co_table_cleaning_type', 'Cleaning Type')
+          : t('dashboard_ui.co_ir_daily_inspection_status', 'Inspection Status'),
     item: isMo
       ? t('dashboard_ui.mo_table_defect', 'Defect')
       : isIm
@@ -203,10 +211,11 @@ export function ModuleDailyTrendDrilldownTable({
         : t('dashboard_ui.co_table_average_time', 'Average Time'),
   }), [isCo, isIm, isMo, rootLevel, t]);
 
-  const queryUrl = useCallback((level: 'hotels' | ModalLevel, drillPath?: DrillPath) => {
+  const queryUrl = useCallback((level: 'hotels' | 'groups' | ModalLevel, drillPath?: DrillPath) => {
     const query = new URLSearchParams({ level, chain: chainCode });
     const selectedHotel = drillPath?.hotel || (hotelFilter !== 'ALL' ? hotelFilter : '');
     if (selectedHotel) query.set('hotel', selectedHotel);
+    if (drillPath?.group) query.set('group', drillPath.group);
     if (drillPath?.distStart) query.set('dist_start', String(drillPath.distStart));
     if (drillPath?.distEnd) query.set('dist_end', String(drillPath.distEnd));
     if (drillPath?.item) query.set('item', drillPath.item);
@@ -295,9 +304,8 @@ export function ModuleDailyTrendDrilldownTable({
       setModalLevel('dists');
       return;
     }
-    const dist = row as DistRow;
-    setPath({ hotel: hotelFilter, distName: dist.name, distStart: dist.range_start, distEnd: dist.range_end });
-    setModalLevel('items');
+    setPath({ hotel: hotelFilter, group: row.name });
+    setModalLevel('dists');
   };
 
   const drillDist = (row: DistRow) => {
@@ -327,10 +335,8 @@ export function ModuleDailyTrendDrilldownTable({
     setModalLoading(true);
     if (modalLevel === 'details') setModalLevel('dates');
     else if (modalLevel === 'dates') setModalLevel('items');
-    else if (modalLevel === 'items') {
-      if (rootLevel === 'dists') setModalLevel(null);
-      else setModalLevel('dists');
-    } else {
+    else if (modalLevel === 'items') setModalLevel('dists');
+    else {
       setModalLevel(null);
     }
   };
@@ -346,7 +352,7 @@ export function ModuleDailyTrendDrilldownTable({
     if (!path) return [];
     const parts = rootLevel === 'hotels'
       ? [hotelLabel(path.hotel), path.distName, path.item, path.date]
-      : [path.distName, path.item, path.date];
+      : [path.group, path.distName, path.item, path.date];
     return parts.filter(Boolean) as string[];
   }, [hotelLabel, path, rootLevel]);
 
@@ -386,12 +392,15 @@ export function ModuleDailyTrendDrilldownTable({
     <button type="button" onClick={onClick} title={`${actionLabel}: ${name}`} aria-label={`${actionLabel}: ${name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-all hover:scale-105 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2" style={{ color: tokens.accent, border: `1px solid ${tokens.accent}55`, background: tokens.accentTint }}><CircleChevronRight size={17} aria-hidden="true" /></button>
   );
 
-  const exportRows = (level: 'hotels' | ModalLevel, rows: TableRow[]) => {
+  const exportRows = (level: 'hotels' | 'groups' | ModalLevel, rows: TableRow[]) => {
     let headers: string[] = [];
     let values: CsvValue[][] = [];
     if (level === 'hotels') {
       headers = [t('dashboard_ui.daily_table_hotel', 'Hotel'), labels.total, labels.items, t('dashboard_ui.daily_table_active_days', 'Active Days'), t('dashboard_ui.daily_table_completed', 'Completed'), labels.exception, labels.rate, labels.average];
       values = (rows as SummaryRow[]).map((row) => [hotelLabel(row.name), row.total, row.distinct_count, row.active_days, row.completed, row.exception_count, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration)]);
+    } else if (level === 'groups') {
+      headers = [labels.group, labels.items, labels.total, t('dashboard_ui.daily_table_active_days', 'Active Days'), t('dashboard_ui.daily_table_completed', 'Completed'), labels.exception, labels.rate, labels.average];
+      values = (rows as SummaryRow[]).map((row) => [row.name, row.distinct_count, row.total, row.active_days, row.completed, row.exception_count, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration)]);
     } else if (level === 'dists') {
       headers = [labels.dist, labels.items, labels.total, t('dashboard_ui.daily_table_completed', 'Completed'), labels.exception, labels.rate, labels.average];
       values = (rows as DistRow[]).map((row) => [row.name, row.distinct_count, row.total, row.completed, row.exception_count, `${row.completion_rate.toFixed(1)}%`, formatDuration(row.avg_duration)]);
@@ -447,15 +456,15 @@ export function ModuleDailyTrendDrilldownTable({
       headers = [t('dashboard_ui.im_table_case_number', 'Case Number'), t('dashboard_ui.im_table_date_time', 'Date / Time'), t('dashboard_ui.daily_table_completed_time', 'Completed Time'), t('dashboard_ui.im_table_room', 'Room'), t('dashboard_ui.im_table_guest', 'Guest'), t('dashboard_ui.im_table_status', 'Status'), t('dashboard_ui.im_table_severity', 'Severity'), labels.average, t('dashboard_ui.im_table_complaint_source', 'Complaint Source')];
       values = (rows as DetailRow[]).map((row) => [row.record_id, formatDateTime(row.created_datetime), formatDateTime(row.completed_datetime), row.room_no ?? '—', row.guest_name ?? '—', row.status, row.severity ?? '—', formatDuration(row.duration), row.complaint_source ?? '—']);
     }
-    const scope = [module, chainCode, path?.hotel, path?.distName, path?.item, path?.date, level].filter(Boolean).map((part) => csvSlug(String(part))).join('-');
+    const scope = [module, chainCode, path?.hotel, path?.group, path?.distName, path?.item, path?.date, level].filter(Boolean).map((part) => csvSlug(String(part))).join('-');
     downloadCsvFile(`${scope}.csv`, headers, values);
   };
 
-  const SummaryTable = ({ rows, root = false, distribution = false }: { rows: Array<SummaryRow | DistRow>; root?: boolean; distribution?: boolean }) => (
+  const SummaryTable = ({ rows, root = false, distribution = false, grouped = false }: { rows: Array<SummaryRow | DistRow>; root?: boolean; distribution?: boolean; grouped?: boolean }) => (
     <table className="min-w-[980px] w-full">
       <thead style={{ background: tokens.dashboard.tableHeadBg }}><tr>
         {[
-          (distribution ? labels.dist : t('dashboard_ui.daily_table_hotel', 'Hotel')),
+          (distribution ? labels.dist : grouped ? labels.group : t('dashboard_ui.daily_table_hotel', 'Hotel')),
           labels.items,
           labels.total,
           ...(!distribution ? [t('dashboard_ui.daily_table_active_days', 'Active Days')] : []),
@@ -467,7 +476,7 @@ export function ModuleDailyTrendDrilldownTable({
         ].map((label) => <th key={label} className="px-3 py-2 text-left font-mono uppercase" style={{ ...thStyle, fontSize: '0.62rem', letterSpacing: '0.06em' }}>{label}</th>)}
       </tr></thead>
       <tbody>{rows.map((row) => <tr key={distribution ? `${(row as DistRow).range_start}-${(row as DistRow).range_end}` : row.name}>
-        <td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{distribution ? row.name : hotelLabel(row.name)}</td>
+        <td className="px-3 py-2 text-sm font-semibold" style={tdStyle}>{distribution || grouped ? row.name : hotelLabel(row.name)}</td>
         <td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.distinct_count.toLocaleString()}</td>
         <td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.total.toLocaleString()}</td>
         {!distribution && <td className="px-3 py-2 font-mono text-xs" style={tdStyle}>{row.active_days.toLocaleString()}</td>}
@@ -493,7 +502,7 @@ export function ModuleDailyTrendDrilldownTable({
           ? <div className="p-8 flex items-center justify-center gap-2 font-mono text-xs" style={{ color: tokens.dashboard.tableMuted }}><LoaderCircle size={16} className="animate-spin" /> {t('dashboard_ui.daily_table_loading', 'Loading table data…')}</div>
           : rootRows.length === 0
             ? <EmptyState />
-            : <SummaryTable rows={rootRows} root distribution={rootLevel === 'dists'} />}
+            : <SummaryTable rows={rootRows} root grouped={rootLevel === 'groups'} />}
         </div>
       </div>
 

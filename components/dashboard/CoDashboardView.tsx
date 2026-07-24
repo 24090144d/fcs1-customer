@@ -4709,7 +4709,7 @@ export function CoDashboardView({
               chainCode={data.meta.chain_code ?? ''}
               hotelFilter={isCorp ? hotelFilter : (data.meta.hotel_code ?? '')}
               hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name]))}
-              rootLevel={isCorp ? 'hotels' : 'dists'}
+              rootLevel={isCorp ? 'hotels' : 'groups'}
               from={filters.dateFrom}
               to={filters.dateTo}
               coFilters={filters}

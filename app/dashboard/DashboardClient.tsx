@@ -5329,7 +5329,7 @@ function MaintenanceDashboardView({ data, chainEntries = [], myDash, myDashEmbed
                   chainCode={data.meta.chain_code}
                   hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
                   hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  rootLevel={isCorp ? 'hotels' : 'groups'}
                   maintenanceType={maintenanceType}
                   from={filtered ? dateFrom : ''}
                   to={filtered ? dateTo : ''}
@@ -7042,7 +7042,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
                   chainCode={data.meta.chain_code}
                   hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
                   hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  rootLevel={isCorp ? 'hotels' : 'groups'}
                   from={filtered ? dateFrom : ''}
                   to={filtered ? dateTo : ''}
                   dark={dark}
@@ -7075,7 +7075,7 @@ function StandardDashboardClient({ data, chainEntries = [], myDash, myDashEmbed 
                   chainCode={data.meta.chain_code}
                   hotelFilter={isCorp ? hotelFilter : data.meta.hotel_code}
                   hotelNames={Object.fromEntries(chainEntries.map((entry) => [entry.hotel_code, entry.hotel_name || entry.hotel_code]))}
-                  rootLevel={isCorp ? 'hotels' : 'dists'}
+                  rootLevel={isCorp ? 'hotels' : 'groups'}
                   from={filtered ? dateFrom : ''}
                   to={filtered ? dateTo : ''}
                   dark={dark}

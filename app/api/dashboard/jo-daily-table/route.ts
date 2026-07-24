@@ -3,9 +3,9 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getPool } from '@/lib/db/supabaseCompat';
 import { resolveLiveTimezone } from '@/lib/dashboard-fetch';
 
-type TableLevel = 'hotels' | 'dists' | 'items' | 'dates' | 'details';
+type TableLevel = 'hotels' | 'groups' | 'dists' | 'items' | 'dates' | 'details';
 
-const LEVELS = new Set<TableLevel>(['hotels', 'dists', 'items', 'dates', 'details']);
+const LEVELS = new Set<TableLevel>(['hotels', 'groups', 'dists', 'items', 'dates', 'details']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function clean(value: string | null, max = 200): string {
@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     const level = clean(url.searchParams.get('level'), 24) as TableLevel;
     const chain = clean(url.searchParams.get('chain'), 32).toUpperCase();
     const hotel = clean(url.searchParams.get('hotel'), 64).toUpperCase();
+    const group = clean(url.searchParams.get('group'));
     const item = clean(url.searchParams.get('item'));
     const date = clean(url.searchParams.get('date'), 10);
     const from = clean(url.searchParams.get('from'), 10);
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
     };
 
     if (hotel && hotel !== 'ALL') add(hotel, (index) => `hotel_code = $${index}`);
+    if (group) add(group, (index) => `group_key = $${index}`);
     if (from) add(from, (index) => `local_date >= $${index}::date`);
     if (to) add(to, (index) => `local_date <= $${index}::date`);
 
@@ -66,6 +68,11 @@ export async function GET(req: NextRequest) {
       WITH source AS (
         SELECT
           hotel_code,
+          CASE
+            WHEN COALESCE(NULLIF(BTRIM(department_name), ''), NULLIF(BTRIM(assigned_to_department), '')) ~* 'housekeep'
+              THEN 'Housekeeping'
+            ELSE COALESCE(NULLIF(BTRIM(department_name), ''), NULLIF(BTRIM(assigned_to_department), ''), 'Unknown Department')
+          END AS group_key,
           COALESCE(NULLIF(BTRIM(service_item), ''), 'Unknown Service Item') AS item,
           COALESCE(NULLIF(BTRIM(job_status), ''), 'Unknown') AS status,
           COALESCE(is_complete, false) OR COALESCE(job_status, '') ~* '(complete|closed|done|finish)' AS completed_flag,
@@ -139,6 +146,15 @@ export async function GET(req: NextRequest) {
         FROM base
         GROUP BY hotel_code
         ORDER BY total_jobs DESC, name ASC`;
+    } else if (level === 'groups') {
+      sql = `${base}
+        SELECT group_key AS name, COUNT(*)::int AS total_jobs,
+          COUNT(DISTINCT item)::int AS distinct_count, COUNT(DISTINCT local_date)::int AS active_days,
+          COUNT(*) FILTER (WHERE completed_flag)::int AS completed,
+          COUNT(*) FILTER (WHERE delayed_flag)::int AS delayed,
+          ROUND(100.0 * COUNT(*) FILTER (WHERE completed_flag) / NULLIF(COUNT(*), 0), 1)::float8 AS completion_rate,
+          ROUND(AVG(duration_minutes) FILTER (WHERE ${validDuration}), 1)::float8 AS avg_duration_minutes
+        FROM base GROUP BY group_key ORDER BY total_jobs DESC, name ASC`;
     } else if (level === 'dists') {
       sql = `${base}, ${itemAgg}
         SELECT

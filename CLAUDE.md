@@ -12,7 +12,7 @@ Read this file before touching any code. The rules here override default behavio
 | Key | Value |
 |---|---|
 | App | FCS1 Customer Dashboard |
-| Version | **v1.1.30** (as of 2026-07-24) |
+| Version | **v1.1.31** (as of 2026-07-24) |
 | Stack | Next.js 14 App Router · TypeScript · Highcharts · Neon (Postgres) · Vercel |
 | Branch | `main` only — no feature branches unless explicitly requested |
 | Local dev | `http://localhost:3010` (`npm run dev`) |
@@ -354,6 +354,7 @@ node -e "['en','ja','zh-TW','zh-CN'].forEach(l => { try { JSON.parse(require('fs
 
 | Version | Date | Summary |
 |---|---|---|
+| **v1.1.31** | 2026-07-24 | Extended Hotel daily drilldown tables with a business grouping before each rank distribution: JO starts at Department, MO at Department, IM at Department, CO-ACSR at Cleaning Type, and CO-IR at Inspection Status. Group filters now persist through item, daily, detail, breadcrumb, and CSV export levels while Corp hierarchies remain hotel-first. |
 | **v1.1.30** | 2026-07-24 | Removed the CO-IR `Duration Source` column from Corp and Hotel daily-inspector detail tables and CSV exports. Hardened the shared terminal detail renderer against PostgreSQL numeric values returned as strings, preventing client-side exceptions when formatting inspection score, credit, duration, standard, and variance. |
 | **v1.1.28** | 2026-07-23 | Standardized CO-IR, IM, and MO terminal drilldown combinations across corp and hotel renderers. CO-IR now uses Total Credit and Pass Rate columns with an Average Duration spline; IM uses Total Incident and Repeat Rate columns with Average Duration and Closing Rate splines; MO uses Total Order and Delay Rate columns with a Completed Duration spline. Shared metric-leaf helpers enforce consistent deep-teal, brick-red, burnt/amber-orange, and muted-purple series colors plus visible unit-aware data labels. |
 | **v1.1.27** | 2026-07-23 | Fixed Corp IM `cim-21` no-data rendering by adding the missing live `all/ALL` incident-item aggregate. Added renderer-level Highcharts drilldown x-axis state snapshots and restoration, preserving labels, type, title, and visibility across JO/MO/CO/CO-IR/IM when returning from multi-series combo leaves. |

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
           COALESCE(inspection_result, '') ~* '(fail|failed|reject|not pass)' AS exception_flag,
           inspection_duration_minutes::numeric AS duration_minutes,
           COALESCE(NULLIF(BTRIM(row_key), ''), hotel_code || '-' || COALESCE(location, 'room') || '-' || row_number::text) AS record_id,
-          location, room_status, cleaned_by, start_time, complete_time, duration_source,
+          location, room_status, cleaned_by, start_time, complete_time,
           inspection_result, inspection_score, inspection_credit, row_number
         FROM co_ir_records
         WHERE chain_code = $1 AND inspection_date IS NOT NULL
@@ -144,7 +144,7 @@ export async function GET(req: NextRequest) {
         SELECT record_id, start_time AS created_datetime, complete_time AS completed_datetime,
           location, room_status, cleaned_by, COALESCE(NULLIF(BTRIM(inspection_result), ''), 'Unknown') AS status,
           CASE WHEN ${validDuration} THEN ROUND(duration_minutes, 1)::float8 END AS duration,
-          duration_source, inspection_score, COALESCE(inspection_credit, 0)::float8 AS credit
+          inspection_score, COALESCE(inspection_credit, 0)::float8 AS credit
         FROM base WHERE item = $${params.length - 1} AND source_date = $${params.length}::date
         ORDER BY source_date ASC, start_time ASC NULLS LAST, location ASC, row_number ASC`;
     }

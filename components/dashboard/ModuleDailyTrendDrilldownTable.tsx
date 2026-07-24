@@ -53,7 +53,7 @@ type DetailRow = {
   status: string;
   assigned_to?: string;
   completed_by?: string;
-  duration: number | null;
+  duration: number | string | null;
   delay?: number | null;
   guest_name?: string;
   room_no?: string;
@@ -62,13 +62,12 @@ type DetailRow = {
   floor?: string;
   service_round?: string;
   inspector?: string;
-  standard?: number | null;
-  variance?: number | null;
-  credit?: number;
+  standard?: number | string | null;
+  variance?: number | string | null;
+  credit?: number | string;
   room_status?: string;
   cleaned_by?: string;
-  duration_source?: string;
-  inspection_score?: number | null;
+  inspection_score?: number | string | null;
 };
 
 type TableRow = SummaryRow | DistRow | ItemRow | DateRow | DetailRow;
@@ -367,7 +366,14 @@ export function ModuleDailyTrendDrilldownTable({
       year: '2-digit', month: '2-digit', day: '2-digit', timeZone: 'UTC',
     }).format(parsed);
   };
-  const formatDuration = (value: number | null) => value === null ? '—' : `${value.toFixed(1)} ${isCo || isCoIr ? 'min' : 'h'}`;
+  const formatDecimal = (value: unknown, suffix = '') => {
+    const numericValue = Number(value);
+    return value === null || value === undefined || !Number.isFinite(numericValue)
+      ? '—'
+      : `${numericValue.toFixed(1)}${suffix}`;
+  };
+  const formatDuration = (value: number | string | null | undefined) =>
+    formatDecimal(value, ` ${isCo || isCoIr ? 'min' : 'h'}`);
   const formatQuantity = (value?: number) => Math.round(Number(value) || 0).toLocaleString();
   const thStyle = { color: tokens.dashboard.tableHeadText, borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` };
   const tdStyle = { color: tokens.text, borderBottom: `1px solid ${tokens.dashboard.tableCellBorder}` };
@@ -412,8 +418,8 @@ export function ModuleDailyTrendDrilldownTable({
       values = (rows as DetailRow[]).map((row) => [
         row.room_no ?? '—', row.floor ?? '—', row.service_round ?? '—', row.inspector ?? 'Inspector',
         formatDateTime(row.created_datetime), formatDateTime(row.completed_datetime), row.status,
-        formatDuration(row.duration), row.standard === null || row.standard === undefined ? '—' : `${row.standard.toFixed(1)} min`,
-        row.variance === null || row.variance === undefined ? '—' : `${row.variance.toFixed(1)} min`,
+        formatDuration(row.duration), formatDecimal(row.standard, ' min'),
+        formatDecimal(row.variance, ' min'),
         row.credit ?? 0,
       ]);
     } else if (isCoIr) {
@@ -426,14 +432,13 @@ export function ModuleDailyTrendDrilldownTable({
         t('dashboard_ui.co_table_complete', 'Complete'),
         t('dashboard_ui.co_ir_result', 'Result'),
         t('dashboard_ui.co_table_time_spent', 'Time Spent'),
-        t('dashboard_ui.co_ir_duration_source', 'Duration Source'),
         t('dashboard_ui.co_ir_score', 'Score'),
         t('dashboard_ui.co_table_credit', 'Credit'),
       ];
       values = (rows as DetailRow[]).map((row) => [
         path?.date ?? '', row.location ?? '—', row.room_status ?? '—', row.cleaned_by ?? '—',
         formatDateTime(row.created_datetime), formatDateTime(row.completed_datetime), row.status,
-        formatDuration(row.duration), row.duration_source ?? '—', row.inspection_score ?? '—', row.credit ?? 0,
+        formatDuration(row.duration), row.inspection_score ?? '—', row.credit ?? 0,
       ]);
     } else if (isMo) {
       headers = [t('dashboard_ui.mo_table_maintenance_order', 'Maintenance Order'), t('dashboard_ui.mo_table_created_time', 'Created Time'), t('dashboard_ui.daily_table_completed_time', 'Completed Time'), t('dashboard_ui.mo_table_location', 'Location'), t('dashboard_ui.mo_table_quantity', 'Quantity'), t('dashboard_ui.mo_table_status', 'Status'), t('dashboard_ui.mo_table_assigned_to', 'Assigned To'), t('dashboard_ui.mo_table_completed_by', 'Completed By'), t('dashboard_ui.mo_table_duration', 'Duration'), t('dashboard_ui.mo_table_delay', 'Delay'), t('dashboard_ui.mo_table_guest_name', 'Guest Name')];
@@ -524,9 +529,9 @@ export function ModuleDailyTrendDrilldownTable({
                         t('dashboard_ui.co_table_standard', 'Standard'),
                         t('dashboard_ui.co_table_ahead_behind', 'Ahead / Behind'),
                         t('dashboard_ui.co_table_credit', 'Credit'),
-                      ].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.46rem, 0.62vw, 0.58rem)', letterSpacing: '0.02em' }}>{label}</th>)}</tr></thead><tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.record_id}-${index}`} style={{ fontSize: 'clamp(0.5rem, 0.7vw, 0.68rem)' }}><td className="px-1.5 py-2 font-mono font-semibold break-words" style={tdStyle}>{row.room_no ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.floor ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.service_round ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.inspector ?? 'Inspector'}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDuration(row.duration)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{row.standard === null || row.standard === undefined ? '—' : `${row.standard.toFixed(1)} min`}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{row.variance === null || row.variance === undefined ? '—' : `${row.variance.toFixed(1)} min`}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{(row.credit ?? 0).toFixed(1)}</td></tr>)}</tbody></table>
+                      ].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.46rem, 0.62vw, 0.58rem)', letterSpacing: '0.02em' }}>{label}</th>)}</tr></thead><tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.record_id}-${index}`} style={{ fontSize: 'clamp(0.5rem, 0.7vw, 0.68rem)' }}><td className="px-1.5 py-2 font-mono font-semibold break-words" style={tdStyle}>{row.room_no ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.floor ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.service_round ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.inspector ?? 'Inspector'}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDuration(row.duration)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDecimal(row.standard, ' min')}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDecimal(row.variance, ' min')}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDecimal(row.credit ?? 0)}</td></tr>)}</tbody></table>
                     ) : isCoIr ? (
-                      <table className="w-full table-fixed"><colgroup>{[9, 9, 9, 10, 11, 11, 9, 8, 9, 7, 6].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup><thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[
+                      <table className="w-full table-fixed"><colgroup>{[10, 10, 10, 11, 12, 12, 10, 9, 8, 8].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup><thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[
                         t('dashboard_ui.co_table_date', 'Date'),
                         t('dashboard_ui.co_table_room', 'Room'),
                         t('dashboard_ui.co_ir_room_status', 'Room Status'),
@@ -535,10 +540,9 @@ export function ModuleDailyTrendDrilldownTable({
                         t('dashboard_ui.co_table_complete', 'Complete'),
                         t('dashboard_ui.co_ir_result', 'Result'),
                         t('dashboard_ui.co_table_time_spent', 'Time Spent'),
-                        t('dashboard_ui.co_ir_duration_source', 'Duration Source'),
                         t('dashboard_ui.co_ir_score', 'Score'),
                         t('dashboard_ui.co_table_credit', 'Credit'),
-                      ].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.46rem, 0.62vw, 0.58rem)', letterSpacing: '0.02em' }}>{label}</th>)}</tr></thead><tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.record_id}-${index}`} style={{ fontSize: 'clamp(0.5rem, 0.7vw, 0.68rem)' }}><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDate(path?.date ?? '')}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.location ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.room_status ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.cleaned_by ?? '—'}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDuration(row.duration)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.duration_source ?? '—'}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{row.inspection_score === null || row.inspection_score === undefined ? '—' : row.inspection_score.toFixed(1)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{(row.credit ?? 0).toFixed(1)}</td></tr>)}</tbody></table>
+                      ].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.46rem, 0.62vw, 0.58rem)', letterSpacing: '0.02em' }}>{label}</th>)}</tr></thead><tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.record_id}-${index}`} style={{ fontSize: 'clamp(0.5rem, 0.7vw, 0.68rem)' }}><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDate(path?.date ?? '')}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.location ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.room_status ?? '—'}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.cleaned_by ?? '—'}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDuration(row.duration)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDecimal(row.inspection_score)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDecimal(row.credit ?? 0)}</td></tr>)}</tbody></table>
                     ) : isMo ? (
                       <table className="w-full table-fixed"><colgroup>{[9, 10, 10, 9, 5, 7, 10, 10, 8, 7, 15].map((width, index) => <col key={index} style={{ width: `${width}%` }} />)}</colgroup><thead className="sticky top-0" style={{ background: tokens.dashboard.tableHeadBg }}><tr>{[t('dashboard_ui.mo_table_maintenance_order', 'Maintenance Order'), t('dashboard_ui.mo_table_created_time', 'Created Time'), t('dashboard_ui.daily_table_completed_time', 'Completed Time'), t('dashboard_ui.mo_table_location', 'Location'), t('dashboard_ui.mo_table_quantity', 'Quantity'), t('dashboard_ui.mo_table_status', 'Status'), t('dashboard_ui.mo_table_assigned_to', 'Assigned To'), t('dashboard_ui.mo_table_completed_by', 'Completed By'), t('dashboard_ui.mo_table_duration', 'Duration'), t('dashboard_ui.mo_table_delay', 'Delay'), t('dashboard_ui.mo_table_guest_name', 'Guest Name')].map((label) => <th key={label} className="px-1.5 py-2 text-left font-mono uppercase leading-tight break-words" style={{ ...thStyle, fontSize: 'clamp(0.48rem, 0.65vw, 0.6rem)', letterSpacing: '0.025em' }}>{label}</th>)}</tr></thead><tbody>{(modalRows as DetailRow[]).map((row, index) => <tr key={`${row.record_id}-${index}`} style={{ fontSize: 'clamp(0.52rem, 0.72vw, 0.7rem)' }}><td className="px-1.5 py-2 font-mono font-semibold break-words" style={tdStyle}>{row.record_id}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.created_datetime)}</td><td className="px-1.5 py-2 font-mono leading-tight" style={tdStyle}>{formatDateTime(row.completed_datetime)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.location}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatQuantity(row.quantity)}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.status}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.assigned_to}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.completed_by}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{formatDuration(row.duration)}</td><td className="px-1.5 py-2 font-mono" style={tdStyle}>{row.delay === null || row.delay === undefined ? '—' : `${row.delay.toFixed(1)} h`}</td><td className="px-1.5 py-2 break-words" style={tdStyle}>{row.guest_name}</td></tr>)}</tbody></table>
                     ) : (
